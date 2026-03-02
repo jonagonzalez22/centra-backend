@@ -1,0 +1,9 @@
+.env
+.env.backup
+.phpunit.result.cache
+/vendor
+/public/storage
+/storage/*.key
+.vscode/
+.idea/
+.cursor/
