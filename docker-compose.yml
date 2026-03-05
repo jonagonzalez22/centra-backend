@@ -1,0 +1,60 @@
+services:
+  # El contenedor de Laravel (PHP 8.4)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: centra-backend-app
+    container_name: centra-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    networks:
+      - centra-network
+
+  # Nginx Web Server (El traductor)
+  web:
+    image: nginx:alpine
+    container_name: centra-web
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+    networks:
+      - centra-network
+
+  # El servidor de Base de Datos
+  db:
+    image: mysql:8.0
+    container_name: centra-db
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+    volumes:
+      - centra-db-data:/var/lib/mysql
+    networks:
+      - centra-network
+
+  # Redis para caché y sesiones rápidas
+  redis:
+    image: redis:alpine
+    container_name: centra-redis
+    restart: unless-stopped
+    networks:
+      - centra-network
+
+networks:
+  centra-network:
+    driver: bridge
+
+volumes:
+  centra-db-data:
+    driver: local
