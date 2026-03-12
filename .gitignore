@@ -1,6 +1,5 @@
 .env
 .env.backup
-.env.example
 .env
 .env.develop
 .env.prod
