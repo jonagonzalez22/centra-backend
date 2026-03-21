@@ -26,22 +26,19 @@ jobs:
           ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             set -e
             
-            # 1. Navegar al directorio del proyecto
-            # AJUSTA ESTA RUTA si tu proyecto está en otro lado (ej: /var/www/centra)
-            cd /var/www/centra-backend
+            cd /var/www/centra/centra-backend
 
             echo "--- 📥 Actualizando código desde Git ---"
             git pull origin develop
 
             echo "--- 🐳 Construyendo y levantando contenedores ---"
-            # Usamos -f para asegurar que tome el archivo correcto si tienes varios
+            
             docker compose up -d --build
 
             echo "--- 🧱 Ejecutando migraciones de base de datos ---"
-            # 'app' debe ser el nombre de tu servicio en docker-compose.yml
+            
             docker compose exec -T app php artisan migrate --force
 
-            echo "--- 🧹 Limpiando imágenes antiguas ---"
             docker image prune -f
 
             echo "✅ ¡Despliegue completado con éxito!"
