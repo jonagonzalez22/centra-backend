@@ -1,5 +1,9 @@
 .env
 .env.backup
+.env
+.env.develop
+.env.prod
+.env.local
 .phpunit.result.cache
 /vendor
 /public/storage
