@@ -1,0 +1,45 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Execute Remote Commands
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            set -e
+            
+            cd /var/www/centra/centra-backend
+
+            echo "--- 📥 Actualizando código desde Git ---"
+            git pull origin develop
+
+            echo "--- 🐳 Construyendo y levantando contenedores ---"
+            
+            docker compose up -d --build
+
+            echo "--- 🧱 Ejecutando migraciones de base de datos ---"
+            
+            docker compose exec -T app php artisan migrate --force
+
+            docker image prune -f
+
+            echo "✅ ¡Despliegue completado con éxito!"
+          EOF
