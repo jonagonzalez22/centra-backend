@@ -1,5 +1,7 @@
+version: '3.8'
+
 services:
-  # El contenedor de Laravel (PHP 8.4)
+  # Laravel (PHP)
   app:
     build:
       context: .
@@ -13,7 +15,7 @@ services:
     networks:
       - centra-network
 
-  # Nginx Web Server (El traductor)
+  # Nginx (Backend + Frontend)
   web:
     image: nginx:alpine
     container_name: centra-web
@@ -21,12 +23,19 @@ services:
     ports:
       - "80:80"
     volumes:
+      # Backend
       - ./:/var/www
+
+      # Frontend
+      - /var/www/centra/centra-frontend:/var/www/html/frontend
+
+      # Nginx configuration
       - ./docker/nginx/conf.d:/etc/nginx/conf.d
+
     networks:
       - centra-network
 
-  # El servidor de Base de Datos
+  # MySQL
   db:
     image: mysql:8.0
     container_name: centra-db
@@ -43,7 +52,7 @@ services:
     networks:
       - centra-network
 
-  # Redis para caché y sesiones rápidas
+  # Redis
   redis:
     image: redis:alpine
     container_name: centra-redis
