@@ -10,7 +10,7 @@ test('api can list all stores', function () {
   Store::factory()->create(['name' => 'Store A']);
   Store::factory()->create(['name' => 'Store B']);
 
-  $response = $this->getJson('/api/stores');
+  $response = $this->getJson('/api/v1/stores');
 
   $response->assertStatus(200)
     ->assertJsonCount(2);
@@ -23,7 +23,7 @@ test('api can create a new store', function () {
     'status' => 'active'
   ];
 
-  $response = $this->postJson('/api/stores', $data);
+  $response = $this->postJson('/api/v1/stores', $data);
 
   $response->assertStatus(201);
   $this->assertDatabaseHas('stores', ['name' => 'Ferretería Central']);
