@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -15,13 +14,11 @@ class DatabaseSeeder extends Seeder
 
 
     if (app()->environment('local')) {
-      User::firstOrCreate(
-        ['email' => 'admin@centra.com'],
-        [
-          'name' => 'Super Admin Local',
-          'password' => bcrypt('password123'),
-        ]
-      )->assignRole('SUPER_ADMIN');
+      $this->call([
+        RoleSeeder::class,
+        StoreSeeder::class,
+        UserSeeder::class,
+      ]);
     }
   }
 }
