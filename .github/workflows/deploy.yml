@@ -32,12 +32,16 @@ jobs:
             git pull origin develop
 
             echo "--- 🐳 Construyendo y levantando contenedores ---"
-            
             docker compose up -d --build
 
             echo "--- 🧱 Ejecutando migraciones de base de datos ---"
-            
             docker compose exec -T app php artisan migrate --force
+
+            echo "--- 🧩 Asegurando roles base ---"
+            docker compose exec -T app php artisan db:seed --class=RoleSeeder --force
+
+            echo "--- 🧹 Limpiando caché de permisos ---"
+            docker compose exec -T app php artisan permission:cache-reset
 
             docker image prune -f
 
