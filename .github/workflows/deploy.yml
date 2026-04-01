@@ -34,6 +34,9 @@ jobs:
             echo "--- 🐳 Construyendo y levantando contenedores ---"
             docker compose up -d --build
 
+            echo "--- 📦 Instalando dependencias de Composer ---"
+            docker compose exec -T app composer install --no-dev --optimize-autoloader
+
             echo "--- 🧱 Ejecutando migraciones de base de datos ---"
             docker compose exec -T app php artisan migrate --force
 
