@@ -1,8 +1,10 @@
 <?php
 
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
   ->withRouting(
@@ -12,8 +14,18 @@ return Application::configure(basePath: dirname(__DIR__))
     health: '/up',
   )
   ->withMiddleware(function (Middleware $middleware): void {
-    //
+    // Habilita el manejo de estado para Sanctum en la API
+    $middleware->statefulApi();
   })
   ->withExceptions(function (Exceptions $exceptions): void {
-    //
+    // Captura errores de autenticación en rutas de API y devuelve JSON estandarizado
+    $exceptions->render(function (AuthenticationException $e, Request $request) {
+      if ($request->is('api/*')) {
+        return response()->json([
+          'data'    => null,
+          'message' => 'No autenticado.',
+          'errors'  => null,
+        ], 401);
+      }
+    });
   })->create();
