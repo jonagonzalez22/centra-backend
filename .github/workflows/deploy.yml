@@ -34,6 +34,9 @@ jobs:
             echo "--- 🐳 Construyendo y levantando contenedores ---"
             docker compose up -d --build
 
+            echo "--- 📦 Instalando dependencias ---"
+            docker compose exec -T app composer install --no-dev --optimize-autoloader
+
             echo "--- 🧱 Ejecutando migraciones de base de datos ---"
             docker compose exec -T app php artisan migrate --force
 
@@ -42,6 +45,12 @@ jobs:
 
             echo "--- 🧹 Limpiando caché de permisos ---"
             docker compose exec -T app php artisan permission:cache-reset
+
+            echo "--- 📄 Generando documentación Swagger ---"
+            docker compose exec -T app php artisan l5-swagger:generate
+
+            echo "--- 🧹 Limpiando caché de Laravel ---"
+            docker compose exec -T app php artisan optimize:clear
 
             docker image prune -f
 
