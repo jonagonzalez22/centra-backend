@@ -16,15 +16,22 @@ return Application::configure(basePath: dirname(__DIR__))
   ->withMiddleware(function (Middleware $middleware): void {
     // Habilita el manejo de estado para Sanctum en la API
     $middleware->statefulApi();
+
+    // Excluye las rutas de API del chequeo CSRF
+    // (Las APIs usan Bearer Token, no cookies de sesión)
+    $middleware->validateCsrfTokens(except: [
+      'api/*',
+    ]);
   })
   ->withExceptions(function (Exceptions $exceptions): void {
     // Captura errores de autenticación en rutas de API y devuelve JSON estandarizado
     $exceptions->render(function (AuthenticationException $e, Request $request) {
       if ($request->is('api/*')) {
         return response()->json([
-          'data'    => null,
+          'status' => 'error',
           'message' => 'No autenticado.',
-          'errors'  => null,
+          'data'    => null,
+          'errors'  => ['auth' => ['No autenticado.']],
         ], 401);
       }
     });
