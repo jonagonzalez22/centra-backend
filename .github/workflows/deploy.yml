@@ -37,6 +37,9 @@ jobs:
             echo "--- 📦 Instalando dependencias ---"
             docker compose exec -T app composer install --no-dev --optimize-autoloader
 
+            echo "--- 🔗 Creando storage link ---"
+            docker compose exec -T app php artisan storage:link --force
+
             echo "--- 🧱 Ejecutando migraciones de base de datos ---"
             docker compose exec -T app php artisan migrate --force
 
