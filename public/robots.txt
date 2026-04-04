@@ -1,2 +1,15 @@
 User-agent: *
-Disallow:
+Disallow: /api/
+Disallow: /api/documentation
+Disallow: /sanctum/
+Disallow: /login
+Disallow: /register
+
+# Permitir bots legítimos en rutas públicas
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+
+# Evitar indexación de archivos sensibles
+Disallow: /*.env$
+Disallow: /*.log$

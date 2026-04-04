@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\BlockSuspiciousAgents;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -21,6 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
     // (Las APIs usan Bearer Token, no cookies de sesión)
     $middleware->validateCsrfTokens(except: [
       'api/*',
+    ]);
+
+    // Bloquea User-Agents sospechosos o vacíos en todas las rutas API
+    $middleware->appendToGroup('api', [
+      BlockSuspiciousAgents::class,
     ]);
   })
   ->withExceptions(function (Exceptions $exceptions): void {
