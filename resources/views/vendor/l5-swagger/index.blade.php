@@ -32,7 +32,7 @@
     window.onload = function() {
       const ui = SwaggerUIBundle({
         dom_id: '#swagger-ui',
-        url: "{!! $urlToDocs !!}",
+        url: "{{ route('l5-swagger.default.docs') }}",
         presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
         plugins: [SwaggerUIBundle.plugins.DownloadUrl],
         layout: "StandaloneLayout",
