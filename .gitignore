@@ -8,6 +8,7 @@
 /vendor
 /public/storage
 /storage/*.key
+/storage/api-docs/api-docs.json
 .vscode/
 .idea/
 .cursor/
