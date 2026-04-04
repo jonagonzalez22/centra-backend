@@ -16,6 +16,11 @@ use OpenApi\Attributes as OA;
   description: "Servidor Local"
 )]
 
+#[OA\Server(
+  url: "http://138.197.100.197/api/v1",
+  description: "Servidor de desarrollo"
+)]
+
 #[OA\SecurityScheme(
   securityScheme: "sanctum",
   type: "apiKey",

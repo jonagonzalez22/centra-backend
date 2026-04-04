@@ -12,6 +12,10 @@
         {
             "url": "http://localhost/api/v1",
             "description": "Servidor Local"
+        },
+        {
+            "url": "http://138.197.100.197/api/v1",
+            "description": "Servidor de desarrollo"
         }
     ],
     "paths": {
