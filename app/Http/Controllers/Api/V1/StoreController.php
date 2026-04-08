@@ -8,50 +8,39 @@ use Illuminate\Http\Request;
 
 class StoreController extends Controller
 {
-  /**
-   * Display a listing of the resource.
-   */
-  public function index(Request $request)
+  public function index()
   {
-    $stores = Store::all();
-    return response()->json($stores);
+    return response()->json(Store::with('businessType')->get());
   }
 
-  /**
-   * Store a newly created resource in storage.
-   */
   public function store(Request $request)
   {
     $store = Store::create($request->all());
+    $store->load('businessType');
+
     return response()->json($store, 201);
   }
 
-  /**
-   * Display the specified resource.
-   */
   public function show(string $id)
   {
-    $store = Store::findOrFail($id);
+    $store = Store::with('businessType')->findOrFail($id);
     return response()->json($store);
   }
 
-  /**
-   * Update the specified resource in storage.
-   */
   public function update(Request $request, string $id)
   {
     $store = Store::findOrFail($id);
     $store->update($request->all());
+    $store->load('businessType');
+
     return response()->json($store);
   }
 
-  /**
-   * Remove the specified resource from storage.
-   */
   public function destroy(string $id)
   {
     $store = Store::findOrFail($id);
     $store->delete();
+
     return response()->json(null, 204);
   }
 }

@@ -19,6 +19,12 @@ class StoreFactory extends Factory
   {
     return [
       'name' => $this->faker->company(),
+      'cuit' => (string) $this->faker->numerify('20-#########'),
+      'address' => $this->faker->streetAddress(),
+      'state' => $this->faker->state(),
+      'city' => $this->faker->city(),
+      'country' => $this->faker->country(),
+      'phone' => $this->faker->phoneNumber(),
       'email' => $this->faker->unique()->safeEmail(),
       'status' => 'active',
     ];

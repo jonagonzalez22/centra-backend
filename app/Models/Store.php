@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Store extends Model
@@ -12,7 +13,15 @@ class Store extends Model
 
   protected $fillable = [
     'name',
+    'business_type_id',
+    'cuit',
+    'address',
+    'state',
+    'city',
+    'country',
+    'phone',
     'email',
+    'url_logo',
     'status',
   ];
 
@@ -23,5 +32,10 @@ class Store extends Model
   public function users(): HasMany
   {
     return $this->hasMany(User::class);
+  }
+
+  public function businessType(): BelongsTo
+  {
+    return $this->belongsTo(BusinessType::class);
   }
 }
