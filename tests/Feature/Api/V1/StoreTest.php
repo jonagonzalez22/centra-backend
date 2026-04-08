@@ -28,8 +28,14 @@ test('api can create a new store', function () {
 
   $data = [
     'name' => 'Ferretería Central',
+    'cuit' => '20-30123456789',
+    'address' => 'Av. Corrientes 1234',
+    'state' => 'Buenos Aires',
+    'city' => 'Buenos Aires',
+    'country' => 'Argentina',
+    'phone' => '+54 11 5555-0000',
     'email' => 'central@test.com',
-    'status' => 'active'
+    'status' => 'active',
   ];
 
   $response = $this->withHeader('Authorization', "Bearer $token")
