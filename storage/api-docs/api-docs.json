@@ -330,6 +330,544 @@
                     }
                 ]
             }
+        },
+        "/stores": {
+            "get": {
+                "tags": [
+                    "Stores"
+                ],
+                "summary": "Listar tiendas",
+                "description": "Retorna la lista completa de tiendas con su tipo de negocio asociado.",
+                "operationId": "storeIndex",
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Listado de tiendas obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/Store"
+                                                    }
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Stores"
+                ],
+                "summary": "Crear tienda",
+                "description": "Crea una nueva tienda en el sistema.",
+                "operationId": "storeCreate",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "business_type_id",
+                                    "cuit",
+                                    "address",
+                                    "state",
+                                    "city",
+                                    "country",
+                                    "phone",
+                                    "email",
+                                    "status"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Ferretería test"
+                                    },
+                                    "business_type_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "cuit": {
+                                        "type": "string",
+                                        "example": "20345678595"
+                                    },
+                                    "address": {
+                                        "type": "string",
+                                        "example": "Tunuyan 782"
+                                    },
+                                    "state": {
+                                        "type": "string",
+                                        "example": "Ciudad"
+                                    },
+                                    "city": {
+                                        "type": "string",
+                                        "example": "Mendoza"
+                                    },
+                                    "country": {
+                                        "type": "string",
+                                        "example": "Argentina"
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "example": "+5426112345678"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "ferreTest@central.com"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "example": "active"
+                                    },
+                                    "url_logo": {
+                                        "type": "string",
+                                        "example": "https://www.testcentral.com/logo.png",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "201": {
+                        "description": "Tienda creada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Store"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/stores/{id}": {
+            "get": {
+                "tags": [
+                    "Stores"
+                ],
+                "summary": "Obtener tienda por ID",
+                "description": "Retorna una tienda específica con su tipo de negocio.",
+                "operationId": "storeShow",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID de la tienda",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Tienda no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Tienda no encontrada."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "store": [
+                                                            "No existe una tienda con ese ID"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Tienda obtenida correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Store"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Stores"
+                ],
+                "summary": "Actualizar tienda",
+                "description": "Actualiza una tienda existente.",
+                "operationId": "storeUpdate",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "business_type_id",
+                                    "cuit",
+                                    "address",
+                                    "state",
+                                    "city",
+                                    "country",
+                                    "phone",
+                                    "email",
+                                    "status"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Ferretería test"
+                                    },
+                                    "business_type_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "cuit": {
+                                        "type": "string",
+                                        "example": "20345678595"
+                                    },
+                                    "address": {
+                                        "type": "string",
+                                        "example": "Tunuyan 782"
+                                    },
+                                    "state": {
+                                        "type": "string",
+                                        "example": "Ciudad"
+                                    },
+                                    "city": {
+                                        "type": "string",
+                                        "example": "Mendoza"
+                                    },
+                                    "country": {
+                                        "type": "string",
+                                        "example": "Argentina"
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "example": "+5426112345678"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "ferreTest@central.com"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "example": "active"
+                                    },
+                                    "url_logo": {
+                                        "type": "string",
+                                        "example": "https://www.testcentral.com/logo.png",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Tienda no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Tienda actualizada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Store"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Stores"
+                ],
+                "summary": "Eliminar tienda",
+                "description": "Elimina una tienda por ID.",
+                "operationId": "storeDelete",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Tienda no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Tienda eliminada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
         }
     },
     "components": {
@@ -366,6 +904,103 @@
                                 "type": "string"
                             }
                         }
+                    }
+                },
+                "type": "object"
+            },
+            "BusinessType": {
+                "title": "BusinessType",
+                "description": "Tipo de negocio asociado a una tienda",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Ferretería"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Businesses that sell hardware and tools"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "active"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-04-07T22:00:06.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-04-07T22:00:06.000000Z"
+                    }
+                },
+                "type": "object"
+            },
+            "Store": {
+                "title": "Store",
+                "description": "Entidad tienda con su tipo de negocio",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 3
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Ferretería Central"
+                    },
+                    "business_type_id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "cuit": {
+                        "type": "string",
+                        "example": "20-1234567890"
+                    },
+                    "address": {
+                        "type": "string",
+                        "example": "Sarmiento 4455"
+                    },
+                    "state": {
+                        "type": "string",
+                        "example": "Buenos Aires"
+                    },
+                    "city": {
+                        "type": "string",
+                        "example": "Buenos Aires"
+                    },
+                    "country": {
+                        "type": "string",
+                        "example": "Argentina"
+                    },
+                    "phone": {
+                        "type": "string",
+                        "example": "+54 11 1234-5678"
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "ferreteria@central.com"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "active"
+                    },
+                    "url_logo": {
+                        "type": "string",
+                        "example": "https://www.testcentral.com/logo.png"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-04-07T22:30:49.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-04-07T22:30:49.000000Z"
+                    },
+                    "business_type": {
+                        "$ref": "#/components/schemas/BusinessType"
                     }
                 },
                 "type": "object"
@@ -427,6 +1062,10 @@
         {
             "name": "Autenticación",
             "description": "Autenticación"
+        },
+        {
+            "name": "Stores",
+            "description": "Stores"
         }
     ]
 }

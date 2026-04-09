@@ -2,10 +2,12 @@
 
 use App\Http\Middleware\BlockSuspiciousAgents;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
   ->withRouting(
@@ -39,6 +41,32 @@ return Application::configure(basePath: dirname(__DIR__))
           'data'    => null,
           'errors'  => ['auth' => ['No autenticado.']],
         ], 401);
+      }
+    });
+
+    $exceptions->render(function (ModelNotFoundException $e, Request $request) {
+      if ($request->is('api/*')) {
+        return response()->json([
+          'status' => 'error',
+          'message' => 'Recurso no encontrado.',
+          'data' => null,
+          'errors' => [
+            'resourse' => 'El registro solicitado no existe.'
+          ],
+        ], 404);
+      }
+    });
+
+    $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+      if ($request->is('api/*')) {
+        return response()->json([
+          'status' => 'error',
+          'message' => 'Recurso no encontrado.',
+          'data' => null,
+          'errors' => [
+            'resourse' => 'El registro solicitado no existe.'
+          ],
+        ], 404);
       }
     });
   })->create();
