@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\BusinessType;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -18,7 +19,7 @@ test('api can list all stores', function () {
     ->getJson('/api/v1/stores');
 
   $response->assertStatus(200)
-    ->assertJsonCount(2);
+    ->assertJsonCount(2, 'data');
 });
 
 test('api can create a new store', function () {
@@ -26,14 +27,21 @@ test('api can create a new store', function () {
   $user = User::factory()->create();
   $token = $user->createToken('test-token')->plainTextToken;
 
+  $businessType = BusinessType::create([
+    'name' => 'Ferretería',
+    'description' => 'Test',
+    'status' => 'active',
+  ]);
+
   $data = [
     'name' => 'Ferretería Central',
-    'cuit' => '20-30123456789',
+    'business_type_id' => $businessType->id,
+    'cuit' => '20345678906',
     'address' => 'Av. Corrientes 1234',
     'state' => 'Buenos Aires',
     'city' => 'Buenos Aires',
     'country' => 'Argentina',
-    'phone' => '+54 11 5555-0000',
+    'phone' => '+541112345678',
     'email' => 'central@test.com',
     'status' => 'active',
   ];
