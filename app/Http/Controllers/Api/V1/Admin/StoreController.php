@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\admin\StoreRequest;
+use App\Http\Requests\Api\V1\Admin\StoreRequest;
 use App\Models\Admin\Store;
 use OpenApi\Attributes as OA;
 
@@ -358,7 +358,7 @@ class StoreController extends Controller
 
   #[OA\Response(
     response: 200,
-    description: "Tienda eliminada correctamente",
+    description: "Tienda eliminada correctamente.",
     content: new OA\JsonContent(
       allOf: [
         new OA\Schema(ref: "#/components/schemas/ApiResponse"),
