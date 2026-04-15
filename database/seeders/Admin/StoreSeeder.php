@@ -1,9 +1,9 @@
 <?php
 
-namespace Database\Seeders;
+namespace Database\Seeders\Admin;
 
-use App\Models\BusinessType;
-use App\Models\Store;
+use App\Models\Admin\BusinessType;
+use App\Models\Admin\Store;
 use Illuminate\Database\Seeder;
 
 class StoreSeeder extends Seeder

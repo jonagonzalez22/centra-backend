@@ -9,16 +9,16 @@ class DatabaseSeeder extends Seeder
   public function run(): void
   {
     $this->call([
-      RoleSeeder::class,
-      BusinessTypeSeeder::class,
+      \Database\Seeders\RoleSeeder::class,
+      \Database\Seeders\Admin\BusinessTypeSeeder::class,
     ]);
 
 
     if (app()->environment('local')) {
       $this->call([
-        RoleSeeder::class,
-        StoreSeeder::class,
-        UserSeeder::class,
+        \Database\Seeders\RoleSeeder::class,
+        \Database\Seeders\Admin\StoreSeeder::class,
+        \Database\Seeders\UserSeeder::class,
       ]);
     }
   }

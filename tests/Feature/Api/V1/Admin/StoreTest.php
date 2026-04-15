@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\BusinessType;
-use App\Models\Store;
+use App\Models\Admin\BusinessType;
+use App\Models\Admin\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -16,7 +16,7 @@ test('api can list all stores', function () {
   Store::factory()->create(['name' => 'Store B']);
 
   $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson('/api/v1/stores');
+    ->getJson('/api/v1/admin/stores');
 
   $response->assertStatus(200)
     ->assertJsonCount(2, 'data');
@@ -47,7 +47,7 @@ test('api can create a new store', function () {
   ];
 
   $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/stores', $data);
+    ->postJson('/api/v1/admin/stores', $data);
 
   $response->assertStatus(201);
   $this->assertDatabaseHas('stores', ['name' => 'Ferretería Central']);
