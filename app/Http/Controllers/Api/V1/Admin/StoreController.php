@@ -358,7 +358,7 @@ class StoreController extends Controller
 
   #[OA\Response(
     response: 200,
-    description: "Tienda eliminada correctamente",
+    description: "Tienda eliminada correctamente.",
     content: new OA\JsonContent(
       allOf: [
         new OA\Schema(ref: "#/components/schemas/ApiResponse"),
