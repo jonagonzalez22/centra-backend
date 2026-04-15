@@ -1,8 +1,8 @@
 <?php
 
-namespace Database\Seeders;
+namespace Database\Seeders\Admin;
 
-use App\Models\BusinessType;
+use App\Models\Admin\BusinessType;
 use Illuminate\Database\Seeder;
 
 class BusinessTypeSeeder extends Seeder

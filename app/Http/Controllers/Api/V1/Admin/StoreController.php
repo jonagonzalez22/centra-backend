@@ -1,16 +1,16 @@
 <?php
 
-namespace App\Http\Controllers\Api\V1;
+namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\StoreRequest;
-use App\Models\Store;
+use App\Http\Requests\Api\V1\admin\StoreRequest;
+use App\Models\Admin\Store;
 use OpenApi\Attributes as OA;
 
 class StoreController extends Controller
 {
   #[OA\Get(
-    path: "/stores",
+    path: "/admin/stores",
     summary: "Listar tiendas",
     description: "Retorna la lista completa de tiendas con su tipo de negocio asociado.",
     operationId: "storeIndex",
@@ -72,7 +72,7 @@ class StoreController extends Controller
   }
 
   #[OA\Post(
-    path: "/stores",
+    path: "/admin/stores",
     summary: "Crear tienda",
     description: "Crea una nueva tienda en el sistema.",
     operationId: "storeCreate",
@@ -161,7 +161,7 @@ class StoreController extends Controller
   }
 
   #[OA\Get(
-    path: "/stores/{id}",
+    path: "/admin/stores/{id}",
     summary: "Obtener tienda por ID",
     description: "Retorna una tienda específica con su tipo de negocio.",
     operationId: "storeShow",
@@ -238,7 +238,7 @@ class StoreController extends Controller
   }
 
   #[OA\Put(
-    path: "/stores/{id}",
+    path: "/admin/stores/{id}",
     summary: "Actualizar tienda",
     description: "Actualiza una tienda existente.",
     operationId: "storeUpdate",
@@ -329,7 +329,7 @@ class StoreController extends Controller
   }
 
   #[OA\Delete(
-    path: "/stores/{id}",
+    path: "/admin/stores/{id}",
     summary: "Eliminar tienda",
     description: "Elimina una tienda por ID.",
     operationId: "storeDelete",
