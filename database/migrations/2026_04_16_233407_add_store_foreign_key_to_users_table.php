@@ -9,12 +9,10 @@ return new class extends Migration
   public function up(): void
   {
     Schema::table('users', function (Blueprint $table) {
-      $table->foreignId('store_id')
-        ->nullable()
-        ->after('id')
-        ->constrained()
-        ->nullOnDelete()
-        ->index();
+      $table->foreign('store_id')
+        ->references('id')
+        ->on('stores')
+        ->nullOnDelete();
     });
   }
 
@@ -22,7 +20,6 @@ return new class extends Migration
   {
     Schema::table('users', function (Blueprint $table) {
       $table->dropForeign(['store_id']);
-      $table->dropColumn('store_id');
     });
   }
 };

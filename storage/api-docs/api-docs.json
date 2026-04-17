@@ -523,7 +523,7 @@
                         }
                     },
                     "200": {
-                        "description": "Tienda eliminada correctamente",
+                        "description": "Tienda eliminada correctamente.",
                         "content": {
                             "application/json": {
                                 "schema": {

@@ -8,6 +8,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Spatie\Permission\Exceptions\UnauthorizedException;
 
 return Application::configure(basePath: dirname(__DIR__))
   ->withRouting(
@@ -17,26 +18,28 @@ return Application::configure(basePath: dirname(__DIR__))
     health: '/up',
   )
   ->withMiddleware(function (Middleware $middleware): void {
-    // Habilita el manejo de estado para Sanctum en la API
     $middleware->statefulApi();
 
-    // Excluye las rutas de API del chequeo CSRF
-    // (Las APIs usan Bearer Token, no cookies de sesión)
     $middleware->validateCsrfTokens(except: [
       'api/*',
     ]);
 
-    // Bloquea User-Agents sospechosos o vacíos en todas las rutas API
     $middleware->appendToGroup('api', [
       BlockSuspiciousAgents::class,
     ]);
+
+    // 👇 Middlewares de Spatie para roles y permisos
+    $middleware->alias([
+      'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
+      'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+      'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+    ]);
   })
   ->withExceptions(function (Exceptions $exceptions): void {
-    // Captura errores de autenticación en rutas de API y devuelve JSON estandarizado
     $exceptions->render(function (AuthenticationException $e, Request $request) {
       if ($request->is('api/*')) {
         return response()->json([
-          'status' => 'error',
+          'status'  => 'error',
           'message' => 'No autenticado.',
           'data'    => null,
           'errors'  => ['auth' => ['No autenticado.']],
@@ -47,12 +50,10 @@ return Application::configure(basePath: dirname(__DIR__))
     $exceptions->render(function (ModelNotFoundException $e, Request $request) {
       if ($request->is('api/*')) {
         return response()->json([
-          'status' => 'error',
+          'status'  => 'error',
           'message' => 'Recurso no encontrado.',
-          'data' => null,
-          'errors' => [
-            'resourse' => 'El registro solicitado no existe.'
-          ],
+          'data'    => null,
+          'errors'  => ['resourse' => 'El registro solicitado no existe.'],
         ], 404);
       }
     });
@@ -60,13 +61,24 @@ return Application::configure(basePath: dirname(__DIR__))
     $exceptions->render(function (NotFoundHttpException $e, Request $request) {
       if ($request->is('api/*')) {
         return response()->json([
-          'status' => 'error',
+          'status'  => 'error',
           'message' => 'Recurso no encontrado.',
-          'data' => null,
-          'errors' => [
-            'resourse' => 'El registro solicitado no existe.'
-          ],
+          'data'    => null,
+          'errors'  => ['resourse' => 'El registro solicitado no existe.'],
         ], 404);
+      }
+    });
+
+
+
+    $exceptions->render(function (UnauthorizedException $e, Request $request) {
+      if ($request->is('api/*')) {
+        return response()->json([
+          'status'  => 'error',
+          'message' => 'No tenés permisos para realizar esta acción.',
+          'data'    => null,
+          'errors'  => ['auth' => ['No autorizado.']],
+        ], 403);
       }
     });
   })->create();
