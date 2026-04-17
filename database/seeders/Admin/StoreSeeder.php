@@ -15,6 +15,9 @@ class StoreSeeder extends Seeder
     $businessType = BusinessType::where('id', 1)->first();
     Store::updateOrCreate(
       [
+        'email' => 'ferreteria@central.com',
+      ],
+      [
         'name' => 'Ferretería Central',
         'business_type_id' => $businessType->id,
         'cuit' => '20-1234567890',
@@ -23,7 +26,6 @@ class StoreSeeder extends Seeder
         'city' => 'Buenos Aires',
         'country' => 'Argentina',
         'phone' => '+54 11 1234-5678',
-        'email' => 'ferreteria@central.com',
         'url_logo' => 'https://www.testcentral.com/logo.png',
         'status' => 'active',
       ]
