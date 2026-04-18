@@ -6,16 +6,57 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\StoreRequest;
 use App\Models\Admin\Store;
 use OpenApi\Attributes as OA;
+use Illuminate\Http\Request;
 
 class StoreController extends Controller
 {
   #[OA\Get(
     path: "/admin/stores",
     summary: "Listar tiendas",
-    description: "Retorna la lista completa de tiendas con su tipo de negocio asociado.",
+    description: "Retorna la lista paginada de tiendas con su tipo de negocio asociado. Permite filtrar por nombre, estado y tipo de negocio.",
     operationId: "storeIndex",
     security: [["sanctum" => []]],
     tags: ["Stores"]
+  )]
+
+  #[OA\Parameter(
+    name: "name",
+    in: "query",
+    required: false,
+    description: "Filtrar por nombre (búsqueda parcial)",
+    schema: new OA\Schema(type: "string", example: "Ferretería")
+  )]
+
+  #[OA\Parameter(
+    name: "status",
+    in: "query",
+    required: false,
+    description: "Filtrar por estado",
+    schema: new OA\Schema(type: "string", example: "active")
+  )]
+
+  #[OA\Parameter(
+    name: "business_type_id",
+    in: "query",
+    required: false,
+    description: "Filtrar por ID de tipo de negocio",
+    schema: new OA\Schema(type: "integer", example: 1)
+  )]
+
+  #[OA\Parameter(
+    name: "per_page",
+    in: "query",
+    required: false,
+    description: "Cantidad de resultados por página (default: 15)",
+    schema: new OA\Schema(type: "integer", example: 15)
+  )]
+
+  #[OA\Parameter(
+    name: "page",
+    in: "query",
+    required: false,
+    description: "Número de página",
+    schema: new OA\Schema(type: "integer", example: 1)
   )]
 
   #[OA\Response(
@@ -32,9 +73,7 @@ class StoreController extends Controller
             new OA\Property(
               property: "errors",
               type: "object",
-              example: [
-                "auth" => ["Token inválido o ausente"]
-              ]
+              example: ["auth" => ["Token inválido o ausente"]]
             )
           ]
         )
@@ -52,8 +91,18 @@ class StoreController extends Controller
           properties: [
             new OA\Property(
               property: "data",
-              type: "array",
-              items: new OA\Items(ref: "#/components/schemas/Store")
+              type: "object",
+              properties: [
+                new OA\Property(
+                  property: "items",
+                  type: "array",
+                  items: new OA\Items(ref: "#/components/schemas/Store")
+                ),
+                new OA\Property(property: "total", type: "integer", example: 50),
+                new OA\Property(property: "per_page", type: "integer", example: 15),
+                new OA\Property(property: "current_page", type: "integer", example: 1),
+                new OA\Property(property: "last_page", type: "integer", example: 4),
+              ]
             ),
             new OA\Property(property: "errors", nullable: true, example: null),
           ]
@@ -61,12 +110,42 @@ class StoreController extends Controller
       ]
     )
   )]
-  public function index()
+  public function index(Request $request)
   {
+    $query = Store::with('businessType');
+
+    $query->when(
+      $request->filled('name'),
+      fn($q) =>
+      $q->where('name', 'like', '%' . $request->name . '%')
+    );
+
+    $query->when(
+      $request->filled('status'),
+      fn($q) =>
+      $q->where('status', $request->status)
+    );
+
+    $query->when(
+      $request->filled('business_type_id'),
+      fn($q) =>
+      $q->where('business_type_id', $request->business_type_id)
+    );
+
+    $perPage = $request->integer('per_page', 15);
+    $stores = $query->paginate($perPage);
+
+
     return response()->json([
       'status' => 'success',
       'message' => 'Listado de tiendas obtenido correctamente.',
-      'data' => Store::with('businessType')->get(),
+      'data' => [
+        'items'        => $stores->items(),
+        'total'        => $stores->total(),
+        'per_page'     => $stores->perPage(),
+        'current_page' => $stores->currentPage(),
+        'last_page'    => $stores->lastPage(),
+      ],
       'errors' => null,
     ]);
   }

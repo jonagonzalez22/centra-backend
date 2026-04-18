@@ -25,7 +25,10 @@ test('api can list all stores', function () {
     ->getJson('/api/v1/admin/stores');
 
   $response->assertStatus(200)
-    ->assertJsonCount(2, 'data');
+    ->assertJsonCount(2, 'data.items')
+    ->assertJsonPath('data.total', 2)
+    ->assertJsonPath('data.per_page', 15)
+    ->assertJsonPath('data.current_page', 1);
 });
 
 test('api can create a new store', function () {
