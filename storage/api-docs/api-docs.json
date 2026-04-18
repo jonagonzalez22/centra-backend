@@ -25,8 +25,60 @@
                     "Stores"
                 ],
                 "summary": "Listar tiendas",
-                "description": "Retorna la lista completa de tiendas con su tipo de negocio asociado.",
+                "description": "Retorna la lista paginada de tiendas con su tipo de negocio asociado. Permite filtrar por nombre, estado y tipo de negocio.",
                 "operationId": "storeIndex",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Filtrar por nombre (búsqueda parcial)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Ferretería"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filtrar por estado",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "active"
+                        }
+                    },
+                    {
+                        "name": "business_type_id",
+                        "in": "query",
+                        "description": "Filtrar por ID de tipo de negocio",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Cantidad de resultados por página (default: 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
                 "responses": {
                     "401": {
                         "description": "No autenticado",
@@ -77,10 +129,31 @@
                                         {
                                             "properties": {
                                                 "data": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "$ref": "#/components/schemas/Store"
-                                                    }
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/Store"
+                                                            }
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 15
+                                                        },
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 4
+                                                        }
+                                                    },
+                                                    "type": "object"
                                                 },
                                                 "errors": {
                                                     "example": null,
