@@ -1038,9 +1038,19 @@
                         "type": "string",
                         "example": "ferreteria@central.com"
                     },
-                    "status": {
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "inactive_reason": {
                         "type": "string",
-                        "example": "active"
+                        "example": null,
+                        "nullable": true
+                    },
+                    "inactive_at": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
                     },
                     "url_logo": {
                         "type": "string",
