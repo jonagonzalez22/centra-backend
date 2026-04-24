@@ -27,7 +27,9 @@ class Store extends Model
     'phone',
     'email',
     'url_logo',
-    'status',
+    'is_active',
+    'inactive_reason',
+    'inactive_at'
   ];
 
   protected $casts = [

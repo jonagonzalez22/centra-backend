@@ -29,7 +29,7 @@ test('DatabaseSeeder siembra store y usuarios con roles en env local', function 
 
   $this->assertDatabaseHas('stores', [
     'email' => 'ferreteria@central.com',
-    'status' => 'active',
+    'is_active' => true,
   ]);
 
   $store = Store::where('email', 'ferreteria@central.com')->firstOrFail();

@@ -40,7 +40,7 @@ test('api can create a new store', function () {
   $businessType = BusinessType::create([
     'name' => 'Ferretería',
     'description' => 'Test',
-    'status' => 'active',
+    'is_active' => true,
   ]);
 
   $data = [
@@ -53,7 +53,7 @@ test('api can create a new store', function () {
     'country' => 'Argentina',
     'phone' => '+541112345678',
     'email' => 'central@test.com',
-    'status' => 'active',
+    'is_active' => true,
   ];
 
   $response = $this->withHeader('Authorization', "Bearer $token")
@@ -86,7 +86,7 @@ test('api cannot create store without SUPER_ADMIN role', function () {
   $businessType = BusinessType::create([
     'name' => 'Ferretería',
     'description' => 'Test',
-    'status' => 'active',
+    'is_active' => true,
   ]);
 
   $data = [
@@ -99,7 +99,7 @@ test('api cannot create store without SUPER_ADMIN role', function () {
     'country' => 'Argentina',
     'phone' => '+541112345678',
     'email' => 'central@test.com',
-    'status' => 'active',
+    'is_active' => true,
   ];
 
   $response = $this->withHeader('Authorization', "Bearer $token")

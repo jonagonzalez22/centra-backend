@@ -39,7 +39,7 @@
                         }
                     },
                     {
-                        "name": "status",
+                        "name": "is_active",
                         "in": "query",
                         "description": "Filtrar por estado",
                         "required": false,
@@ -235,9 +235,18 @@
                                         "type": "string",
                                         "example": "ferreTest@central.com"
                                     },
-                                    "status": {
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "inactive_reason": {
                                         "type": "string",
-                                        "example": "active"
+                                        "nullable": true
+                                    },
+                                    "inactive_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "nullable": true
                                     },
                                     "url_logo": {
                                         "type": "string",
@@ -332,7 +341,7 @@
                         "description": "ID de la tienda",
                         "required": true,
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -430,7 +439,7 @@
                         "in": "path",
                         "required": true,
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],
@@ -449,7 +458,7 @@
                                     "country",
                                     "phone",
                                     "email",
-                                    "status"
+                                    "is_active"
                                 ],
                                 "properties": {
                                     "name": {
@@ -488,9 +497,18 @@
                                         "type": "string",
                                         "example": "ferreTest@central.com"
                                     },
-                                    "status": {
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "inactive_reason": {
                                         "type": "string",
-                                        "example": "active"
+                                        "nullable": true
+                                    },
+                                    "inactive_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "nullable": true
                                     },
                                     "url_logo": {
                                         "type": "string",
@@ -570,7 +588,7 @@
                         "in": "path",
                         "required": true,
                         "schema": {
-                            "type": "integer"
+                            "type": "string"
                         }
                     }
                 ],

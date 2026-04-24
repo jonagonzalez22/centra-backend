@@ -28,7 +28,7 @@ class StoreController extends Controller
   )]
 
   #[OA\Parameter(
-    name: "status",
+    name: "is_active",
     in: "query",
     required: false,
     description: "Filtrar por estado",
@@ -121,9 +121,9 @@ class StoreController extends Controller
     );
 
     $query->when(
-      $request->filled('status'),
+      $request->filled('is_active'),
       fn($q) =>
-      $q->where('status', $request->status)
+      $q->where('is_active', $request->boolean('is_active'))
     );
 
     $query->when(
@@ -184,7 +184,9 @@ class StoreController extends Controller
         new OA\Property(property: "country", type: "string", example: "Argentina"),
         new OA\Property(property: "phone", type: "string", example: "+5426112345678"),
         new OA\Property(property: "email", type: "string", example: "ferreTest@central.com"),
-        new OA\Property(property: "status", type: "string", example: "active"),
+        new OA\Property(property: "is_active", type: "boolean", example: true),
+        new OA\Property(property: "inactive_reason", type: "string", nullable: true),
+        new OA\Property(property: "inactive_at", type: "string", format: "date-time", nullable: true),
         new OA\Property(property: "url_logo", type: "string", nullable: true, example: "https://www.testcentral.com/logo.png")
       ]
     )
@@ -228,7 +230,7 @@ class StoreController extends Controller
   )]
   public function store(StoreRequest $request)
   {
-    $store = Store::create($request->all());
+    $store = Store::create($request->validated());
     $store->load('businessType');
 
     return response()->json([
@@ -253,7 +255,7 @@ class StoreController extends Controller
     in: "path",
     required: true,
     description: "ID de la tienda",
-    schema: new OA\Schema(type: "integer")
+    schema: new OA\Schema(type: "string")
   )]
 
   #[OA\Response(
@@ -338,7 +340,7 @@ class StoreController extends Controller
         "country",
         "phone",
         "email",
-        "status"
+        "is_active"
       ],
       properties: [
         new OA\Property(property: "name", type: "string", example: "Ferretería test"),
@@ -350,7 +352,9 @@ class StoreController extends Controller
         new OA\Property(property: "country", type: "string", example: "Argentina"),
         new OA\Property(property: "phone", type: "string", example: "+5426112345678"),
         new OA\Property(property: "email", type: "string", example: "ferreTest@central.com"),
-        new OA\Property(property: "status", type: "string", example: "active"),
+        new OA\Property(property: "is_active", type: "boolean", example: true),
+        new OA\Property(property: "inactive_reason", type: "string", nullable: true),
+        new OA\Property(property: "inactive_at", type: "string", format: "date-time", nullable: true),
         new OA\Property(property: "url_logo", type: "string", nullable: true, example: "https://www.testcentral.com/logo.png")
       ]
     )
@@ -360,7 +364,7 @@ class StoreController extends Controller
     name: "id",
     in: "path",
     required: true,
-    schema: new OA\Schema(type: "integer")
+    schema: new OA\Schema(type: "string")
   )]
 
   #[OA\Response(
@@ -396,7 +400,7 @@ class StoreController extends Controller
   public function update(StoreRequest $request, string $id)
   {
     $store = Store::findOrFail($id);
-    $store->update($request->all());
+    $store->update($request->validated());
     $store->load('businessType');
 
     return response()->json([
@@ -420,7 +424,7 @@ class StoreController extends Controller
     name: "id",
     in: "path",
     required: true,
-    schema: new OA\Schema(type: "integer")
+    schema: new OA\Schema(type: "string")
   )]
 
   #[OA\Response(

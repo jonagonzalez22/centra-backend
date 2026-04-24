@@ -71,9 +71,13 @@ class StoreRequest extends FormRequest
 
       'phone' => ['required', 'string', 'regex:/^\+?[0-9]{10,15}$/'],
 
-      'email' => ['required', 'string', 'email', 'max:255', Rule::unique('stores', 'email')->ignore($this->route('store')),],
-
-      'status' => ['nullable', 'in:active,inactive'],
+      'email' => [
+        'required',
+        'string',
+        'email',
+        'max:255',
+        Rule::unique('stores', 'email')->ignore($this->route('id') ?? $this->route('store'))
+      ],
 
       'url_logo' => ['nullable', 'string', 'url', 'max:255'],
     ];
@@ -106,8 +110,6 @@ class StoreRequest extends FormRequest
       'phone.regex' => 'El teléfono debe tener formato internacional válido, por ejemplo: +541112345678.',
 
       'url_logo.url' => 'La URL del logo debe ser válida.',
-
-      'status.in' => 'El estado debe ser active o inactive.',
     ];
   }
 

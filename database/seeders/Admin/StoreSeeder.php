@@ -27,7 +27,7 @@ class StoreSeeder extends Seeder
         'country' => 'Argentina',
         'phone' => '+54 11 1234-5678',
         'url_logo' => 'https://www.testcentral.com/logo.png',
-        'status' => 'active',
+        'is_active' => true,
       ]
     );
   }
