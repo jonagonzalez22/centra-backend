@@ -26,7 +26,7 @@ class StoreFactory extends Factory
       'country' => $this->faker->country(),
       'phone' => $this->faker->phoneNumber(),
       'email' => $this->faker->unique()->safeEmail(),
-      'status' => 'active',
+      'is_active' => true,
     ];
   }
 }
