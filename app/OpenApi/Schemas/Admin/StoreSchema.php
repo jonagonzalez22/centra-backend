@@ -41,8 +41,14 @@ class StoreSchema
   #[OA\Property(example: "ferreteria@central.com")]
   public string $email;
 
-  #[OA\Property(example: "active")]
-  public string $status;
+  #[OA\Property(example: true)]
+  public bool $is_active;
+
+  #[OA\Property(example: null)]
+  public ?string $inactive_reason;
+
+  #[OA\Property(example: null)]
+  public ?string $inactive_at;
 
   #[OA\Property(example: "https://www.testcentral.com/logo.png")]
   public string $url_logo;
