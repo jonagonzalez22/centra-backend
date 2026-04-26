@@ -78,7 +78,9 @@ class StoreRequest extends FormRequest
         'max:255',
         Rule::unique('stores', 'email')->ignore($this->route('id') ?? $this->route('store'))
       ],
-
+      'is_active' => ['nullable', 'boolean'],
+      'inactive_reason' => ['nullable', 'string', 'max:255'],
+      'inactive_at' => ['nullable', 'date'],
       'url_logo' => ['nullable', 'string', 'url', 'max:255'],
     ];
   }

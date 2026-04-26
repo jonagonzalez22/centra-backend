@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Models\Admin\Store;
+use App\Models\Store;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
