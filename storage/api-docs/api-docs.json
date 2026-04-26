@@ -44,8 +44,8 @@
                         "description": "Filtrar por estado",
                         "required": false,
                         "schema": {
-                            "type": "string",
-                            "example": "active"
+                            "type": "boolean",
+                            "example": "true"
                         }
                     },
                     {
@@ -196,7 +196,7 @@
                                     "country",
                                     "phone",
                                     "email",
-                                    "status"
+                                    "is_active"
                                 ],
                                 "properties": {
                                     "name": {

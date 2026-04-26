@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\Admin\BusinessType;
-use App\Models\Admin\Store;
+use App\Models\BusinessType;
+use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;

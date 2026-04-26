@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\StoreRequest;
-use App\Models\Admin\Store;
+use App\Models\Store;
 use OpenApi\Attributes as OA;
 use Illuminate\Http\Request;
 
@@ -32,7 +32,7 @@ class StoreController extends Controller
     in: "query",
     required: false,
     description: "Filtrar por estado",
-    schema: new OA\Schema(type: "string", example: "active")
+    schema: new OA\Schema(type: 'boolean', example: "true")
   )]
 
   #[OA\Parameter(
@@ -172,7 +172,7 @@ class StoreController extends Controller
         "country",
         "phone",
         "email",
-        "status"
+        "is_active"
       ],
       properties: [
         new OA\Property(property: "name", type: "string", example: "Ferretería test"),
@@ -186,7 +186,7 @@ class StoreController extends Controller
         new OA\Property(property: "email", type: "string", example: "ferreTest@central.com"),
         new OA\Property(property: "is_active", type: "boolean", example: true),
         new OA\Property(property: "inactive_reason", type: "string", nullable: true),
-        new OA\Property(property: "inactive_at", type: "string", format: "date-time", nullable: true),
+        new OA\Property(property: "inactive_at", type: "string", format: "date-time", nullable: true, example: "2024-06-01T12:00:00Z"),
         new OA\Property(property: "url_logo", type: "string", nullable: true, example: "https://www.testcentral.com/logo.png")
       ]
     )
@@ -354,7 +354,7 @@ class StoreController extends Controller
         new OA\Property(property: "email", type: "string", example: "ferreTest@central.com"),
         new OA\Property(property: "is_active", type: "boolean", example: true),
         new OA\Property(property: "inactive_reason", type: "string", nullable: true),
-        new OA\Property(property: "inactive_at", type: "string", format: "date-time", nullable: true),
+        new OA\Property(property: "inactive_at", type: "string", format: "date-time", nullable: true, example: "2026-04-25T14:30:00Z"),
         new OA\Property(property: "url_logo", type: "string", nullable: true, example: "https://www.testcentral.com/logo.png")
       ]
     )

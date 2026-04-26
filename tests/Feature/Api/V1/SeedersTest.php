@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Admin\Store;
+use App\Models\Store;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;

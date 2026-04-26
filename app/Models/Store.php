@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models\Admin;
+namespace App\Models;
 
 use App\Models\User;
 use Illuminate\Support\Str;
@@ -33,7 +33,8 @@ class Store extends Model
   ];
 
   protected $casts = [
-    'status' => 'string',
+    'is_active' => 'boolean',
+    'inactive_at' => 'datetime',
   ];
 
   protected static function booted()

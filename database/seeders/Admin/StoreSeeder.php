@@ -2,8 +2,8 @@
 
 namespace Database\Seeders\Admin;
 
-use App\Models\Admin\BusinessType;
-use App\Models\Admin\Store;
+use App\Models\BusinessType;
+use App\Models\Store;
 use Illuminate\Database\Seeder;
 
 class StoreSeeder extends Seeder
