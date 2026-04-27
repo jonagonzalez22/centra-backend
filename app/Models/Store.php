@@ -55,4 +55,18 @@ class Store extends Model
   {
     return $this->belongsTo(BusinessType::class);
   }
+
+  public function plan()
+  {
+    return $this->belongsTo(Plan::class);
+  }
+
+  public function hasFeature(string $code): bool
+  {
+    if (!$this->plan) {
+      return false;
+    }
+
+    return $this->plan->features->contains('code', $code);
+  }
 }
