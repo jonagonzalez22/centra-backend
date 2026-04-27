@@ -15,4 +15,10 @@ class Feature extends Model
     'name',
     'description',
   ];
+  public function plans()
+  {
+    return $this->belongsToMany(Plan::class, 'plan_features')
+      ->withPivot('limit_value')
+      ->withTimestamps();
+  }
 }

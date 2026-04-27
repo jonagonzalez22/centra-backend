@@ -24,4 +24,11 @@ class Plan extends Model
     'is_active'   => 'boolean',
     'is_trial'    => 'boolean',
   ];
+
+  public function features()
+  {
+    return $this->belongsToMany(Feature::class, 'plan_features')
+      ->withPivot('limit_value')
+      ->withTimestamps();
+  }
 }
