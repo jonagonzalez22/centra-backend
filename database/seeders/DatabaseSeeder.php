@@ -19,6 +19,8 @@ class DatabaseSeeder extends Seeder
         \Database\Seeders\RoleSeeder::class,
         \Database\Seeders\Admin\StoreSeeder::class,
         \Database\Seeders\UserSeeder::class,
+        \Database\Seeders\FeatureSeeder::class,
+        \Database\Seeders\PlanSeeder::class,
       ]);
     }
   }
