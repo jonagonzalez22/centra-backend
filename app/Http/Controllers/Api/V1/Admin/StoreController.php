@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\StoreRequest;
+use App\Http\Resources\StoreResource;
 use App\Models\Store;
 use OpenApi\Attributes as OA;
 use Illuminate\Http\Request;
@@ -41,6 +42,14 @@ class StoreController extends Controller
     required: false,
     description: "Filtrar por ID de tipo de negocio",
     schema: new OA\Schema(type: "integer", example: 1)
+  )]
+
+  #[OA\Parameter(
+    name: "plan_id",
+    in: "query",
+    required: false,
+    description: "Filtrar por ID de plan",
+    schema: new OA\Schema(type: "string", example: "019dd4bc-7318-7094-829b-a02485ba6caf")
   )]
 
   #[OA\Parameter(
@@ -112,7 +121,7 @@ class StoreController extends Controller
   )]
   public function index(Request $request)
   {
-    $query = Store::with('businessType');
+    $query = Store::with(['businessType', 'plan']);
 
     $query->when(
       $request->filled('name'),
@@ -132,6 +141,12 @@ class StoreController extends Controller
       $q->where('business_type_id', $request->business_type_id)
     );
 
+    $query->when(
+      $request->filled('plan_id'),
+      fn($q) =>
+      $q->where('plan_id', $request->plan_id)
+    );
+
     $perPage = $request->integer('per_page', 15);
     $stores = $query->paginate($perPage);
 
@@ -140,7 +155,7 @@ class StoreController extends Controller
       'status' => 'success',
       'message' => 'Listado de tiendas obtenido correctamente.',
       'data' => [
-        'items'        => $stores->items(),
+        'items'        => StoreResource::collection($stores->items()),
         'total'        => $stores->total(),
         'per_page'     => $stores->perPage(),
         'current_page' => $stores->currentPage(),
@@ -177,6 +192,7 @@ class StoreController extends Controller
       properties: [
         new OA\Property(property: "name", type: "string", example: "Ferretería test"),
         new OA\Property(property: "business_type_id", type: "integer", example: 1),
+        new OA\Property(property: "plan_id", type: "string", example: "019dd4bc-7318-7094-829b-a02485ba6caf"),
         new OA\Property(property: "cuit", type: "string", example: "20345678595"),
         new OA\Property(property: "address", type: "string", example: "Tunuyan 782"),
         new OA\Property(property: "state", type: "string", example: "Ciudad"),
@@ -308,12 +324,12 @@ class StoreController extends Controller
   )]
   public function show(string $id)
   {
-    $store = Store::with('businessType')->findOrFail($id);
+    $store = Store::with(['businessType', 'plan'])->findOrFail($id);
 
     return response()->json([
       'status' => 'success',
       'message' => 'Tienda obtenida correctamente.',
-      'data' => $store,
+      'data' => StoreResource::make($store),
       'errors' => null,
     ]);
   }
@@ -345,6 +361,7 @@ class StoreController extends Controller
       properties: [
         new OA\Property(property: "name", type: "string", example: "Ferretería test"),
         new OA\Property(property: "business_type_id", type: "integer", example: 1),
+        new OA\Property(property: "plan_id", type: "string", example: "019dd4bc-7318-7094-829b-a02485ba6caf"),
         new OA\Property(property: "cuit", type: "string", example: "20345678595"),
         new OA\Property(property: "address", type: "string", example: "Tunuyan 782"),
         new OA\Property(property: "state", type: "string", example: "Ciudad"),
@@ -401,12 +418,12 @@ class StoreController extends Controller
   {
     $store = Store::findOrFail($id);
     $store->update($request->validated());
-    $store->load('businessType');
+    $store->load(['businessType', 'plan']);
 
     return response()->json([
       'status' => 'success',
       'message' => 'Tienda actualizada correctamente.',
-      'data' => $store,
+      'data' => StoreResource::make($store),
       'errors' => null,
     ]);
   }

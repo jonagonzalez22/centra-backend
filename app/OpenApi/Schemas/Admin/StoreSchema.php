@@ -11,14 +11,11 @@ use OpenApi\Attributes as OA;
 )]
 class StoreSchema
 {
-  #[OA\Property(example: 3)]
+  #[OA\Property(example: "9482050g-0b29-4281-b9a7-7f19a14b3e6d")]
   public int $id;
 
   #[OA\Property(example: "Ferretería Central")]
   public string $name;
-
-  #[OA\Property(example: 1)]
-  public int $business_type_id;
 
   #[OA\Property(example: "20-1234567890")]
   public string $cuit;
@@ -59,9 +56,20 @@ class StoreSchema
   #[OA\Property(example: "2026-04-07T22:30:49.000000Z")]
   public string $updated_at;
 
+
+
   #[OA\Property(
     property: "business_type",
-    ref: "#/components/schemas/BusinessType"
+    ref: "#/components/schemas/BusinessTypeLight"
   )]
   public $business_type;
+
+  #[OA\Property(
+    property: "plan",
+    ref: "#/components/schemas/PlanLight"
+  )]
+  public $plan;
+
+  #[OA\Property(example: null)]
+  public ?string $trial_ends_at;
 }
