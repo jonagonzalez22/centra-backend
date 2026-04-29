@@ -59,6 +59,16 @@
                         }
                     },
                     {
+                        "name": "plan_id",
+                        "in": "query",
+                        "description": "Filtrar por ID de plan",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Cantidad de resultados por página (default: 15)",
@@ -207,6 +217,10 @@
                                         "type": "integer",
                                         "example": 1
                                     },
+                                    "plan_id": {
+                                        "type": "string",
+                                        "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                                    },
                                     "cuit": {
                                         "type": "string",
                                         "example": "20345678595"
@@ -246,6 +260,7 @@
                                     "inactive_at": {
                                         "type": "string",
                                         "format": "date-time",
+                                        "example": "2024-06-01T12:00:00Z",
                                         "nullable": true
                                     },
                                     "url_logo": {
@@ -469,6 +484,10 @@
                                         "type": "integer",
                                         "example": 1
                                     },
+                                    "plan_id": {
+                                        "type": "string",
+                                        "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                                    },
                                     "cuit": {
                                         "type": "string",
                                         "example": "20345678595"
@@ -508,6 +527,7 @@
                                     "inactive_at": {
                                         "type": "string",
                                         "format": "date-time",
+                                        "example": "2026-04-25T14:30:00Z",
                                         "nullable": true
                                     },
                                     "url_logo": {
@@ -963,6 +983,21 @@
     },
     "components": {
         "schemas": {
+            "BusinessTypeLight": {
+                "title": "BusinessTypeLight",
+                "description": "Versión simplificada de BusinessType para Store",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "30dd3bb-7320-7094-829b-a02485ba6cad"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Ferretería"
+                    }
+                },
+                "type": "object"
+            },
             "BusinessType": {
                 "title": "BusinessType",
                 "description": "Tipo de negocio asociado a una tienda",
@@ -994,21 +1029,32 @@
                 },
                 "type": "object"
             },
+            "PlanLight": {
+                "title": "PlanLight",
+                "description": "Versión simplificada de plans para Store",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Beta"
+                    }
+                },
+                "type": "object"
+            },
             "Store": {
                 "title": "Store",
                 "description": "Entidad tienda con su tipo de negocio",
                 "properties": {
                     "id": {
                         "type": "integer",
-                        "example": 3
+                        "example": "9482050g-0b29-4281-b9a7-7f19a14b3e6d"
                     },
                     "name": {
                         "type": "string",
                         "example": "Ferretería Central"
-                    },
-                    "business_type_id": {
-                        "type": "integer",
-                        "example": 1
                     },
                     "cuit": {
                         "type": "string",
@@ -1065,7 +1111,15 @@
                         "example": "2026-04-07T22:30:49.000000Z"
                     },
                     "business_type": {
-                        "$ref": "#/components/schemas/BusinessType"
+                        "$ref": "#/components/schemas/BusinessTypeLight"
+                    },
+                    "plan": {
+                        "$ref": "#/components/schemas/PlanLight"
+                    },
+                    "trial_ends_at": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
                     }
                 },
                 "type": "object"

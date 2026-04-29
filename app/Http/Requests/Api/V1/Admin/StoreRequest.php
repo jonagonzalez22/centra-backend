@@ -54,6 +54,8 @@ class StoreRequest extends FormRequest
 
       'business_type_id' => ['required', 'integer', 'exists:business_types,id'],
 
+      'plan_id' => 'nullable|uuid|exists:plans,id',
+
       'cuit' => [
         'required',
         'string',
@@ -92,6 +94,10 @@ class StoreRequest extends FormRequest
 
       'business_type_id.required' => 'El tipo de negocio es obligatorio.',
       'business_type_id.exists' => 'El tipo de negocio seleccionado no existe.',
+
+      'plan_id.uuid' => 'El ID del plan debe ser un UUID válido.',
+      'plan_id.exists' => 'El plan seleccionado no existe.',
+      'plan_id.required' => 'El plan es obligatorio.',
 
       'cuit.required' => 'El CUIT es obligatorio.',
       'cuit.regex' => 'El CUIT debe contener exactamente 11 dígitos numéricos.',
