@@ -13,8 +13,6 @@ use OpenApi\Attributes as OA;
 
 class AuthController extends Controller
 {
-
-
   #[OA\Post(
     path: "/login",
     summary: "Inicio de sesión",
@@ -103,11 +101,13 @@ class AuthController extends Controller
   )]
   public function login(LoginRequest $request): JsonResponse
   {
-    $user = User::where('email', $request->email)->first();
+    $user = User::with('store.plan.features')
+      ->where('email', $request->email)
+      ->first();
 
     if (! $user || ! Hash::check($request->password, $user->password)) {
       return response()->json([
-        'status' => 'error',
+        'status'  => 'error',
         'message' => 'Credenciales inválidas.',
         'data'    => null,
         'errors'  => ['auth' => ['El email o la contraseña son incorrectos.']],
@@ -119,20 +119,15 @@ class AuthController extends Controller
     $token = $user->createToken('api-token')->plainTextToken;
 
     return response()->json([
-      'status' => 'success',
+      'status'  => 'success',
       'message' => 'Autenticación exitosa.',
-      'data' => [
+      'data'    => [
         'token' => $token,
         'user'  => $this->formatUser($user),
       ],
       'errors'  => null,
     ], 200);
   }
-
-  /**
-   * POST /api/v1/logout
-   */
-
 
   #[OA\Post(
     path: "/logout",
@@ -181,8 +176,6 @@ class AuthController extends Controller
       ]
     )
   )]
-
-
   public function logout(Request $request): JsonResponse
   {
     $request->user()->tokens()->delete();
@@ -195,16 +188,12 @@ class AuthController extends Controller
     }
 
     return response()->json([
-      'status' => 'success',
+      'status'  => 'success',
       'message' => 'Sesión cerrada correctamente.',
       'data'    => null,
       'errors'  => null,
     ], 200);
   }
-
-  /**
-   * GET /api/v1/me
-   */
 
   #[OA\Get(
     path: "/me",
@@ -260,15 +249,14 @@ class AuthController extends Controller
       ]
     )
   )]
-
   public function me(Request $request): JsonResponse
   {
-    $user = $request->user()->load('roles');
+    $user = $request->user()->load(['roles', 'store.plan.features']);
 
     return response()->json([
-      'status' => 'success',
+      'status'  => 'success',
       'message' => 'Usuario autenticado.',
-      'data' => [
+      'data'    => [
         'user' => $this->formatUser($user),
       ],
       'errors'  => null,
@@ -276,19 +264,20 @@ class AuthController extends Controller
   }
 
   /**
-   * Format User for standar response.
+   * Format User for standard response.
    */
   private function formatUser(User $user): array
   {
+    $features = $user->store?->plan?->features->pluck('code')->toArray() ?? [];
+
     return [
       'id'          => $user->id,
       'name'        => $user->name,
       'email'       => $user->email,
       'store_id'    => $user->store_id,
       'roles'       => $user->getRoleNames()->toArray(),
-      'permissions' => $user->getPermissionsViaRoles()
-        ->pluck('name')
-        ->toArray(),
+      'permissions' => $user->getPermissionsViaRoles()->pluck('name')->toArray(),
+      'features'    => $features,
     ];
   }
 }

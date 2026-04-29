@@ -1165,8 +1165,8 @@
                 "description": "Modelo de usuario de CENTRA",
                 "properties": {
                     "id": {
-                        "type": "integer",
-                        "example": 1
+                        "type": "string",
+                        "example": "123e4567-e89b-12d3-a456-426614174000"
                     },
                     "name": {
                         "type": "string",
@@ -1178,8 +1178,8 @@
                         "example": "admin@centra.com"
                     },
                     "store_id": {
-                        "type": "number",
-                        "example": "39",
+                        "type": "string",
+                        "example": "9482050g-0b29-4281-b9a7-7f19a14b3e6d",
                         "nullable": true
                     },
                     "roles": {
@@ -1198,6 +1198,16 @@
                         },
                         "example": [
                             "cash.view"
+                        ]
+                    },
+                    "features": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "example": [
+                            "feature1",
+                            "feature2"
                         ]
                     }
                 },
