@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
+use App\Http\Controllers\Api\V1\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -20,6 +21,7 @@ Route::prefix('v1')->group(function () {
     ->middleware(['auth:sanctum', 'throttle:api', 'role:SUPER_ADMIN'])
     ->group(function () {
       Route::apiResource('stores', StoreController::class);
+      Route::apiResource('users', UserController::class);
     });
 
   Route::prefix('store')
