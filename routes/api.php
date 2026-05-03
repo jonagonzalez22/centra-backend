@@ -18,10 +18,14 @@ Route::prefix('v1')->group(function () {
     Route::get('me',      [AuthController::class, 'me']);
   });
   Route::prefix('admin')
-    ->middleware(['auth:sanctum', 'throttle:api', 'role:SUPER_ADMIN'])
+    ->middleware(['auth:sanctum', 'throttle:api'])
     ->group(function () {
-      Route::apiResource('stores', StoreController::class);
-      Route::apiResource('users', UserController::class);
+      Route::middleware('role:SUPER_ADMIN')->group(function () {
+        Route::apiResource('stores', StoreController::class);
+      });
+      Route::middleware('role:SUPER_ADMIN|STORE_ADMIN')->group(function () {
+        Route::apiResource('users', UserController::class);
+      });
     });
 
   Route::prefix('store')

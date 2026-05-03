@@ -6,7 +6,7 @@ use OpenApi\Attributes as OA;
 
 #[OA\Schema(
   schema: "User",
-  title: "Usuario",
+  title: "User",
   description: "Modelo de usuario de CENTRA",
   type: "object"
 )]
@@ -21,8 +21,12 @@ class UserSchema
   #[OA\Property(property: "email", type: "string", format: "email", example: "admin@centra.com")]
   public string $email;
 
-  #[OA\Property(property: "store_id", type: "string", example: "9482050g-0b29-4281-b9a7-7f19a14b3e6d", nullable: true)]
-  public string $store_id;
+  #[OA\Property(
+    property: "store",
+    ref: "#/components/schemas/StoreLight"
+  )]
+
+  public $store;
 
   #[OA\Property(
     property: "roles",

@@ -13,7 +13,7 @@ class UserResource extends JsonResource
       'id'          => $this->id,
       'name'        => $this->name,
       'email'       => $this->email,
-      'store_id'    => $this->store_id,
+      'store'    => new SimpleStoreResource($this->whenLoaded('store')),
       'roles'       => $this->getRoleNames()->toArray(),
       'permissions' => $this->getPermissionsViaRoles()->pluck('name')->toArray(),
       'features'    => $this->whenLoaded('store', function () {
