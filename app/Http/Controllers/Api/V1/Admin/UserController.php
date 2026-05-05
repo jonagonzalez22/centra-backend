@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\CreateUserRequest;
+use App\Http\Requests\Api\V1\Admin\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -214,24 +215,23 @@ class UserController extends Controller
   {
     $authUser = $request->user();
 
+
+    if (!$this->canAssignRole($authUser, $request->role)) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'No tenés permisos para asignar ese rol.',
+        'data'    => null,
+        'errors'  => ['role' => ['No podés asignar ese rol.']],
+      ], 403);
+    }
+
+
     // 🔐 Lógica multi-tenant
     // STORE_ADMIN → siempre su propio store_id (ignoramos lo que mande)
     // SUPER_ADMIN → usa el store_id del request (puede ser null)
     $storeId = $authUser->hasRole('SUPER_ADMIN')
       ? $request->store_id
       : $authUser->store_id;
-
-
-    if ($authUser->hasRole('STORE_ADMIN') && $request->role === 'SUPER_ADMIN') {
-      return response()->json([
-        'status' => 'error',
-        'message' => 'No tenés permisos para asignar ese rol.',
-        'data' => null,
-        'errors' => [
-          'role' => ['No podés asignar el rol SUPER_ADMIN.']
-        ],
-      ], 403);
-    }
 
     try {
       return DB::transaction(function () use ($request, $storeId) {
@@ -382,15 +382,330 @@ class UserController extends Controller
     ]);
   }
 
-  public function update(Request $request, string $id): JsonResponse
+  #[OA\Put(
+    path: "/admin/users/{id}",
+    summary: "Actualizar usuario",
+    description: "Actualiza los datos de un usuario. El password y el store_id son opcionales. STORE_ADMIN solo puede editar usuarios de su tienda y no puede asignar el rol SUPER_ADMIN.",
+    operationId: "userUpdate",
+    security: [["sanctum" => []]],
+    tags: ["Users"]
+  )]
+  #[OA\Parameter(
+    name: "id",
+    in: "path",
+    required: true,
+    description: "ID del usuario (UUID)",
+    schema: new OA\Schema(type: "string", example: "019dd4bc-7318-7094-829b-a02485ba6caf")
+  )]
+  #[OA\RequestBody(
+    required: true,
+    content: new OA\JsonContent(
+      properties: [
+        new OA\Property(property: "name", type: "string", example: "Juan Modificado"),
+        new OA\Property(property: "email", type: "string", example: "juan_nuevo@centra.com"),
+        new OA\Property(property: "password", type: "string", example: "NewPassword123"),
+        new OA\Property(property: "password_confirmation", type: "string", example: "NewPassword123"),
+        new OA\Property(property: "role", type: "string", example: "STORE_ADMIN"),
+        new OA\Property(property: "store_id", type: "string", nullable: true, description: "Solo editable por SUPER_ADMIN", example: "019dd4bc-7318-7094-829b-a02485ba6caf"),
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 200,
+    description: "Usuario actualizado correctamente",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "success"),
+            new OA\Property(property: "message", example: "Usuario actualizado correctamente."),
+            new OA\Property(property: "data", ref: "#/components/schemas/User"),
+            new OA\Property(property: "errors", nullable: true, example: null),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 401,
+    description: "No autenticado",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "No autenticado."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", type: "object", example: ["auth" => ["Token inválido o ausente"]]),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 403,
+    description: "Sin permisos o intento de asignar rol no permitido",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "No tenés permisos para asignar ese rol."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", type: "object", example: ["role" => ["No podés asignar ese rol."]]),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 404,
+    description: "Usuario no encontrado",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "Usuario no encontrado."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", nullable: true, example: null),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 422,
+    description: "Error de validación",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "Error de validación."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", type: "object"),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 500,
+    description: "Error interno del servidor",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "Error al actualizar el usuario."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", type: "string"),
+          ]
+        )
+      ]
+    )
+  )]
+  public function update(UpdateUserRequest $request, string $id): JsonResponse
   {
-    // TICKET 20
-    return response()->json(['message' => 'Update - Ticket 20']);
+    /** @var \App\Models\User $authUser */
+    $authUser = $request->user();
+
+
+    if ($request->filled('role') && !$this->canAssignRole($authUser, $request->role)) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'No tenés permisos para asignar ese rol.',
+        'data'    => null,
+        'errors'  => ['role' => ['No podés asignar ese rol.']],
+      ], 403);
+    }
+
+    // 2. Buscar el usuario respetando el multi-tenant
+    $query = User::where('id', $id);
+    if ($authUser->hasRole('STORE_ADMIN')) {
+      $query->where('store_id', $authUser->store_id);
+    }
+    $user = $query->first();
+
+    if (!$user) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'Usuario no encontrado.',
+        'data'    => null,
+        'errors'  => null,
+      ], 404);
+    }
+
+    try {
+      return DB::transaction(function () use ($request, $user, $authUser) {
+
+
+        $user->fill($request->only(['name', 'email']));
+
+
+        if ($request->filled('password')) {
+          $user->password = $request->password;
+        }
+
+
+        if ($authUser->hasRole('SUPER_ADMIN') && $request->has('store_id')) {
+          $user->store_id = $request->store_id;
+        }
+
+        $user->save();
+
+        if ($request->filled('role')) {
+          $user->syncRoles([$request->role]);
+        }
+
+        $user->load(['store.plan.features', 'roles']);
+
+        return response()->json([
+          'status'  => 'success',
+          'message' => 'Usuario actualizado correctamente.',
+          'data'    => UserResource::make($user),
+          'errors'  => null,
+        ]);
+      });
+    } catch (\Exception $e) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'Error al actualizar el usuario.',
+        'data'    => null,
+        'errors'  => $e->getMessage(),
+      ], 500);
+    }
   }
 
-  public function destroy(string $id): JsonResponse
+  #[OA\Delete(
+    path: "/admin/users/{id}",
+    summary: "Eliminar usuario",
+    description: "Elimina un usuario del sistema. Un usuario no puede eliminarse a sí mismo. STORE_ADMIN solo puede eliminar usuarios de su propia tienda.",
+    operationId: "userDestroy",
+    security: [["sanctum" => []]],
+    tags: ["Users"]
+  )]
+  #[OA\Parameter(
+    name: "id",
+    in: "path",
+    required: true,
+    description: "ID del usuario (UUID) a eliminar",
+    schema: new OA\Schema(type: "string", example: "019dd4bc-7318-7094-829b-a02485ba6caf")
+  )]
+  #[OA\Response(
+    response: 200,
+    description: "Usuario eliminado correctamente",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "success"),
+            new OA\Property(property: "message", example: "Usuario eliminado correctamente."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", nullable: true, example: null),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 401,
+    description: "No autenticado",
+    content: new OA\JsonContent(ref: "#/components/schemas/ApiResponse")
+  )]
+  #[OA\Response(
+    response: 403,
+    description: "Intento de auto-eliminación o sin permisos",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "No podés eliminar tu propio usuario."),
+          ]
+        )
+      ]
+    )
+  )]
+  #[OA\Response(
+    response: 404,
+    description: "Usuario no encontrado",
+    content: new OA\JsonContent(ref: "#/components/schemas/ApiResponse")
+  )]
+  #[OA\Response(
+    response: 500,
+    description: "Error interno del servidor",
+    content: new OA\JsonContent(ref: "#/components/schemas/ApiResponse")
+  )]
+  public function destroy(Request $request, string $id): JsonResponse
   {
-    // TICKET 21
-    return response()->json(['message' => 'Destroy - Ticket 21']);
+    /** @var \App\Models\User $authUser */
+    $authUser = $request->user();
+
+    if ($authUser->id === $id) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'No podés eliminar tu propio usuario.',
+        'data'    => null,
+        'errors'  => null,
+      ], 403);
+    }
+
+
+    $query = User::where('id', $id);
+    if ($authUser->hasRole('STORE_ADMIN')) {
+      $query->where('store_id', $authUser->store_id);
+    }
+    $user = $query->first();
+
+    if (!$user) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'Usuario no encontrado o no pertenece a tu tienda.',
+        'data'    => null,
+        'errors'  => null,
+      ], 404);
+    }
+
+    try {
+
+      $user->delete();
+
+      return response()->json([
+        'status'  => 'success',
+        'message' => 'Usuario eliminado correctamente.',
+        'data'    => null,
+        'errors'  => null,
+      ]);
+    } catch (\Exception $e) {
+      return response()->json([
+        'status'  => 'error',
+        'message' => 'Error al eliminar el usuario.',
+        'data'    => null,
+        'errors'  => $e->getMessage(),
+      ], 500);
+    }
+  }
+
+  private function canAssignRole(\App\Models\User $authUser, string $role): bool
+  {
+    if ($authUser->hasRole('SUPER_ADMIN')) {
+      return true;
+    }
+
+    if ($authUser->hasRole('STORE_ADMIN')) {
+      return $role !== 'SUPER_ADMIN';
+    }
+
+    return false;
   }
 }
