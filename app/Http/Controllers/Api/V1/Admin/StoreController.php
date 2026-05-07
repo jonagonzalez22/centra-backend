@@ -5,12 +5,156 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\StoreRequest;
 use App\Http\Resources\StoreResource;
+use App\Models\BusinessType;
+use App\Models\Plan;
 use App\Models\Store;
 use OpenApi\Attributes as OA;
 use Illuminate\Http\Request;
 
 class StoreController extends Controller
 {
+  #[OA\Get(
+    path: "/admin/stores/filter-options",
+    summary: "Opciones de filtro para tiendas",
+    description: "Retorna los valores disponibles para poblar los filtros del listado de tiendas.",
+    operationId: "storeFilterOptions",
+    security: [["sanctum" => []]],
+    tags: ["Stores"]
+  )]
+
+  #[OA\Response(
+    response: 401,
+    description: "No autenticado",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "No autenticado."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(
+              property: "errors",
+              type: "object",
+              example: ["auth" => ["Token inválido o ausente"]]
+            )
+          ]
+        )
+      ]
+    )
+  )]
+
+  #[OA\Response(
+    response: 403,
+    description: "Sin permisos",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(property: "status", example: "error"),
+            new OA\Property(property: "message", example: "No tenés permisos para realizar esta acción."),
+            new OA\Property(property: "data", nullable: true, example: null),
+            new OA\Property(property: "errors", type: "object")
+          ]
+        )
+      ]
+    )
+  )]
+
+  #[OA\Response(
+    response: 200,
+    description: "Opciones de filtro obtenidas correctamente",
+    content: new OA\JsonContent(
+      allOf: [
+        new OA\Schema(ref: "#/components/schemas/ApiResponse"),
+        new OA\Schema(
+          properties: [
+            new OA\Property(
+              property: "data",
+              type: "object",
+              properties: [
+                new OA\Property(
+                  property: "business_types",
+                  type: "array",
+                  items: new OA\Items(
+                    type: "object",
+                    properties: [
+                      new OA\Property(property: "id", type: "integer", example: 1),
+                      new OA\Property(property: "name", type: "string", example: "Ferretería"),
+                    ]
+                  )
+                ),
+                new OA\Property(
+                  property: "plans",
+                  type: "array",
+                  items: new OA\Items(
+                    type: "object",
+                    properties: [
+                      new OA\Property(property: "id", type: "string", example: "019dd4bc-7318-7094-829b-a02485ba6caf"),
+                      new OA\Property(property: "name", type: "string", example: "Plan Básico"),
+                    ]
+                  )
+                ),
+                new OA\Property(
+                  property: "is_active",
+                  type: "array",
+                  items: new OA\Items(
+                    type: "object",
+                    properties: [
+                      new OA\Property(property: "value", type: "boolean", example: true),
+                      new OA\Property(property: "label", type: "string", example: "Activo"),
+                    ]
+                  )
+                ),
+              ]
+            ),
+            new OA\Property(property: "errors", nullable: true, example: null),
+          ]
+        )
+      ]
+    )
+  )]
+  public function filterOptions()
+  {
+    $businessTypes = BusinessType::whereIn('id', function ($query) {
+      $query->select('business_type_id')->from('stores')->distinct();
+    })
+      ->where('status', 'active')
+      ->select('id', 'name')
+      ->orderBy('name')
+      ->get();
+
+    $plans = Plan::whereIn('id', function ($query) {
+      $query->select('plan_id')->from('stores')->whereNotNull('plan_id')->distinct();
+    })
+      ->where('is_active', true)
+      ->select('id', 'name')
+      ->orderBy('name')
+      ->get();
+
+    $activeValues = Store::distinct()->pluck('is_active');
+
+    $isActive = collect();
+    if ($activeValues->contains(true)) {
+      $isActive->push(['value' => true, 'label' => 'Activo']);
+    }
+    if ($activeValues->contains(false)) {
+      $isActive->push(['value' => false, 'label' => 'Inactivo']);
+    }
+
+    return response()->json([
+      'status' => 'success',
+      'message' => 'Opciones de filtro obtenidas correctamente.',
+      'data' => [
+        'business_types' => $businessTypes,
+        'plans' => $plans,
+        'is_active' => $isActive->values(),
+      ],
+      'errors' => null,
+    ]);
+  }
+
   #[OA\Get(
     path: "/admin/stores",
     summary: "Listar tiendas",
