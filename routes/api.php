@@ -21,6 +21,7 @@ Route::prefix('v1')->group(function () {
     ->middleware(['auth:sanctum', 'throttle:api'])
     ->group(function () {
       Route::middleware('role:SUPER_ADMIN')->group(function () {
+        Route::get('stores/filter-options', [StoreController::class, 'filterOptions']);
         Route::apiResource('stores', StoreController::class);
       });
       Route::middleware('role:SUPER_ADMIN|STORE_ADMIN')->group(function () {
