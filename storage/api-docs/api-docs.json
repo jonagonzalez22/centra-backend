@@ -19,6 +19,894 @@
         }
     ],
     "paths": {
+        "/admin/business-types": {
+            "get": {
+                "tags": [
+                    "Business Types"
+                ],
+                "summary": "Listar tipos de negocio",
+                "description": "Retorna la lista paginada de tipos de negocio. Permite filtrar por nombre y estado.",
+                "operationId": "businessTypeIndex",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Filtrar por nombre (búsqueda parcial)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Ferretería"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filtrar por estado",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "active",
+                                "inactive"
+                            ],
+                            "example": "active"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Resultados por página (default: 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Listado de tipos de negocio obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Listado de tipos de negocio obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/BusinessType"
+                                                            }
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 15
+                                                        },
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 4
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Business Types"
+                ],
+                "summary": "Crear tipo de negocio",
+                "description": "Crea un nuevo tipo de negocio en el sistema.",
+                "operationId": "businessTypeStore",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "status"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Ferretería"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Businesses that sell hardware and tools",
+                                        "nullable": true
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "active",
+                                            "inactive"
+                                        ],
+                                        "example": "active"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Tipo de negocio creado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/BusinessType"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/business-types/{id}": {
+            "get": {
+                "tags": [
+                    "Business Types"
+                ],
+                "summary": "Obtener tipo de negocio por ID",
+                "description": "Retorna un tipo de negocio específico.",
+                "operationId": "businessTypeShow",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del tipo de negocio",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tipo de negocio obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Tipo de negocio obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/BusinessType"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Tipo de negocio no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Tipo de negocio no encontrado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "business_type": [
+                                                            "No existe un tipo de negocio con ese ID"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Business Types"
+                ],
+                "summary": "Actualizar tipo de negocio",
+                "description": "Actualiza un tipo de negocio existente.",
+                "operationId": "businessTypeUpdate",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del tipo de negocio",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Ferretería actualizada"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Descripción actualizada",
+                                        "nullable": true
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "active",
+                                            "inactive"
+                                        ],
+                                        "example": "active"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Tipo de negocio actualizado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Tipo de negocio actualizado correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/BusinessType"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Tipo de negocio no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Tipo de negocio no encontrado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Business Types"
+                ],
+                "summary": "Eliminar tipo de negocio",
+                "description": "Elimina un tipo de negocio por ID. No se puede eliminar si tiene tiendas asociadas.",
+                "operationId": "businessTypeDestroy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del tipo de negocio a eliminar",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tipo de negocio eliminado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Tipo de negocio eliminado correctamente."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Tipo de negocio no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflicto - tiene tiendas asociadas",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No se puede eliminar el tipo de negocio porque tiene tiendas asociadas."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/admin/stores/filter-options": {
             "get": {
                 "tags": [
@@ -2304,6 +3192,10 @@
         }
     },
     "tags": [
+        {
+            "name": "Business Types",
+            "description": "Business Types"
+        },
         {
             "name": "Stores",
             "description": "Stores"

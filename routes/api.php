@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\Admin\BusinessTypeController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,7 @@ Route::prefix('v1')->group(function () {
       Route::middleware('role:SUPER_ADMIN')->group(function () {
         Route::get('stores/filter-options', [StoreController::class, 'filterOptions']);
         Route::apiResource('stores', StoreController::class);
+        Route::apiResource('business-types', BusinessTypeController::class);
       });
       Route::middleware('role:SUPER_ADMIN|STORE_ADMIN')->group(function () {
         Route::apiResource('users', UserController::class);
