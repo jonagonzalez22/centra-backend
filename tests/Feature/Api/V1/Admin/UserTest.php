@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Feature;
+use App\Models\Plan;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -151,7 +153,11 @@ test('super admin can create user in any store', function () {
 
 test('store admin creates user in their own store ignoring store_id sent', function () {
   /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+  $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+  $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+  $plan->features()->attach($feature->id, ['limit_value' => 5]);
+
+  $store = Store::factory()->create(['plan_id' => $plan->id]);
   $otherStore = Store::factory()->create();
 
   $admin = User::factory()->create(['store_id' => $store->id]);

@@ -233,6 +233,24 @@ class UserController extends Controller
       ? $request->store_id
       : $authUser->store_id;
 
+    if ($authUser->hasRole('STORE_ADMIN')) {
+      $store = $authUser->store->load('plan.features');
+      $currentUsers = $store->users()->count();
+
+      if (!$store->canUseFeature('multi_user', $currentUsers)) {
+        $limit = $store->getFeatureLimit('multi_user');
+        return response()->json([
+          'status'  => 'error',
+          'message' => 'Has alcanzado el límite de usuarios de tu plan.',
+          'data'    => null,
+          'errors'  => [
+            'limit' => ["Tu plan permite un máximo de {$limit} usuarios."]
+          ],
+        ], 403);
+      }
+    }
+
+
     try {
       return DB::transaction(function () use ($request, $storeId) {
 
