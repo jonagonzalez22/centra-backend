@@ -70,4 +70,31 @@ class Store extends Model
 
     return $this->plan->features->contains('code', $code);
   }
+
+
+  public function getFeatureLimit(string $code): ?int
+  {
+    if (!$this->plan || !$this->plan->relationLoaded('features')) {
+      return null;
+    }
+
+    $feature = $this->plan->features->firstWhere('code', $code);
+
+    return $feature?->pivot?->limit_value;
+  }
+
+  public function canUseFeature(string $code, int $currentUsage): bool
+  {
+    if (!$this->hasFeature($code)) {
+      return false;
+    }
+
+    $limit = $this->getFeatureLimit($code);
+
+    if (is_null($limit)) {
+      return true;
+    }
+
+    return $currentUsage < $limit;
+  }
 }
