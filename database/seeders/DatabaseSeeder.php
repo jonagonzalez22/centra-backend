@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
         \Database\Seeders\UserSeeder::class,
         \Database\Seeders\FeatureSeeder::class,
         \Database\Seeders\PlanSeeder::class,
+        \Database\Seeders\PermissionSeeder::class,
       ]);
     }
   }
