@@ -8,24 +8,42 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
-  // Rutas públicas (Login)
   Route::middleware('throttle:auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
   });
 
-  // Rutas protegidas generales (Cualquier usuario logueado)
   Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me',      [AuthController::class, 'me']);
   });
+
   Route::prefix('admin')
     ->middleware(['auth:sanctum', 'throttle:api'])
     ->group(function () {
-      Route::middleware('role:SUPER_ADMIN')->group(function () {
-        Route::get('stores/filter-options', [StoreController::class, 'filterOptions']);
-        Route::apiResource('stores', StoreController::class);
+
+      Route::middleware('role:SUPER_ADMIN|BACKOFFICE_USER')->group(function () {
+
+        Route::get('stores/filter-options', [StoreController::class, 'filterOptions'])
+          ->middleware('permission:stores.view');
+
+        Route::get('stores', [StoreController::class, 'index'])
+          ->middleware('permission:stores.view');
+
+        Route::post('stores', [StoreController::class, 'store'])
+          ->middleware('permission:stores.create');
+
+        Route::get('stores/{id}', [StoreController::class, 'show'])
+          ->middleware('permission:stores.view');
+
+        Route::put('stores/{id}', [StoreController::class, 'update'])
+          ->middleware('permission:stores.edit');
+
+        Route::delete('stores/{id}', [StoreController::class, 'destroy'])
+          ->middleware('permission:stores.delete');
+
         Route::apiResource('business-types', BusinessTypeController::class);
       });
+
       Route::middleware('role:SUPER_ADMIN|STORE_ADMIN')->group(function () {
         Route::apiResource('users', UserController::class);
       });

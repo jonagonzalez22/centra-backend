@@ -5,12 +5,19 @@ use App\Models\Plan;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-  Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
+  $role = Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
+
+  $permissions = ['stores.view', 'stores.create', 'stores.edit', 'stores.delete'];
+  foreach ($permissions as $permission) {
+    Permission::firstOrCreate(['name' => $permission]);
+  }
+  $role->syncPermissions($permissions);
 });
 
 test('api can list all stores', function () {
