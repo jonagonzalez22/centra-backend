@@ -391,13 +391,13 @@ class StoreController extends Controller
   public function store(StoreRequest $request)
   {
     $store = Store::create($request->validated());
-    $store->load('businessType');
+    $store->load(['businessType', 'plan']);
 
     return response()->json([
-      'status' => 'success',
+      'status'  => 'success',
       'message' => 'Tienda creada correctamente.',
-      'data' => $store,
-      'errors' => null,
+      'data'    => StoreResource::make($store),
+      'errors'  => null,
     ], 201);
   }
 
