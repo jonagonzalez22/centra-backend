@@ -37,6 +37,21 @@ class UpdateUserRequest extends FormRequest
     ];
   }
 
+  public function messages(): array
+  {
+    return [
+
+      'email.email'    => 'El email debe tener un formato válido.',
+      'email.unique'   => 'Ya existe un usuario con este email.',
+
+      'password.confirmed' => 'Las contraseñas no coinciden.',
+      'password.min'       => 'La contraseña debe tener al menos 6 caracteres.',
+
+      'store_id.uuid'   => 'El store_id debe ser un UUID válido.',
+      'store_id.exists' => 'La tienda seleccionada no existe.',
+    ];
+  }
+
   protected function failedValidation(Validator $validator): void
   {
     throw new HttpResponseException(
