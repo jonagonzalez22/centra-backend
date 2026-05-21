@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\BusinessTypeController;
+use App\Http\Controllers\Api\V1\Admin\FeatureController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -42,6 +43,8 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:stores.delete');
 
                 Route::apiResource('business-types', BusinessTypeController::class);
+
+                Route::apiResource('features', FeatureController::class);
             });
 
             Route::middleware('role:SUPER_ADMIN|STORE_ADMIN')->group(function () {
