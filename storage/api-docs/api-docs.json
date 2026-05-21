@@ -907,6 +907,892 @@
                 ]
             }
         },
+        "/admin/features": {
+            "get": {
+                "tags": [
+                    "Features"
+                ],
+                "summary": "Listar funcionalidades",
+                "description": "Retorna la lista paginada de funcionalidades. Permite filtrar por código, nombre y si tienen planes asociados.",
+                "operationId": "featureIndex",
+                "parameters": [
+                    {
+                        "name": "code",
+                        "in": "query",
+                        "description": "Filtrar por código (búsqueda parcial)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "pos"
+                        }
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Filtrar por nombre (búsqueda parcial)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Punto de venta"
+                        }
+                    },
+                    {
+                        "name": "has_plans",
+                        "in": "query",
+                        "description": "Filtrar por planes asociados (true = con planes, false = sin planes)",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": false
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Resultados por página (default: 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Listado de funcionalidades obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Listado de funcionalidades obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/Feature"
+                                                            }
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 15
+                                                        },
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 4
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Features"
+                ],
+                "summary": "Crear funcionalidad",
+                "description": "Crea una nueva funcionalidad en el sistema.",
+                "operationId": "featureStore",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "code",
+                                    "name"
+                                ],
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "example": "pos"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Punto de venta"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Sistema de punto de venta integrado",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Funcionalidad creada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Feature"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/features/{id}": {
+            "get": {
+                "tags": [
+                    "Features"
+                ],
+                "summary": "Obtener funcionalidad por ID",
+                "description": "Retorna una funcionalidad específica.",
+                "operationId": "featureShow",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID de la funcionalidad",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Funcionalidad obtenida correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Funcionalidad obtenida correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Feature"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Funcionalidad no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Funcionalidad no encontrada."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "feature": [
+                                                            "No existe una funcionalidad con ese ID"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Features"
+                ],
+                "summary": "Actualizar funcionalidad",
+                "description": "Actualiza una funcionalidad existente.",
+                "operationId": "featureUpdate",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID de la funcionalidad",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "example": "pos"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Punto de venta actualizado"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Descripción actualizada",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Funcionalidad actualizada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Funcionalidad actualizada correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Feature"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Funcionalidad no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Funcionalidad no encontrada."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Features"
+                ],
+                "summary": "Eliminar funcionalidad",
+                "description": "Elimina una funcionalidad por ID. No se puede eliminar si tiene planes asociados.",
+                "operationId": "featureDestroy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID de la funcionalidad a eliminar",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Funcionalidad eliminada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Funcionalidad eliminada correctamente."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Funcionalidad no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflicto - tiene planes asociados",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No se puede eliminar la funcionalidad porque tiene planes asociados."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/admin/stores/filter-options": {
             "get": {
                 "tags": [
@@ -3130,6 +4016,37 @@
                 },
                 "type": "object"
             },
+            "Feature": {
+                "title": "Feature",
+                "description": "Funcionalidad del sistema",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                    },
+                    "code": {
+                        "type": "string",
+                        "example": "pos"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Punto de venta"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Sistema de punto de venta integrado"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-04-27T22:00:06.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-04-27T22:00:06.000000Z"
+                    }
+                },
+                "type": "object"
+            },
             "PlanLight": {
                 "title": "PlanLight",
                 "description": "Versión simplificada de plans para Store",
@@ -3341,6 +4258,10 @@
         {
             "name": "Business Types",
             "description": "Business Types"
+        },
+        {
+            "name": "Features",
+            "description": "Features"
         },
         {
             "name": "Stores",
