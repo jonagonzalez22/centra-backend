@@ -14,6 +14,7 @@ class FeatureResource extends JsonResource
             'code' => $this->code,
             'name' => $this->name,
             'description' => $this->description,
+            'limit_value' => $this->when($this->relationLoaded('pivot'), fn () => $this->pivot?->limit_value),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
