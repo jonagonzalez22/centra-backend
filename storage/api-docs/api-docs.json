@@ -1793,6 +1793,1055 @@
                 ]
             }
         },
+        "/admin/plans": {
+            "get": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Listar planes",
+                "description": "Retorna la lista paginada de planes. Permite filtrar por nombre, ciclo de facturación y estado.",
+                "operationId": "planIndex",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Filtrar por nombre (búsqueda parcial)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "Básico"
+                        }
+                    },
+                    {
+                        "name": "billing_cycle",
+                        "in": "query",
+                        "description": "Filtrar por ciclo de facturación",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "monthly",
+                                "yearly"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "is_active",
+                        "in": "query",
+                        "description": "Filtrar por estado",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": true
+                        }
+                    },
+                    {
+                        "name": "is_trial",
+                        "in": "query",
+                        "description": "Filtrar si es plan de prueba",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": false
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Resultados por página (default: 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Listado de planes obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Listado de planes obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/Plan"
+                                                            }
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 15
+                                                        },
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 4
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Crear plan",
+                "description": "Crea un nuevo plan en el sistema.",
+                "operationId": "planStore",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "price",
+                                    "billing_cycle"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Plan Básico"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Plan ideal para pequeños negocios",
+                                        "nullable": true
+                                    },
+                                    "price": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 29.99
+                                    },
+                                    "billing_cycle": {
+                                        "type": "string",
+                                        "enum": [
+                                            "monthly",
+                                            "yearly"
+                                        ],
+                                        "example": "monthly"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_trial": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Plan creado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Plan"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/plans/{id}": {
+            "get": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Obtener plan por ID",
+                "description": "Retorna un plan específico con sus funcionalidades asociadas.",
+                "operationId": "planShow",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del plan",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Plan obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Plan"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Plan no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Plan no encontrado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "plan": [
+                                                            "No existe un plan con ese ID"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Actualizar plan",
+                "description": "Actualiza un plan existente.",
+                "operationId": "planUpdate",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del plan",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Plan Básico Actualizado"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Descripción actualizada",
+                                        "nullable": true
+                                    },
+                                    "price": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 39.99
+                                    },
+                                    "billing_cycle": {
+                                        "type": "string",
+                                        "enum": [
+                                            "monthly",
+                                            "yearly"
+                                        ],
+                                        "example": "yearly"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_trial": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Plan actualizado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Plan actualizado correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Plan"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Plan no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Eliminar plan",
+                "description": "Elimina un plan por ID. No se puede eliminar si tiene tiendas asociadas.",
+                "operationId": "planDestroy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del plan a eliminar",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan eliminado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Plan eliminado correctamente."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Plan no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflicto - tiene tiendas asociadas",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No se puede eliminar el plan porque tiene tiendas asociadas."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/plans/{id}/sync-features": {
+            "post": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Sincronizar funcionalidades del plan",
+                "description": "Sincroniza las funcionalidades asociadas a un plan, reemplazando las existentes.",
+                "operationId": "planSyncFeatures",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del plan",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "features"
+                                ],
+                                "properties": {
+                                    "features": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "feature_id"
+                                            ],
+                                            "properties": {
+                                                "feature_id": {
+                                                    "type": "string",
+                                                    "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                                                },
+                                                "limit_value": {
+                                                    "type": "integer",
+                                                    "example": 100,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Funcionalidades sincronizadas correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Funcionalidades sincronizadas correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Plan"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Plan no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/admin/stores/filter-options": {
             "get": {
                 "tags": [
@@ -4062,6 +5111,60 @@
                 },
                 "type": "object"
             },
+            "Plan": {
+                "title": "Plan",
+                "description": "Plan de suscripción",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Plan Básico"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Plan ideal para pequeños negocios"
+                    },
+                    "price": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 29.99
+                    },
+                    "billing_cycle": {
+                        "type": "string",
+                        "enum": [
+                            "monthly",
+                            "yearly"
+                        ],
+                        "example": "monthly"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "is_trial": {
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "features": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Feature"
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-04-27T22:00:06.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-04-27T22:00:06.000000Z"
+                    }
+                },
+                "type": "object"
+            },
             "StoreLight": {
                 "title": "StoreLight",
                 "description": "Versión simplificada de Store",
@@ -4262,6 +5365,10 @@
         {
             "name": "Features",
             "description": "Features"
+        },
+        {
+            "name": "Plans",
+            "description": "Plans"
         },
         {
             "name": "Stores",
