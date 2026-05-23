@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\Api\V1\Admin\BusinessTypeController;
 use App\Http\Controllers\Api\V1\Admin\FeatureController;
+use App\Http\Controllers\Api\V1\Admin\PermissionController;
 use App\Http\Controllers\Api\V1\Admin\PlanController;
+use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -51,6 +53,10 @@ Route::prefix('v1')->group(function () {
             Route::middleware('role:SUPER_ADMIN')->group(function () {
                 Route::apiResource('plans', PlanController::class);
                 Route::post('plans/{plan}/sync-features', [PlanController::class, 'syncFeatures']);
+
+                Route::apiResource('roles', RoleController::class);
+                Route::post('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
+                Route::get('permissions', [PermissionController::class, 'index']);
             });
 
             Route::middleware('role:SUPER_ADMIN|STORE_ADMIN')->group(function () {
