@@ -185,6 +185,14 @@ class StoreController extends Controller
     )]
 
     #[OA\Parameter(
+        name: 'cuit',
+        in: 'query',
+        required: false,
+        description: 'Filtrar por CUIT (búsqueda parcial)',
+        schema: new OA\Schema(type: 'string', example: '20345678595')
+    )]
+
+    #[OA\Parameter(
         name: 'per_page',
         in: 'query',
         required: false,
@@ -273,6 +281,11 @@ class StoreController extends Controller
         $query->when(
             $request->filled('plan_id'),
             fn ($q) => $q->where('plan_id', $request->plan_id)
+        );
+
+        $query->when(
+            $request->filled('cuit'),
+            fn ($q) => $q->where('cuit', 'like', '%'.$request->cuit.'%')
         );
 
         $perPage = $request->integer('per_page', 15);
