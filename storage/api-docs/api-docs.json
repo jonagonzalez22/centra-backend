@@ -907,6 +907,210 @@
                 ]
             }
         },
+        "/admin/dashboard": {
+            "get": {
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "Métricas y datos del dashboard",
+                "description": "Retorna KPIs, gráficos y actividad reciente para el dashboard del backoffice.",
+                "operationId": "dashboard",
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Datos del dashboard obtenidos correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "properties": {
+                                                        "metrics": {
+                                                            "properties": {
+                                                                "total_stores": {
+                                                                    "type": "integer",
+                                                                    "example": 150
+                                                                },
+                                                                "total_users": {
+                                                                    "type": "integer",
+                                                                    "example": 320
+                                                                },
+                                                                "estimated_mrr": {
+                                                                    "type": "number",
+                                                                    "example": 45750
+                                                                },
+                                                                "active_plans_count": {
+                                                                    "type": "integer",
+                                                                    "example": 4
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "charts": {
+                                                            "properties": {
+                                                                "stores_by_plan": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "properties": {
+                                                                            "plan_name": {
+                                                                                "type": "string",
+                                                                                "example": "Plan Básico"
+                                                                            },
+                                                                            "store_count": {
+                                                                                "type": "integer",
+                                                                                "example": 85
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    }
+                                                                },
+                                                                "stores_by_business_type": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "properties": {
+                                                                            "business_type_name": {
+                                                                                "type": "string",
+                                                                                "example": "Ferretería"
+                                                                            },
+                                                                            "store_count": {
+                                                                                "type": "integer",
+                                                                                "example": 45
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    }
+                                                                },
+                                                                "growth_last_6_months": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "properties": {
+                                                                            "month": {
+                                                                                "type": "string",
+                                                                                "example": "2026-01"
+                                                                            },
+                                                                            "store_count": {
+                                                                                "type": "integer",
+                                                                                "example": 12
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    }
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "recent_activity": {
+                                                            "properties": {
+                                                                "latest_stores": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "properties": {
+                                                                            "id": {
+                                                                                "type": "string",
+                                                                                "example": "019dd4bc-7318-7094-829b-a02485ba6caf"
+                                                                            },
+                                                                            "name": {
+                                                                                "type": "string",
+                                                                                "example": "Mi Tienda"
+                                                                            },
+                                                                            "created_at": {
+                                                                                "type": "string",
+                                                                                "example": "2026-05-20T10:30:00Z"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    }
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/admin/features": {
             "get": {
                 "tags": [
@@ -1776,6 +1980,134 @@
                                                 },
                                                 "errors": {
                                                     "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/permissions": {
+            "get": {
+                "tags": [
+                    "Permissions"
+                ],
+                "summary": "Listar permisos",
+                "description": "Retorna todos los permisos disponibles en el sistema, agrupados por recurso.",
+                "operationId": "permissionIndex",
+                "responses": {
+                    "200": {
+                        "description": "Listado de permisos obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Listado de permisos obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "stores": [
+                                                            "stores.view",
+                                                            "stores.create"
+                                                        ],
+                                                        "users": [
+                                                            "users.view"
+                                                        ]
+                                                    }
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object"
@@ -2794,6 +3126,922 @@
                     },
                     "404": {
                         "description": "Plan no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/roles": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Listar roles",
+                "description": "Retorna la lista paginada de roles con conteo de usuarios y permisos.",
+                "operationId": "roleIndex",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Resultados por página (default: 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Listado de roles obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Listado de roles obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/Role"
+                                                            }
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 5
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 15
+                                                        },
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No autenticado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Token inválido o ausente"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Crear rol",
+                "description": "Crea un nuevo rol en el sistema.",
+                "operationId": "roleStore",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "editor"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Rol creado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Rol creado correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Role"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/roles/{id}": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Obtener rol por ID",
+                "description": "Retorna un rol específico con sus permisos asociados.",
+                "operationId": "roleShow",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del rol",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Rol obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Rol obtenido correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Role"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Rol no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Rol no encontrado."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "role": [
+                                                            "No existe un rol con ese ID"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Actualizar rol",
+                "description": "Actualiza un rol existente.",
+                "operationId": "roleUpdate",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del rol",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "editor"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Rol actualizado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Rol actualizado correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Role"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Rol no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "Error de validación."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Eliminar rol",
+                "description": "Elimina un rol por ID. No se puede eliminar si tiene usuarios asignados o si es SUPER_ADMIN.",
+                "operationId": "roleDestroy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del rol a eliminar",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Rol eliminado correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Rol eliminado correctamente."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Rol no encontrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflicto - tiene usuarios asignados",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No se puede eliminar el rol porque tiene usuarios asignados."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "No se puede eliminar el rol protegido",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No se puede eliminar el rol SUPER_ADMIN."
+                                                },
+                                                "data": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/admin/roles/{id}/sync-permissions": {
+            "post": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Sincronizar permisos del rol",
+                "description": "Sincroniza los permisos asociados a un rol, reemplazando los existentes. Crea permisos faltantes automáticamente.",
+                "operationId": "roleSyncPermissions",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del rol",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "permissions"
+                                ],
+                                "properties": {
+                                    "permissions": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "example": [
+                                            "stores.view",
+                                            "stores.create",
+                                            "stores.edit"
+                                        ]
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Permisos sincronizados correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Permisos sincronizados correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/Role"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "example": "No tenés permisos para realizar esta acción."
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Rol no encontrado",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -5165,6 +6413,51 @@
                 },
                 "type": "object"
             },
+            "Role": {
+                "title": "Rol",
+                "description": "Rol del sistema",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "STORE_ADMIN"
+                    },
+                    "guard_name": {
+                        "type": "string",
+                        "example": "web"
+                    },
+                    "users_count": {
+                        "type": "integer",
+                        "example": 5
+                    },
+                    "permissions_count": {
+                        "type": "integer",
+                        "example": 8
+                    },
+                    "permissions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "example": [
+                            "stores.view",
+                            "stores.create"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-04-27T22:00:06.000000Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-04-27T22:00:06.000000Z"
+                    }
+                },
+                "type": "object"
+            },
             "StoreLight": {
                 "title": "StoreLight",
                 "description": "Versión simplificada de Store",
@@ -5363,12 +6656,24 @@
             "description": "Business Types"
         },
         {
+            "name": "Dashboard",
+            "description": "Dashboard"
+        },
+        {
             "name": "Features",
             "description": "Features"
         },
         {
+            "name": "Permissions",
+            "description": "Permissions"
+        },
+        {
             "name": "Plans",
             "description": "Plans"
+        },
+        {
+            "name": "Roles",
+            "description": "Roles"
         },
         {
             "name": "Stores",
