@@ -4302,6 +4302,16 @@
                         }
                     },
                     {
+                        "name": "cuit",
+                        "in": "query",
+                        "description": "Filtrar por CUIT (búsqueda parcial)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "20345678595"
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Cantidad de resultados por página (default: 15)",
