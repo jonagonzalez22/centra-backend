@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\BusinessTypeController;
+use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\FeatureController;
 use App\Http\Controllers\Api\V1\Admin\PermissionController;
 use App\Http\Controllers\Api\V1\Admin\PlanController;
@@ -26,6 +27,8 @@ Route::prefix('v1')->group(function () {
         ->group(function () {
 
             Route::middleware('role:SUPER_ADMIN|BACKOFFICE_USER')->group(function () {
+
+                Route::get('dashboard', [DashboardController::class, '__invoke']);
 
                 Route::get('stores/filter-options', [StoreController::class, 'filterOptions'])
                     ->middleware('permission:stores.view');
