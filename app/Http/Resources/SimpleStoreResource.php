@@ -12,6 +12,10 @@ class SimpleStoreResource extends JsonResource
     return [
       'id'   => $this->id,
       'name' => $this->name,
+      'business_type' => $this->whenLoaded(
+        'businessType',
+        fn() => $this->businessType?->name
+      ),
     ];
   }
 }

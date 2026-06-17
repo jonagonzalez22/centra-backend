@@ -46,13 +46,13 @@ class AuthTest extends TestCase
       ->assertJsonStructure([
         'data' => [
           'token',
-          'user' => ['id', 'name', 'email', 'store_id', 'roles', 'permissions', 'features']
+          'user' => ['id', 'name', 'email', 'store', 'roles', 'permissions', 'features']
         ],
         'message'
       ])
       ->assertJsonPath('data.user.email', 'test@centra.com')
       ->assertJsonPath('data.user.roles.0', 'SUPER_ADMIN')
-      ->assertJsonPath('data.user.features.0', 'feature1');
+      ->assertJsonPath('data.user.features.0.code', 'feature1');
   }
 
   /** @test */
@@ -92,11 +92,12 @@ class AuthTest extends TestCase
     $response->assertStatus(200)
       ->assertJsonStructure([
         'data' => [
-          'user' => ['id', 'name', 'email', 'store_id', 'roles', 'permissions', 'features']
+          'user' => ['id', 'name', 'email', 'store', 'roles', 'permissions', 'features']
         ]
       ])
       ->assertJsonPath('data.user.email', $user->email)
-      ->assertJsonCount(2, 'data.user.features');
+      ->assertJsonCount(2, 'data.user.features')
+      ->assertJsonPath('data.user.features.0.code', 'feature1');
   }
 
   /** @test */
