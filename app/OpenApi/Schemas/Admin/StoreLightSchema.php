@@ -16,4 +16,7 @@ class StoreLightSchema
 
   #[OA\Property(example: "Ferretería El Tornillo Feliz")]
   public string $name;
+
+  #[OA\Property(example: "Ferretería")]
+  public string $business_type;
 }

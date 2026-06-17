@@ -6479,6 +6479,10 @@
                     "name": {
                         "type": "string",
                         "example": "Ferretería El Tornillo Feliz"
+                    },
+                    "business_type": {
+                        "type": "string",
+                        "example": "Ferretería"
                     }
                 },
                 "type": "object"
@@ -6640,11 +6644,28 @@
                     "features": {
                         "type": "array",
                         "items": {
-                            "type": "string"
+                            "properties": {
+                                "code": {
+                                    "type": "string",
+                                    "example": "pos"
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "example": null,
+                                    "nullable": true
+                                }
+                            },
+                            "type": "object"
                         },
                         "example": [
-                            "feature1",
-                            "feature2"
+                            {
+                                "code": "pos",
+                                "limit": null
+                            },
+                            {
+                                "code": "multi_user",
+                                "limit": 2
+                            }
                         ]
                     }
                 },

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LoginRequest;
+use App\Http\Resources\SimpleStoreResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -101,7 +102,7 @@ class AuthController extends Controller
   )]
   public function login(LoginRequest $request): JsonResponse
   {
-    $user = User::with('store.plan.features')
+    $user = User::with('store.businessType', 'store.plan.features')
       ->where('email', $request->email)
       ->first();
 
@@ -251,7 +252,7 @@ class AuthController extends Controller
   )]
   public function me(Request $request): JsonResponse
   {
-    $user = $request->user()->load(['roles', 'store.plan.features']);
+    $user = $request->user()->load(['roles', 'store.businessType', 'store.plan.features']);
 
     return response()->json([
       'status'  => 'success',
@@ -268,13 +269,18 @@ class AuthController extends Controller
    */
   private function formatUser(User $user): array
   {
-    $features = $user->store?->plan?->features->pluck('code')->toArray() ?? [];
+    $features = $user->store?->plan?->features->map(fn($f) => [
+      'code'  => $f->code,
+      'limit' => $f->pivot->limit_value,
+    ])->toArray() ?? [];
 
     return [
       'id'          => $user->id,
       'name'        => $user->name,
       'email'       => $user->email,
-      'store_id'    => $user->store_id,
+      'store'       => $user->store
+        ? (new SimpleStoreResource($user->store))->toArray(request())
+        : null,
       'roles'       => $user->getRoleNames()->toArray(),
       'permissions' => $user->getPermissionsViaRoles()->pluck('name')->toArray(),
       'features'    => $features,

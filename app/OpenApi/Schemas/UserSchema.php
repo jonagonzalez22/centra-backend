@@ -47,8 +47,14 @@ class UserSchema
   #[OA\Property(
     property: "features",
     type: "array",
-    items: new OA\Items(type: "string"),
-    example: ["feature1", "feature2"]
+    items: new OA\Items(
+      type: "object",
+      properties: [
+        new OA\Property(property: "code", type: "string", example: "pos"),
+        new OA\Property(property: "limit", type: "integer", nullable: true, example: null),
+      ]
+    ),
+    example: [["code" => "pos", "limit" => null], ["code" => "multi_user", "limit" => 2]]
   )]
   public array $features;
 }
