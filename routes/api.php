@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\Store\CategoryController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -70,5 +71,14 @@ Route::prefix('v1')->group(function () {
 
     Route::prefix('store')
         ->middleware(['auth:sanctum', 'throttle:api', 'role:STORE_ADMIN|STORE_USER'])
-        ->group(function () {});
+        ->group(function () {
+            Route::get('categories', [CategoryController::class, 'index'])->name('store.categories.index');
+            Route::get('categories/{category}', [CategoryController::class, 'show'])->name('store.categories.show');
+
+            Route::middleware('role:STORE_ADMIN')->group(function () {
+                Route::post('categories', [CategoryController::class, 'store'])->name('store.categories.store');
+                Route::put('categories/{category}', [CategoryController::class, 'update'])->name('store.categories.update');
+                Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->name('store.categories.destroy');
+            });
+        });
 });
