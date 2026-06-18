@@ -21,8 +21,10 @@ class CategoryController extends Controller
    *   tags={"Store - Categorías"},
    *   security={{"sanctum":{}}},
    *
+   *   @OA\Parameter(name="name", in="query", @OA\Schema(type="string"), description="Filtrar por nombre (búsqueda parcial)"),
    *   @OA\Parameter(name="is_active", in="query", @OA\Schema(type="boolean"), description="Filtrar por estado activo"),
    *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
+   *   @OA\Parameter(name="page", in="query", @OA\Schema(type="integer", default=1 ), description="Número de página"),
    *
    *   @OA\Response(
    *     response=200,
@@ -32,7 +34,13 @@ class CategoryController extends Controller
    *
    *       @OA\Property(property="status", type="string", example="success"),
    *       @OA\Property(property="message", type="string", example="Categorías obtenidas exitosamente."),
-   *       @OA\Property(property="data", type="array", @OA\Items(ref="#/components/schemas/CategoryResource")),
+   *       @OA\Property(property="data", type="object",
+   *         @OA\Property(property="items", type="array", @OA\Items(ref="#/components/schemas/CategoryResource")),
+   *         @OA\Property(property="total", type="integer", example=4),
+   *         @OA\Property(property="per_page", type="integer", example=15),
+   *         @OA\Property(property="current_page", type="integer", example=1),
+   *         @OA\Property(property="last_page", type="integer", example=1)
+   *       ),
    *       @OA\Property(property="errors", type="null", example=null)
    *     )
    *   ),
@@ -45,6 +53,9 @@ class CategoryController extends Controller
     $storeId = $request->user()->store_id;
 
     $categories = Category::forStore($storeId)
+      ->when($request->filled('name'), function ($query) use ($request) {
+        $query->where('name', 'like', '%' . $request->name . '%');
+      })
       ->when($request->has('is_active'), function ($query) use ($request) {
         $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
       })
@@ -54,13 +65,14 @@ class CategoryController extends Controller
     return response()->json([
       'status' => 'success',
       'message' => 'Categorías obtenidas exitosamente.',
-      'data' => CategoryResource::collection($categories),
+      'data' => [
+        'items' => CategoryResource::collection($categories->items()),
+        'total' => $categories->total(),
+        'per_page' => $categories->perPage(),
+        'current_page' => $categories->currentPage(),
+        'last_page' => $categories->lastPage(),
+      ],
       'errors' => null,
-    ], 200)->withHeaders([
-      'X-Pagination-Total' => $categories->total(),
-      'X-Pagination-Current-Page' => $categories->currentPage(),
-      'X-Pagination-Last-Page' => $categories->lastPage(),
-      'X-Pagination-Per-Page' => $categories->perPage(),
     ]);
   }
 
