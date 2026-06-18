@@ -6284,6 +6284,14 @@
                 "operationId": "73beb60504c4fcf76e64fad82fc151db",
                 "parameters": [
                     {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Filtrar por nombre (búsqueda parcial)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
                         "name": "is_active",
                         "in": "query",
                         "description": "Filtrar por estado activo",
@@ -6298,6 +6306,15 @@
                         "schema": {
                             "type": "integer",
                             "default": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
                         }
                     }
                 ],
@@ -6317,10 +6334,31 @@
                                             "example": "Categorías obtenidas exitosamente."
                                         },
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/components/schemas/CategoryResource"
-                                            }
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/CategoryResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 4
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                }
+                                            },
+                                            "type": "object"
                                         },
                                         "errors": {
                                             "type": "null",
