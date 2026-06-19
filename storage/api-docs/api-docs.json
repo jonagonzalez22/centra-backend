@@ -6660,10 +6660,613 @@
                     }
                 ]
             }
+        },
+        "/store/products": {
+            "get": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Listar productos de la tienda",
+                "description": "Display a listing of products for the authenticated user's store.",
+                "operationId": "dbe62b408ccc2a33a6af0418227136c0",
+                "parameters": [
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Filtrar por categoría",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Filtrar por nombre (búsqueda parcial)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "sku",
+                        "in": "query",
+                        "description": "Filtrar por SKU (búsqueda parcial)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "barcode",
+                        "in": "query",
+                        "description": "Filtrar por código de barras",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "is_active",
+                        "in": "query",
+                        "description": "Filtrar por estado activo",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "sort_by",
+                        "in": "query",
+                        "description": "Campo por el cual ordenar",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "name",
+                                "sku",
+                                "price",
+                                "stock",
+                                "created_at"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "sort_dir",
+                        "in": "query",
+                        "description": "Dirección del ordenamiento",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Productos obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Productos obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/ProductResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Crear un nuevo producto",
+                "description": "Store a newly created product.",
+                "operationId": "60dd5709d9a29d6f43b5cfbf829384fc",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "sku",
+                                    "category_id",
+                                    "price"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Pintura Látex Blanca"
+                                    },
+                                    "sku": {
+                                        "type": "string",
+                                        "maxLength": 100,
+                                        "example": "PNT-LTX-001"
+                                    },
+                                    "category_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "uuid-categoria"
+                                    },
+                                    "barcode": {
+                                        "type": "string",
+                                        "maxLength": 100,
+                                        "example": "7501234567890",
+                                        "nullable": true
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Pintura látex premium para interiores",
+                                        "nullable": true
+                                    },
+                                    "price": {
+                                        "type": "number",
+                                        "example": 259.99
+                                    },
+                                    "cost": {
+                                        "type": "number",
+                                        "example": 150,
+                                        "nullable": true
+                                    },
+                                    "stock": {
+                                        "type": "integer",
+                                        "example": 100,
+                                        "nullable": true
+                                    },
+                                    "stock_reserved": {
+                                        "type": "integer",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "stock_min": {
+                                        "type": "integer",
+                                        "example": 10,
+                                        "nullable": true
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Producto creado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Producto creado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProductResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/products/{id}": {
+            "get": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Ver un producto específico",
+                "description": "Display the specified product.",
+                "operationId": "373c9d4e3d909a8b0376617309220a49",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Producto obtenido exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Producto obtenido exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProductResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Actualizar un producto",
+                "description": "Update the specified product.",
+                "operationId": "04eefb4843cf3a68830d1f16975007ad",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Pintura Látex Blanca Actualizada",
+                                        "nullable": true
+                                    },
+                                    "sku": {
+                                        "type": "string",
+                                        "maxLength": 100,
+                                        "example": "PNT-LTX-002",
+                                        "nullable": true
+                                    },
+                                    "category_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "uuid-categoria",
+                                        "nullable": true
+                                    },
+                                    "barcode": {
+                                        "type": "string",
+                                        "maxLength": 100,
+                                        "example": "7501234567891",
+                                        "nullable": true
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Descripción actualizada",
+                                        "nullable": true
+                                    },
+                                    "price": {
+                                        "type": "number",
+                                        "example": 279.99,
+                                        "nullable": true
+                                    },
+                                    "cost": {
+                                        "type": "number",
+                                        "example": 160,
+                                        "nullable": true
+                                    },
+                                    "stock": {
+                                        "type": "integer",
+                                        "example": 150,
+                                        "nullable": true
+                                    },
+                                    "stock_reserved": {
+                                        "type": "integer",
+                                        "example": 10,
+                                        "nullable": true
+                                    },
+                                    "stock_min": {
+                                        "type": "integer",
+                                        "example": 15,
+                                        "nullable": true
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": false,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Producto actualizado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Producto actualizado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProductResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Eliminar un producto",
+                "description": "Remove the specified product.",
+                "operationId": "d35a90e9d0e8d048485345ff53134a68",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Producto eliminado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Producto eliminado exitosamente."
+                                        },
+                                        "data": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
         }
     },
     "components": {
         "schemas": {
+            "ProductCategoryResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "ProductResource": {
+                "title": "ProductResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "sku": {
+                        "type": "string"
+                    },
+                    "barcode": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "description": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "price": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "cost": {
+                        "type": "number",
+                        "format": "float",
+                        "nullable": true
+                    },
+                    "stock": {
+                        "type": "integer"
+                    },
+                    "stock_reserved": {
+                        "type": "integer"
+                    },
+                    "available_stock": {
+                        "type": "integer"
+                    },
+                    "stock_min": {
+                        "type": "integer"
+                    },
+                    "is_active": {
+                        "type": "boolean"
+                    },
+                    "parent_product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "category": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/ProductCategoryResource"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "type": "object"
+            },
             "BusinessTypeLight": {
                 "title": "BusinessTypeLight",
                 "description": "Versión simplificada de BusinessType para Store",
@@ -7150,6 +7753,10 @@
         {
             "name": "Store - Categorías",
             "description": "Store - Categorías"
+        },
+        {
+            "name": "Store - Productos",
+            "description": "Store - Productos"
         }
     ]
 }
