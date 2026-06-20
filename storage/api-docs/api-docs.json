@@ -6661,6 +6661,85 @@
                 ]
             }
         },
+        "/store/products/generate-sku": {
+            "get": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Generar un SKU único para productos",
+                "description": "Generate a new SKU for products.",
+                "operationId": "0e2797db87ccd6c4124b51c1b56a6e88",
+                "parameters": [
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "ID de categoría para determinar el prefijo del SKU",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Nombre del producto para determinar el prefijo del SKU",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SKU generado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "SKU generado exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "sku": {
+                                                    "type": "string",
+                                                    "example": "FERR-000015"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "Feature no disponible en el plan"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/products": {
             "get": {
                 "tags": [
@@ -7589,6 +7668,37 @@
                                 "type": "string"
                             }
                         }
+                    }
+                },
+                "type": "object"
+            },
+            "SkuData": {
+                "title": "Datos del SKU generado",
+                "properties": {
+                    "sku": {
+                        "type": "string",
+                        "example": "FERR-000015"
+                    }
+                },
+                "type": "object"
+            },
+            "SkuResponse": {
+                "title": "Respuesta de generación de SKU",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "example": "success"
+                    },
+                    "message": {
+                        "type": "string",
+                        "example": "SKU generado exitosamente."
+                    },
+                    "data": {
+                        "$ref": "#/components/schemas/SkuData"
+                    },
+                    "errors": {
+                        "type": "object",
+                        "nullable": true
                     }
                 },
                 "type": "object"
