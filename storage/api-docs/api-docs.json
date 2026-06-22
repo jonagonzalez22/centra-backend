@@ -6740,6 +6740,245 @@
                 ]
             }
         },
+        "/store/inventory/movements": {
+            "get": {
+                "tags": [
+                    "Store - Inventario"
+                ],
+                "summary": "Listar movimientos de inventario",
+                "description": "Display a listing of inventory movements for the authenticated user's store.",
+                "operationId": "65a4738b2b32ef88c9cfe0ce427b22b1",
+                "parameters": [
+                    {
+                        "name": "product_id",
+                        "in": "query",
+                        "description": "Filtrar por producto",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Filtrar por tipo",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "input",
+                                "output",
+                                "adjustment"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "user_id",
+                        "in": "query",
+                        "description": "Filtrar por usuario",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "description": "Fecha de inicio (YYYY-MM-DD)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "description": "Fecha de fin (YYYY-MM-DD)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Movimientos obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Movimientos de inventario obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/InventoryMovementResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 50
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 4
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/inventory/adjust": {
+            "post": {
+                "tags": [
+                    "Store - Inventario"
+                ],
+                "summary": "Realizar ajuste manual de stock",
+                "description": "Perform a manual inventory adjustment.",
+                "operationId": "ccbfe448306993fdeb7c13484c40ece4",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "product_id",
+                                    "quantity",
+                                    "type",
+                                    "concept"
+                                ],
+                                "properties": {
+                                    "product_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "uuid-producto"
+                                    },
+                                    "quantity": {
+                                        "type": "integer",
+                                        "example": 10
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "input",
+                                            "output"
+                                        ],
+                                        "example": "input"
+                                    },
+                                    "concept": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Ajuste por carga inicial"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Ajuste realizado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ajuste de inventario realizado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/InventoryMovementResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Stock insuficiente o validación de negocio"
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "404": {
+                        "description": "Producto no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/products": {
             "get": {
                 "tags": [
@@ -7745,6 +7984,81 @@
                 },
                 "type": "object"
             },
+            "InventoryMovementResource": {
+                "title": "InventoryMovementResource",
+                "description": "Representación de un movimiento de inventario",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "input",
+                            "output",
+                            "adjustment"
+                        ],
+                        "example": "input"
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "example": 10
+                    },
+                    "previous_stock": {
+                        "type": "integer",
+                        "example": 100
+                    },
+                    "current_stock": {
+                        "type": "integer",
+                        "example": 110
+                    },
+                    "concept": {
+                        "type": "string",
+                        "example": "Carga inicial de stock"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-06-21 12:00:00"
+                    },
+                    "product": {
+                        "description": "Producto asociado al movimiento",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "example": "550e8400-e29b-41d4-a716-446655440000"
+                            },
+                            "name": {
+                                "type": "string",
+                                "example": "Pintura Látex Blanca"
+                            },
+                            "sku": {
+                                "type": "string",
+                                "example": "PNT-LTX-001"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "user": {
+                        "description": "Usuario que realizó el movimiento",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "example": "550e8400-e29b-41d4-a716-446655440001"
+                            },
+                            "name": {
+                                "type": "string",
+                                "example": "Juan Pérez"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
             "User": {
                 "title": "User",
                 "description": "Modelo de usuario de CENTRA",
@@ -7867,6 +8181,10 @@
         {
             "name": "Store - Productos",
             "description": "Store - Productos"
+        },
+        {
+            "name": "Store - Inventario",
+            "description": "Store - Inventario"
         }
     ]
 }
