@@ -26,8 +26,8 @@ class AdjustInventoryRequest extends FormRequest
                     return $query->where('store_id', $storeId);
                 }),
             ],
-            'quantity' => ['required', 'integer', 'min:1'],
-            'type' => ['required', 'string', Rule::in(['input', 'output'])],
+            'quantity' => ['required', 'integer'],
+            'type' => ['required', 'string', Rule::in(['input', 'output', 'adjustment'])],
             'concept' => ['required', 'string', 'max:255'],
         ];
     }
@@ -40,9 +40,8 @@ class AdjustInventoryRequest extends FormRequest
             'product_id.exists' => 'El producto no existe o no pertenece a tu tienda.',
             'quantity.required' => 'La cantidad es obligatoria.',
             'quantity.integer' => 'La cantidad debe ser un número entero.',
-            'quantity.min' => 'La cantidad debe ser mayor a cero.',
             'type.required' => 'El tipo de ajuste es obligatorio.',
-            'type.in' => 'El tipo de ajuste debe ser input o output.',
+            'type.in' => 'El tipo de ajuste debe ser input, output o adjustment.',
             'concept.required' => 'El concepto es obligatorio.',
             'concept.max' => 'El concepto no puede exceder los 255 caracteres.',
         ];
