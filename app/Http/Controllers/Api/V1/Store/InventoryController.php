@@ -113,7 +113,7 @@ class InventoryController extends Controller
      *
      *       @OA\Property(property="product_id", type="string", format="uuid", example="uuid-producto"),
      *       @OA\Property(property="quantity", type="integer", example=10),
-     *       @OA\Property(property="type", type="string", enum={"input", "output"}, example="input"),
+     *       @OA\Property(property="type", type="string", enum={"input", "output", "adjustment"}, example="input"),
      *       @OA\Property(property="concept", type="string", maxLength=255, example="Ajuste por carga inicial")
      *     )
      *   ),
@@ -173,7 +173,7 @@ class InventoryController extends Controller
                 'message' => $e->getMessage(),
                 'data' => null,
                 'errors' => ['quantity' => [$e->getMessage()]],
-            ], 400);
+            ], 422);
         }
     }
 }

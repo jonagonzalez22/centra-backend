@@ -16,26 +16,26 @@ class InventoryMovementService
         int $quantity,
         string $concept
     ): InventoryMovement {
-        if ($quantity <= 0) {
-            throw new \InvalidArgumentException('La cantidad debe ser mayor a cero.');
-        }
-
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
+        }
+
+        if ($type === 'input' && $quantity <= 0) {
+            throw new \InvalidArgumentException('Para entradas, la cantidad debe ser mayor a cero.');
+        }
+
+        if ($type === 'output') {
+            $quantity = abs($quantity) * -1;
         }
 
         return DB::transaction(function () use ($product, $user, $type, $quantity, $concept) {
             $product = Product::where('id', $product->id)->lockForUpdate()->first();
 
             $previousStock = $product->stock;
+            $newStock = $product->stock + $quantity;
 
-            if ($type === 'output' || $type === 'adjustment') {
-                if ($product->stock < $quantity) {
-                    throw new \InvalidArgumentException('Stock insuficiente para realizar el movimiento.');
-                }
-                $newStock = $product->stock - $quantity;
-            } else {
-                $newStock = $product->stock + $quantity;
+            if ($newStock < 0) {
+                throw new \InvalidArgumentException('El stock resultante no puede ser negativo.');
             }
 
             $product->update(['stock' => $newStock]);

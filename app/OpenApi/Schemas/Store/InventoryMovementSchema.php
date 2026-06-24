@@ -17,7 +17,7 @@ class InventoryMovementSchema
     #[OA\Property(type: 'string', enum: ['input', 'output', 'adjustment'], example: 'input')]
     public string $type;
 
-    #[OA\Property(type: 'integer', example: 10)]
+    #[OA\Property(type: 'integer', example: 10, description: 'Cantidad del movimiento. Es positiva para entradas, negativa para salidas. Para ajustes puede ser cualquier entero.')]
     public int $quantity;
 
     #[OA\Property(type: 'integer', example: 100)]
