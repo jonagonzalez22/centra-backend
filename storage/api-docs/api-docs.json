@@ -6916,7 +6916,8 @@
                                         "type": "string",
                                         "enum": [
                                             "input",
-                                            "output"
+                                            "output",
+                                            "adjustment"
                                         ],
                                         "example": "input"
                                     },
@@ -7500,6 +7501,87 @@
                     }
                 ]
             }
+        },
+        "/store/products/search": {
+            "get": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Buscar productos por nombre o SKU",
+                "description": "Endpoint ligero para alimentar componentes de autocompletado en el frontend. Retorna máximo 10 productos activos.",
+                "operationId": "fbd348f1c74fb1768496a9fae9d0b986",
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "Término de búsqueda (mínimo 2 caracteres)",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255,
+                            "minLength": 2
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resultados de búsqueda",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Productos encontrados."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "sku": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "Feature no disponible en el plan"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
         }
     },
     "components": {
@@ -7581,6 +7663,22 @@
                     "updated_at": {
                         "type": "string",
                         "format": "date-time"
+                    }
+                },
+                "type": "object"
+            },
+            "ProductSearchResource": {
+                "title": "ProductSearchResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "sku": {
+                        "type": "string"
                     }
                 },
                 "type": "object"
@@ -8003,6 +8101,7 @@
                         "example": "input"
                     },
                     "quantity": {
+                        "description": "Cantidad del movimiento. Es positiva para entradas, negativa para salidas. Para ajustes puede ser cualquier entero.",
                         "type": "integer",
                         "example": 10
                     },
