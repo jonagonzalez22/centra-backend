@@ -138,6 +138,7 @@ class UserController extends Controller
     #[OA\Parameter(name: 'name', in: 'query', required: false, description: 'Filtrar por nombre', schema: new OA\Schema(type: 'string', example: 'Juan'))]
     #[OA\Parameter(name: 'role', in: 'query', required: false, description: 'Filtrar por nombre de rol', schema: new OA\Schema(type: 'string', example: 'ADMIN'))]
     #[OA\Parameter(name: 'store_id', in: 'query', required: false, description: 'Filtrar por store_id (solo SUPER_ADMIN)', schema: new OA\Schema(type: 'string', example: '019dd4bc-7318-7094-829b-a02485ba6caf'))]
+    #[OA\Parameter(name: 'is_active', in: 'query', required: false, description: 'Filtrar por estado', schema: new OA\Schema(type: 'boolean', example: true))]
     #[OA\Parameter(name: 'per_page', in: 'query', required: false, description: 'Resultados por página (default: 15)', schema: new OA\Schema(type: 'integer', example: 15))]
     #[OA\Parameter(name: 'page', in: 'query', required: false, description: 'Número de página', schema: new OA\Schema(type: 'integer', example: 1))]
 
@@ -226,6 +227,10 @@ class UserController extends Controller
             $q->where('store_id', $request->store_id);
         });
 
+        $query->when($request->has('is_active'), function ($q) use ($request) {
+            $q->where('is_active', $request->boolean('is_active'));
+        });
+
         $perPage = $request->integer('per_page', 15);
         $users = $query->paginate($perPage);
 
@@ -263,6 +268,7 @@ class UserController extends Controller
                 new OA\Property(property: 'password_confirmation', type: 'string', example: 'Password1'),
                 new OA\Property(property: 'role', type: 'string', example: 'STORE_ADMIN'),
                 new OA\Property(property: 'store_id', type: 'string', nullable: true, example: '019dd4bc-7318-7094-829b-a02485ba6caf'),
+                new OA\Property(property: 'is_active', type: 'boolean', description: 'Estado del usuario. Por defecto es true.', example: true),
             ]
         )
     )]
@@ -365,12 +371,18 @@ class UserController extends Controller
         try {
             return DB::transaction(function () use ($request, $storeId) {
 
-                $user = User::create([
+                $userData = [
                     'name' => $request->name,
                     'email' => $request->email,
                     'password' => $request->password,
                     'store_id' => $storeId,
-                ]);
+                ];
+
+                if ($request->has('is_active')) {
+                    $userData['is_active'] = $request->boolean('is_active');
+                }
+
+                $user = User::create($userData);
 
                 $user->assignRole($request->role);
 
@@ -514,7 +526,7 @@ class UserController extends Controller
     #[OA\Put(
         path: '/admin/users/{id}',
         summary: 'Actualizar usuario',
-        description: 'Actualiza los datos de un usuario. El password y el store_id son opcionales. STORE_ADMIN solo puede editar usuarios de su tienda y no puede asignar el rol SUPER_ADMIN.',
+        description: 'Actualiza los datos de un usuario. El password, store_id e is_active son opcionales. STORE_ADMIN solo puede editar usuarios de su tienda y no puede asignar el rol SUPER_ADMIN.',
         operationId: 'userUpdate',
         security: [['sanctum' => []]],
         tags: ['Users']
@@ -536,6 +548,7 @@ class UserController extends Controller
                 new OA\Property(property: 'password_confirmation', type: 'string', example: 'NewPassword123'),
                 new OA\Property(property: 'role', type: 'string', example: 'STORE_ADMIN'),
                 new OA\Property(property: 'store_id', type: 'string', nullable: true, description: 'Solo editable por SUPER_ADMIN', example: '019dd4bc-7318-7094-829b-a02485ba6caf'),
+                new OA\Property(property: 'is_active', type: 'boolean', description: 'Estado del usuario', example: true),
             ]
         )
     )]
@@ -682,6 +695,10 @@ class UserController extends Controller
 
                 if ($authUser->hasRole('SUPER_ADMIN') && $request->has('store_id')) {
                     $user->store_id = $request->store_id;
+                }
+
+                if ($request->has('is_active')) {
+                    $user->is_active = $request->boolean('is_active');
                 }
 
                 $user->save();
