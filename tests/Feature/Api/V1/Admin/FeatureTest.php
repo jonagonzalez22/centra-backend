@@ -5,10 +5,13 @@ use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'BACKOFFICE_USER', 'guard_name' => 'web']);
 });

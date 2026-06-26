@@ -8,6 +8,7 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -17,6 +18,8 @@ class AuthTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     }
