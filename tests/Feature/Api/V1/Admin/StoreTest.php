@@ -7,10 +7,13 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
     $role = Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
 
     $permissions = ['stores.view', 'stores.create', 'stores.edit', 'stores.delete'];

@@ -7,10 +7,13 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
 
@@ -32,7 +35,7 @@ function createProductForStore(Store $store, Category $category, int $stock = 10
 
 function adjustInventory(array $data): \Illuminate\Testing\TestResponse
 {
-    $response = test()->withHeader('Authorization', "Bearer " . test()->token)
+    $response = test()->withHeader('Authorization', 'Bearer '.test()->token)
         ->postJson('/api/v1/store/inventory/adjust', $data);
 
     return $response;
