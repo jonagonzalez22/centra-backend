@@ -6,14 +6,16 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+    app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
 });
 
 // ============================================================
@@ -40,7 +42,11 @@ test('super admin can list all users', function () {
 
 test('store admin only sees users from their store', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -50,7 +56,7 @@ test('store admin only sees users from their store', function () {
     User::factory()->count(3)->create(); // other store
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->getJson('/api/v1/admin/users');
+        ->getJson('/api/v1/store/users');
 
     $response->assertStatus(200)
         ->assertJsonCount(3, 'data.items') // 2 + admin
@@ -195,12 +201,12 @@ test('store admin creates user in their own store ignoring store_id sent', funct
         'email' => 'nuevo@centra.com',
         'password' => 'Password1',
         'password_confirmation' => 'Password1',
-        'role' => 'STORE_ADMIN',
+        'role' => 'STORE_USER',
         'store_id' => $otherStore->id, // should be ignored
     ];
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson('/api/v1/admin/users', $data);
+        ->postJson('/api/v1/store/users', $data);
 
     $response->assertStatus(201);
 
@@ -212,7 +218,11 @@ test('store admin creates user in their own store ignoring store_id sent', funct
 
 test('store admin cannot assign super admin role', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -227,7 +237,7 @@ test('store admin cannot assign super admin role', function () {
     ];
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson('/api/v1/admin/users', $data);
+        ->postJson('/api/v1/store/users', $data);
 
     $response->assertStatus(403)
         ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
@@ -313,7 +323,11 @@ test('super admin can view any user', function () {
 
 test('show store admin can view user from their store', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -322,7 +336,7 @@ test('show store admin can view user from their store', function () {
     $user = User::factory()->create(['store_id' => $store->id]);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->getJson("/api/v1/admin/users/{$user->id}");
+        ->getJson("/api/v1/store/users/{$user->id}");
 
     $response->assertStatus(200)
         ->assertJsonPath('data.id', $user->id);
@@ -343,7 +357,11 @@ test('show returns 404 for non-existent user', function () {
 
 test('store admin cannot view users from another store', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
     $otherStore = Store::factory()->create();
 
     $admin = User::factory()->create(['store_id' => $store->id]);
@@ -353,7 +371,7 @@ test('store admin cannot view users from another store', function () {
     $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->getJson("/api/v1/admin/users/{$otherUser->id}");
+        ->getJson("/api/v1/store/users/{$otherUser->id}");
 
     $response->assertStatus(404)
         ->assertJsonPath('message', 'Usuario no encontrado.');
@@ -382,7 +400,11 @@ test('super admin can update any user', function () {
 
 test('store admin can update users from their store', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -391,7 +413,7 @@ test('store admin can update users from their store', function () {
     $user = User::factory()->create(['store_id' => $store->id, 'name' => 'Old Name']);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'Updated']);
+        ->putJson("/api/v1/store/users/{$user->id}", ['name' => 'Updated']);
 
     $response->assertStatus(200)
         ->assertJsonPath('data.name', 'Updated');
@@ -399,7 +421,11 @@ test('store admin can update users from their store', function () {
 
 test('store admin cannot assign super admin role on update', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -408,7 +434,7 @@ test('store admin cannot assign super admin role on update', function () {
     $user = User::factory()->create(['store_id' => $store->id]);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->putJson("/api/v1/admin/users/{$user->id}", ['role' => 'SUPER_ADMIN']);
+        ->putJson("/api/v1/store/users/{$user->id}", ['role' => 'SUPER_ADMIN']);
 
     $response->assertStatus(403)
         ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
@@ -488,7 +514,11 @@ test('super admin can reactivate a user', function () {
 
 test('store admin can change is_active', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -497,7 +527,7 @@ test('store admin can change is_active', function () {
     $user = User::factory()->create(['store_id' => $store->id, 'is_active' => true]);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->putJson("/api/v1/admin/users/{$user->id}", ['is_active' => false, 'name' => 'Updated']);
+        ->putJson("/api/v1/store/users/{$user->id}", ['is_active' => false, 'name' => 'Updated']);
 
     $response->assertStatus(200)
         ->assertJsonPath('data.is_active', false);
@@ -545,7 +575,11 @@ test('super admin can delete a user', function () {
 
 test('store admin can only delete users from their store', function () {
     /** @var \Tests\TestCase $this */
-    $store = Store::factory()->create();
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
 
     $admin = User::factory()->create(['store_id' => $store->id]);
     $admin->assignRole('STORE_ADMIN');
@@ -554,7 +588,7 @@ test('store admin can only delete users from their store', function () {
     $user = User::factory()->create(['store_id' => $store->id]);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->deleteJson("/api/v1/admin/users/{$user->id}");
+        ->deleteJson("/api/v1/store/users/{$user->id}");
 
     $response->assertStatus(200);
 
