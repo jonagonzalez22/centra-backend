@@ -10,8 +10,8 @@ use Spatie\Permission\Models\Role;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-  Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
-  Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
 });
 
 // ============================================================
@@ -19,105 +19,129 @@ beforeEach(function () {
 // ============================================================
 
 test('super admin can list all users', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  User::factory()->count(3)->create();
+    User::factory()->count(3)->create();
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson('/api/v1/admin/users');
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users');
 
-  $response->assertStatus(200)
-    ->assertJsonCount(4, 'data.items') // 3 + admin
-    ->assertJsonPath('data.total', 4)
-    ->assertJsonPath('data.per_page', 15)
-    ->assertJsonPath('data.current_page', 1);
+    $response->assertStatus(200)
+        ->assertJsonCount(4, 'data.items') // 3 + admin
+        ->assertJsonPath('data.total', 4)
+        ->assertJsonPath('data.per_page', 15)
+        ->assertJsonPath('data.current_page', 1);
 });
 
 test('store admin only sees users from their store', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  User::factory()->count(2)->create(['store_id' => $store->id]);
-  User::factory()->count(3)->create(); // other store
+    User::factory()->count(2)->create(['store_id' => $store->id]);
+    User::factory()->count(3)->create(); // other store
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson('/api/v1/admin/users');
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users');
 
-  $response->assertStatus(200)
-    ->assertJsonCount(3, 'data.items') // 2 + admin
-    ->assertJsonPath('data.total', 3);
+    $response->assertStatus(200)
+        ->assertJsonCount(3, 'data.items') // 2 + admin
+        ->assertJsonPath('data.total', 3);
 });
 
 test('index filters users by name', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  User::factory()->create(['name' => 'Juan Perez']);
-  User::factory()->create(['name' => 'Maria Lopez']);
-  User::factory()->create(['name' => 'Juan Garcia']);
+    User::factory()->create(['name' => 'Juan Perez']);
+    User::factory()->create(['name' => 'Maria Lopez']);
+    User::factory()->create(['name' => 'Juan Garcia']);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson('/api/v1/admin/users?name=Juan');
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users?name=Juan');
 
-  $response->assertStatus(200)
-    ->assertJsonCount(2, 'data.items')
-    ->assertJsonPath('data.total', 2);
+    $response->assertStatus(200)
+        ->assertJsonCount(2, 'data.items')
+        ->assertJsonPath('data.total', 2);
 });
 
 test('index filters users by role', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user1 = User::factory()->create();
-  $user1->assignRole('STORE_ADMIN');
+    $user1 = User::factory()->create();
+    $user1->assignRole('STORE_ADMIN');
 
-  $user2 = User::factory()->create();
-  $user2->assignRole('STORE_ADMIN');
+    $user2 = User::factory()->create();
+    $user2->assignRole('STORE_ADMIN');
 
-  User::factory()->create(); // no role
+    User::factory()->create(); // no role
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson('/api/v1/admin/users?role=STORE_ADMIN');
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users?role=STORE_ADMIN');
 
-  $response->assertStatus(200)
-    ->assertJsonCount(2, 'data.items')
-    ->assertJsonPath('data.total', 2);
+    $response->assertStatus(200)
+        ->assertJsonCount(2, 'data.items')
+        ->assertJsonPath('data.total', 2);
 });
 
 test('super admin can filter by store_id', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $store = Store::factory()->create();
-  User::factory()->count(2)->create(['store_id' => $store->id]);
-  User::factory()->count(3)->create(); // other store
+    $store = Store::factory()->create();
+    User::factory()->count(2)->create(['store_id' => $store->id]);
+    User::factory()->count(3)->create(); // other store
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson("/api/v1/admin/users?store_id={$store->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/admin/users?store_id={$store->id}");
 
-  $response->assertStatus(200)
-    ->assertJsonCount(2, 'data.items')
-    ->assertJsonPath('data.total', 2);
+    $response->assertStatus(200)
+        ->assertJsonCount(2, 'data.items')
+        ->assertJsonPath('data.total', 2);
+});
+
+test('super admin can filter by is_active', function () {
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    User::factory()->count(2)->create(['is_active' => true]);
+    User::factory()->count(3)->create(['is_active' => false]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users?is_active=true');
+
+    $response->assertStatus(200)
+        ->assertJsonCount(3, 'data.items')
+        ->assertJsonPath('data.total', 3);
+
+    $response2 = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users?is_active=false');
+
+    $response2->assertStatus(200)
+        ->assertJsonCount(3, 'data.items')
+        ->assertJsonPath('data.total', 3);
 });
 
 test('index rejects unauthenticated request', function () {
-  /** @var \Tests\TestCase $this */
-  $response = $this->getJson('/api/v1/admin/users');
+    /** @var \Tests\TestCase $this */
+    $response = $this->getJson('/api/v1/admin/users');
 
-  $response->assertStatus(401);
+    $response->assertStatus(401);
 });
 
 // ============================================================
@@ -125,144 +149,144 @@ test('index rejects unauthenticated request', function () {
 // ============================================================
 
 test('super admin can create user in any store', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $store = Store::factory()->create();
+    $store = Store::factory()->create();
 
-  $data = [
-    'name'                  => 'Nuevo Usuario',
-    'email'                 => 'nuevo@centra.com',
-    'password'              => 'Password1',
-    'password_confirmation' => 'Password1',
-    'role'                  => 'STORE_ADMIN',
-    'store_id'              => $store->id,
-  ];
+    $data = [
+        'name' => 'Nuevo Usuario',
+        'email' => 'nuevo@centra.com',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => 'STORE_ADMIN',
+        'store_id' => $store->id,
+    ];
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/admin/users', $data);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/users', $data);
 
-  $response->assertStatus(201)
-    ->assertJsonPath('data.name', 'Nuevo Usuario')
-    ->assertJsonPath('data.email', 'nuevo@centra.com');
+    $response->assertStatus(201)
+        ->assertJsonPath('data.name', 'Nuevo Usuario')
+        ->assertJsonPath('data.email', 'nuevo@centra.com');
 
-  $this->assertDatabaseHas('users', ['email' => 'nuevo@centra.com', 'store_id' => $store->id]);
+    $this->assertDatabaseHas('users', ['email' => 'nuevo@centra.com', 'store_id' => $store->id]);
 });
 
 test('store admin creates user in their own store ignoring store_id sent', function () {
-  /** @var \Tests\TestCase $this */
-  $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
-  $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
-  $plan->features()->attach($feature->id, ['limit_value' => 5]);
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 5]);
 
-  $store = Store::factory()->create(['plan_id' => $plan->id]);
-  $otherStore = Store::factory()->create();
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+    $otherStore = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $data = [
-    'name'                  => 'Nuevo Usuario',
-    'email'                 => 'nuevo@centra.com',
-    'password'              => 'Password1',
-    'password_confirmation' => 'Password1',
-    'role'                  => 'STORE_ADMIN',
-    'store_id'              => $otherStore->id, // should be ignored
-  ];
+    $data = [
+        'name' => 'Nuevo Usuario',
+        'email' => 'nuevo@centra.com',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => 'STORE_ADMIN',
+        'store_id' => $otherStore->id, // should be ignored
+    ];
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/admin/users', $data);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/users', $data);
 
-  $response->assertStatus(201);
+    $response->assertStatus(201);
 
-  $this->assertDatabaseHas('users', [
-    'email'    => 'nuevo@centra.com',
-    'store_id' => $store->id, // assigned to admin's store, not otherStore
-  ]);
+    $this->assertDatabaseHas('users', [
+        'email' => 'nuevo@centra.com',
+        'store_id' => $store->id, // assigned to admin's store, not otherStore
+    ]);
 });
 
 test('store admin cannot assign super admin role', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $data = [
-    'name'                  => 'Nuevo Admin',
-    'email'                 => 'admin@centra.com',
-    'password'              => 'Password1',
-    'password_confirmation' => 'Password1',
-    'role'                  => 'SUPER_ADMIN',
-  ];
+    $data = [
+        'name' => 'Nuevo Admin',
+        'email' => 'admin@centra.com',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => 'SUPER_ADMIN',
+    ];
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/admin/users', $data);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/users', $data);
 
-  $response->assertStatus(403)
-    ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
+    $response->assertStatus(403)
+        ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
 });
 
 test('store fails validation with invalid data', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/admin/users', []);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/users', []);
 
-  $response->assertStatus(422)
-    ->assertJsonPath('message', 'Error de validación.')
-    ->assertJsonStructure(['errors' => ['name', 'email', 'password', 'role']]);
+    $response->assertStatus(422)
+        ->assertJsonPath('message', 'Error de validación.')
+        ->assertJsonStructure(['errors' => ['name', 'email', 'password', 'role']]);
 });
 
 test('store rejects request without role', function () {
-  /** @var \Tests\TestCase $this */
-  $user = User::factory()->create();
-  $token = $user->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $token = $user->createToken('test-token')->plainTextToken;
 
-  $data = [
-    'name'                  => 'Nuevo Usuario',
-    'email'                 => 'nuevo@centra.com',
-    'password'              => 'Password1',
-    'password_confirmation' => 'Password1',
-    'role'                  => 'STORE_ADMIN',
-  ];
+    $data = [
+        'name' => 'Nuevo Usuario',
+        'email' => 'nuevo@centra.com',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => 'STORE_ADMIN',
+    ];
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/admin/users', $data);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/users', $data);
 
-  $response->assertStatus(403);
+    $response->assertStatus(403);
 });
 
 test('store generates uuid automatically for new user', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $data = [
-    'name'                  => 'UUID User',
-    'email'                 => 'uuid@centra.com',
-    'password'              => 'Password1',
-    'password_confirmation' => 'Password1',
-    'role'                  => 'STORE_ADMIN',
-  ];
+    $data = [
+        'name' => 'UUID User',
+        'email' => 'uuid@centra.com',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => 'STORE_ADMIN',
+    ];
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->postJson('/api/v1/admin/users', $data);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/users', $data);
 
-  $response->assertStatus(201);
+    $response->assertStatus(201);
 
-  $user = User::where('email', 'uuid@centra.com')->first();
-  expect($user)->not->toBeNull();
-  expect(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $user->id))->toBe(1);
-  expect($user->store_id)->toBeNull();
+    $user = User::where('email', 'uuid@centra.com')->first();
+    expect($user)->not->toBeNull();
+    expect(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $user->id))->toBe(1);
+    expect($user->store_id)->toBeNull();
 });
 
 // ============================================================
@@ -270,67 +294,67 @@ test('store generates uuid automatically for new user', function () {
 // ============================================================
 
 test('super admin can view any user', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create();
+    $user = User::factory()->create();
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson("/api/v1/admin/users/{$user->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/admin/users/{$user->id}");
 
-  $response->assertStatus(200)
-    ->assertJsonPath('data.id', $user->id)
-    ->assertJsonPath('data.email', $user->email);
+    $response->assertStatus(200)
+        ->assertJsonPath('data.id', $user->id)
+        ->assertJsonPath('data.email', $user->email);
 });
 
 test('show store admin can view user from their store', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create(['store_id' => $store->id]);
+    $user = User::factory()->create(['store_id' => $store->id]);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson("/api/v1/admin/users/{$user->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/admin/users/{$user->id}");
 
-  $response->assertStatus(200)
-    ->assertJsonPath('data.id', $user->id);
+    $response->assertStatus(200)
+        ->assertJsonPath('data.id', $user->id);
 });
 
 test('show returns 404 for non-existent user', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson('/api/v1/admin/users/00000000-0000-0000-0000-000000000000');
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/users/00000000-0000-0000-0000-000000000000');
 
-  $response->assertStatus(404)
-    ->assertJsonPath('message', 'Usuario no encontrado.');
+    $response->assertStatus(404)
+        ->assertJsonPath('message', 'Usuario no encontrado.');
 });
 
 test('store admin cannot view users from another store', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
-  $otherStore = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
+    $otherStore = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
+    $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->getJson("/api/v1/admin/users/{$otherUser->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/admin/users/{$otherUser->id}");
 
-  $response->assertStatus(404)
-    ->assertJsonPath('message', 'Usuario no encontrado.');
+    $response->assertStatus(404)
+        ->assertJsonPath('message', 'Usuario no encontrado.');
 });
 
 // ============================================================
@@ -338,92 +362,147 @@ test('store admin cannot view users from another store', function () {
 // ============================================================
 
 test('super admin can update any user', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create(['name' => 'Old Name']);
+    $user = User::factory()->create(['name' => 'Old Name']);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'New Name']);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'New Name']);
 
-  $response->assertStatus(200)
-    ->assertJsonPath('data.name', 'New Name');
+    $response->assertStatus(200)
+        ->assertJsonPath('data.name', 'New Name');
 
-  $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'New Name']);
+    $this->assertDatabaseHas('users', ['id' => $user->id, 'name' => 'New Name']);
 });
 
 test('store admin can update users from their store', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create(['store_id' => $store->id, 'name' => 'Old Name']);
+    $user = User::factory()->create(['store_id' => $store->id, 'name' => 'Old Name']);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'Updated']);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'Updated']);
 
-  $response->assertStatus(200)
-    ->assertJsonPath('data.name', 'Updated');
+    $response->assertStatus(200)
+        ->assertJsonPath('data.name', 'Updated');
 });
 
 test('store admin cannot assign super admin role on update', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create(['store_id' => $store->id]);
+    $user = User::factory()->create(['store_id' => $store->id]);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->putJson("/api/v1/admin/users/{$user->id}", ['role' => 'SUPER_ADMIN']);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['role' => 'SUPER_ADMIN']);
 
-  $response->assertStatus(403)
-    ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
+    $response->assertStatus(403)
+        ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
 });
 
 test('super admin can change store_id on update', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $store1 = Store::factory()->create();
-  $store2 = Store::factory()->create();
+    $store1 = Store::factory()->create();
+    $store2 = Store::factory()->create();
 
-  $user = User::factory()->create(['store_id' => $store1->id]);
+    $user = User::factory()->create(['store_id' => $store1->id]);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->putJson("/api/v1/admin/users/{$user->id}", ['store_id' => $store2->id]);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['store_id' => $store2->id]);
 
-  $response->assertStatus(200);
+    $response->assertStatus(200);
 
-  $this->assertDatabaseHas('users', ['id' => $user->id, 'store_id' => $store2->id]);
+    $this->assertDatabaseHas('users', ['id' => $user->id, 'store_id' => $store2->id]);
 });
 
 test('update does partial update correctly', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create([
-    'name'  => 'Original Name',
-    'email' => 'original@centra.com',
-  ]);
+    $user = User::factory()->create([
+        'name' => 'Original Name',
+        'email' => 'original@centra.com',
+    ]);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'Changed Name']);
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['name' => 'Changed Name']);
 
-  $response->assertStatus(200)
-    ->assertJsonPath('data.name', 'Changed Name')
-    ->assertJsonPath('data.email', 'original@centra.com'); // unchanged
+    $response->assertStatus(200)
+        ->assertJsonPath('data.name', 'Changed Name')
+        ->assertJsonPath('data.email', 'original@centra.com'); // unchanged
+});
+
+test('super admin can deactivate a user', function () {
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['is_active' => true]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['is_active' => false]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.is_active', false);
+
+    $this->assertDatabaseHas('users', ['id' => $user->id, 'is_active' => false]);
+});
+
+test('super admin can reactivate a user', function () {
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['is_active' => false]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['is_active' => true]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.is_active', true);
+
+    $this->assertDatabaseHas('users', ['id' => $user->id, 'is_active' => true]);
+});
+
+test('store admin can change is_active', function () {
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id, 'is_active' => true]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/users/{$user->id}", ['is_active' => false, 'name' => 'Updated']);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.is_active', false);
+
+    $user->refresh();
+    expect($user->is_active)->toBe(false);
+    expect($user->name)->toBe('Updated');
 });
 
 // ============================================================
@@ -431,63 +510,63 @@ test('update does partial update correctly', function () {
 // ============================================================
 
 test('user cannot delete themselves', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->deleteJson("/api/v1/admin/users/{$admin->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->deleteJson("/api/v1/admin/users/{$admin->id}");
 
-  $response->assertStatus(403)
-    ->assertJsonPath('message', 'No podés eliminar tu propio usuario.');
+    $response->assertStatus(403)
+        ->assertJsonPath('message', 'No podés eliminar tu propio usuario.');
 
-  $this->assertDatabaseHas('users', ['id' => $admin->id]);
+    $this->assertDatabaseHas('users', ['id' => $admin->id]);
 });
 
 test('super admin can delete a user', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create();
+    $user = User::factory()->create();
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->deleteJson("/api/v1/admin/users/{$user->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->deleteJson("/api/v1/admin/users/{$user->id}");
 
-  $response->assertStatus(200)
-    ->assertJsonPath('message', 'Usuario eliminado correctamente.');
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Usuario eliminado correctamente.');
 
-  $this->assertDatabaseMissing('users', ['id' => $user->id]);
+    $this->assertDatabaseMissing('users', ['id' => $user->id]);
 });
 
 test('store admin can only delete users from their store', function () {
-  /** @var \Tests\TestCase $this */
-  $store = Store::factory()->create();
+    /** @var \Tests\TestCase $this */
+    $store = Store::factory()->create();
 
-  $admin = User::factory()->create(['store_id' => $store->id]);
-  $admin->assignRole('STORE_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $user = User::factory()->create(['store_id' => $store->id]);
+    $user = User::factory()->create(['store_id' => $store->id]);
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->deleteJson("/api/v1/admin/users/{$user->id}");
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->deleteJson("/api/v1/admin/users/{$user->id}");
 
-  $response->assertStatus(200);
+    $response->assertStatus(200);
 
-  $this->assertDatabaseMissing('users', ['id' => $user->id]);
+    $this->assertDatabaseMissing('users', ['id' => $user->id]);
 });
 
 test('destroy returns 404 for non-existent user', function () {
-  /** @var \Tests\TestCase $this */
-  $admin = User::factory()->create();
-  $admin->assignRole('SUPER_ADMIN');
-  $token = $admin->createToken('test-token')->plainTextToken;
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+    $token = $admin->createToken('test-token')->plainTextToken;
 
-  $response = $this->withHeader('Authorization', "Bearer $token")
-    ->deleteJson('/api/v1/admin/users/00000000-0000-0000-0000-000000000000');
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->deleteJson('/api/v1/admin/users/00000000-0000-0000-0000-000000000000');
 
-  $response->assertStatus(404);
+    $response->assertStatus(404);
 });

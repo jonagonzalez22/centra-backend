@@ -5097,6 +5097,16 @@
                         }
                     },
                     {
+                        "name": "is_active",
+                        "in": "query",
+                        "description": "Filtrar por estado",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": true
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Resultados por página (default: 15)",
@@ -5295,6 +5305,11 @@
                                         "type": "string",
                                         "example": "019dd4bc-7318-7094-829b-a02485ba6caf",
                                         "nullable": true
+                                    },
+                                    "is_active": {
+                                        "description": "Estado del usuario. Por defecto es true.",
+                                        "type": "boolean",
+                                        "example": true
                                     }
                                 },
                                 "type": "object"
@@ -5583,7 +5598,7 @@
                     "Users"
                 ],
                 "summary": "Actualizar usuario",
-                "description": "Actualiza los datos de un usuario. El password y el store_id son opcionales. STORE_ADMIN solo puede editar usuarios de su tienda y no puede asignar el rol SUPER_ADMIN.",
+                "description": "Actualiza los datos de un usuario. El password, store_id e is_active son opcionales. STORE_ADMIN solo puede editar usuarios de su tienda y no puede asignar el rol SUPER_ADMIN.",
                 "operationId": "userUpdate",
                 "parameters": [
                     {
@@ -5628,6 +5643,11 @@
                                         "type": "string",
                                         "example": "019dd4bc-7318-7094-829b-a02485ba6caf",
                                         "nullable": true
+                                    },
+                                    "is_active": {
+                                        "description": "Estado del usuario",
+                                        "type": "boolean",
+                                        "example": true
                                     }
                                 },
                                 "type": "object"
@@ -6057,6 +6077,41 @@
                                                     "example": {
                                                         "auth": [
                                                             "El email o la contraseña no coinciden con nuestros registros."
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Usuario inactivo",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "error"
+                                                },
+                                                "message": {
+                                                    "type": "string",
+                                                    "example": "Tu cuenta está desactivada."
+                                                },
+                                                "errors": {
+                                                    "type": "object",
+                                                    "example": {
+                                                        "auth": [
+                                                            "Tu cuenta está desactivada. Contactá al administrador de la tienda."
                                                         ]
                                                     }
                                                 }
@@ -8174,6 +8229,10 @@
                         "type": "string",
                         "format": "email",
                         "example": "admin@centra.com"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
                     },
                     "store": {
                         "$ref": "#/components/schemas/StoreLight"
