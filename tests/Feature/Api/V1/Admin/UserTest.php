@@ -5,6 +5,7 @@ use App\Models\Plan;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -16,6 +17,11 @@ beforeEach(function () {
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
+
+    Permission::create(['name' => 'store_users.edit', 'guard_name' => 'web']);
+    Permission::create(['name' => 'store_users.view', 'guard_name' => 'web']);
+    Permission::create(['name' => 'products.view', 'guard_name' => 'web']);
+    Permission::create(['name' => 'products.create', 'guard_name' => 'web']);
 });
 
 // ============================================================
@@ -605,4 +611,189 @@ test('destroy returns 404 for non-existent user', function () {
         ->deleteJson('/api/v1/admin/users/00000000-0000-0000-0000-000000000000');
 
     $response->assertStatus(404);
+});
+
+// ============================================================
+// STORE USER PERMISSIONS
+// ============================================================
+
+test('store admin can view user direct permissions', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+    $user->givePermissionTo('products.view');
+    $user->givePermissionTo('products.create');
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/store/users/{$user->id}/permissions");
+
+    $response->assertStatus(200);
+
+    $permissions = $response->json('data.permissions');
+    expect($permissions)->toContain('products.view')
+        ->toContain('products.create');
+});
+
+test('store admin cannot view permissions of user from another store', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+    $otherStore = Store::factory()->create();
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson("/api/v1/store/users/{$otherUser->id}/permissions");
+
+    $response->assertStatus(404)
+        ->assertJsonPath('message', 'Usuario no encontrado.');
+});
+
+test('store admin can sync user permissions', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+    $user->givePermissionTo('products.view');
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", [
+            'permissions' => ['products.create', 'products.view'],
+        ]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+
+    $user->refresh();
+    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['products.create', 'products.view']);
+});
+
+test('store admin cannot assign admin/backoffice permissions', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $feature = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($feature->id, ['limit_value' => 10]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", [
+            'permissions' => ['stores.create'],
+        ]);
+
+    $response->assertStatus(422)
+        ->assertJsonPath('message', 'Error de validación.');
+});
+
+test('store admin cannot assign permissions for feature not in plan', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Basic', 'price' => 49, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 5]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", [
+            'permissions' => ['products.view'],
+        ]);
+
+    $response->assertStatus(422)
+        ->assertJsonPath('message', 'Error de validación.');
+});
+
+test('store admin cannot modify own permissions', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$admin->id}/permissions", [
+            'permissions' => ['products.view'],
+        ]);
+
+    $response->assertStatus(403)
+        ->assertJsonPath('message', 'No podés modificar tus propios permisos.');
+});
+
+test('store admin cannot modify super admin permissions', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $superAdmin = User::factory()->create(['store_id' => $store->id]);
+    $superAdmin->assignRole('SUPER_ADMIN');
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$superAdmin->id}/permissions", [
+            'permissions' => ['products.view'],
+        ]);
+
+    $response->assertStatus(403)
+        ->assertJsonPath('message', 'No podés modificar los permisos de un SUPER_ADMIN.');
 });
