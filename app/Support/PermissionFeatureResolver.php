@@ -20,4 +20,9 @@ class PermissionFeatureResolver
 
         return in_array($featureCode, self::$validFeatures) ? $featureCode : null;
     }
+
+    public static function clearCache(): void
+    {
+        self::$validFeatures = null;
+    }
 }

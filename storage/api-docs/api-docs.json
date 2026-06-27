@@ -7035,6 +7035,74 @@
                 ]
             }
         },
+        "/store/permissions/catalog": {
+            "get": {
+                "tags": [
+                    "Store - Usuarios"
+                ],
+                "summary": "Catálogo de permisos disponibles para la tienda",
+                "description": "Display the permission catalog available for the store.",
+                "operationId": "86e885aa139112759a35c5d968172ef0",
+                "responses": {
+                    "200": {
+                        "description": "Catálogo de permisos obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Catálogo de permisos obtenido correctamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "groups": {
+                                                    "type": "object",
+                                                    "additionalProperties": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "properties": {
+                                                                "name": {
+                                                                    "type": "string",
+                                                                    "example": "products.view"
+                                                                },
+                                                                "label": {
+                                                                    "type": "string",
+                                                                    "example": "Ver"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No tenés permiso para acceder a este recurso"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/products": {
             "get": {
                 "tags": [
