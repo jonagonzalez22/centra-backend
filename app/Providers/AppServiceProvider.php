@@ -2,32 +2,48 @@
 
 namespace App\Providers;
 
+use App\Support\PermissionFeatureResolver;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-  /**
-   * Register any application services.
-   */
   public function register(): void
   {
-    //
+    $this->app->resolving(Gate::class, function ($gate) {
+      $gate->before(function ($user, $ability) {
+        if ($user->hasRole('SUPER_ADMIN')) {
+          return null;
+        }
+
+        if (is_null($user->store_id)) {
+          return null;
+        }
+
+        $featureCode = PermissionFeatureResolver::resolveFeature($ability);
+
+        if ($featureCode === null) {
+          return null;
+        }
+
+        if (! $user->store || ! $user->store->hasFeature($featureCode)) {
+          return false;
+        }
+
+        return null;
+      });
+    });
   }
 
-  /**
-   * Bootstrap any application services.
-   */
   public function boot(): void
   {
-    // Rate limit general to all API (60 req/min by IP or user)
     RateLimiter::for('api', function (Request $request) {
       return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
     });
 
-    // Strict rate limit for login (5 attempts/min by IP)
     RateLimiter::for('auth', function (Request $request) {
       return Limit::perMinute(5)->by($request->ip())->response(function () {
         return response()->json([
@@ -40,7 +56,6 @@ class AppServiceProvider extends ServiceProvider
       });
     });
 
-    // Rate limit for registration (10 attempts/hour by IP)
     RateLimiter::for('register', function (Request $request) {
       return Limit::perHour(10)->by($request->ip())->response(function () {
         return response()->json([
