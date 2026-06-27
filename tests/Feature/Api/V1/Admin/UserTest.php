@@ -4,6 +4,7 @@ use App\Models\Feature;
 use App\Models\Plan;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\PermissionFeatureResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -13,6 +14,8 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
+    Store::clearFeatureCache();
+    PermissionFeatureResolver::clearCache();
 
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
@@ -22,6 +25,12 @@ beforeEach(function () {
     Permission::create(['name' => 'store_users.view', 'guard_name' => 'web']);
     Permission::create(['name' => 'products.view', 'guard_name' => 'web']);
     Permission::create(['name' => 'products.create', 'guard_name' => 'web']);
+    Permission::create(['name' => 'products.edit', 'guard_name' => 'web']);
+    Permission::create(['name' => 'products.delete', 'guard_name' => 'web']);
+    Permission::create(['name' => 'categories.view', 'guard_name' => 'web']);
+    Permission::create(['name' => 'categories.create', 'guard_name' => 'web']);
+    Permission::create(['name' => 'categories.edit', 'guard_name' => 'web']);
+    Permission::create(['name' => 'categories.delete', 'guard_name' => 'web']);
 });
 
 // ============================================================
@@ -796,4 +805,108 @@ test('store admin cannot modify super admin permissions', function () {
 
     $response->assertStatus(403)
         ->assertJsonPath('message', 'No podés modificar los permisos de un SUPER_ADMIN.');
+});
+
+// ============================================================
+// PERMISSION CATALOG
+// ============================================================
+
+test('store admin can see full permission catalog when store has all features', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $featureCategories = Feature::create(['code' => 'categories', 'name' => 'Categorías', 'description' => 'Gestión de categorías.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+    $plan->features()->attach($featureCategories->id, ['limit_value' => 200]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.view');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/store/permissions/catalog');
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Catálogo de permisos obtenido correctamente.')
+        ->assertJsonStructure([
+            'data' => ['groups' => ['Inventario', 'Categorías', 'Usuarios']],
+        ]);
+
+    $groups = $response->json('data.groups');
+    expect($groups['Inventario'])->toHaveCount(4)
+        ->and($groups['Categorías'])->toHaveCount(4)
+        ->and($groups['Usuarios'])->toHaveCount(4);
+});
+
+test('store admin sees only inventory group when store lacks multi_user feature', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Basic', 'price' => 49, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.view');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/store/permissions/catalog');
+
+    $response->assertStatus(200);
+
+    $groups = $response->json('data.groups');
+    expect($groups)->toHaveKey('Inventario')
+        ->not->toHaveKey('Categorías')
+        ->not->toHaveKey('Usuarios');
+});
+
+test('store admin sees only users group when store lacks inventory and categories features', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Basic', 'price' => 49, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 5]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.view');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/store/permissions/catalog');
+
+    $response->assertStatus(200);
+
+    $groups = $response->json('data.groups');
+    expect($groups)->toHaveKey('Usuarios')
+        ->not->toHaveKey('Inventario')
+        ->not->toHaveKey('Categorías');
+});
+
+test('store user without store_users_view permission gets 403 on catalog', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $storeUser = User::factory()->create(['store_id' => $store->id]);
+    $storeUser->assignRole('STORE_USER');
+    $token = $storeUser->createToken('test-token')->plainTextToken;
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/store/permissions/catalog');
+
+    $response->assertStatus(403);
 });

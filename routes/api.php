@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
+use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -98,6 +99,8 @@ Route::prefix('v1')->group(function () {
             Route::post('products', [ProductController::class, 'store'])->name('store.products.store');
             Route::put('products/{product}', [ProductController::class, 'update'])->name('store.products.update');
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('store.products.destroy');
+
+            Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
 
             Route::middleware(['role:STORE_ADMIN', 'feature:multi_user'])->group(function () {
                 Route::get('users/filter-options', [StoreUserController::class, 'filterOptions'])->name('store.users.filter-options');
