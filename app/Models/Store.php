@@ -13,6 +13,8 @@ class Store extends Model
 {
   use HasFactory;
 
+  private static array $requestFeatureCache = [];
+
   protected $keyType = 'string';
   public $incrementing = false;
 
@@ -64,11 +66,19 @@ class Store extends Model
 
   public function hasFeature(string $code): bool
   {
-    if (!$this->plan) {
-      return false;
+    $cacheKey = "{$this->id}:{$code}";
+
+    if (array_key_exists($cacheKey, self::$requestFeatureCache)) {
+      return self::$requestFeatureCache[$cacheKey];
     }
 
-    return $this->plan->features->contains('code', $code);
+    if (! $this->plan) {
+      return self::$requestFeatureCache[$cacheKey] = false;
+    }
+
+    $this->loadMissing('plan.features');
+
+    return self::$requestFeatureCache[$cacheKey] = $this->plan->features->contains('code', $code);
   }
 
 
