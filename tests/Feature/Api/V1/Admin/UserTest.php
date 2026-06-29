@@ -910,3 +910,86 @@ test('store user without store_users_view permission gets 403 on catalog', funct
 
     $response->assertStatus(403);
 });
+
+test('store admin can remove all permissions by sending empty array', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+    $user->givePermissionTo('products.view');
+    $user->givePermissionTo('products.create');
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => []]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+
+    $user->refresh();
+    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe([]);
+});
+
+test('store admin sending empty array to user already without permissions returns 200', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => []]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+});
+
+test('store admin can recover permissions after emptying them', function () {
+    /** @var \Tests\TestCase $this */
+    $plan = Plan::create(['name' => 'Plan Pro', 'price' => 99, 'billing_cycle' => 'monthly', 'is_active' => true]);
+    $featureMultiUser = Feature::create(['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas.']);
+    $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
+    $plan->features()->attach($featureMultiUser->id, ['limit_value' => 10]);
+    $plan->features()->attach($featureInventory->id, ['limit_value' => 100]);
+
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+    $admin->givePermissionTo('store_users.edit');
+    $token = $admin->createToken('test-token')->plainTextToken;
+
+    $user = User::factory()->create(['store_id' => $store->id]);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => []]);
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => ['products.view']]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+
+    $user->refresh();
+    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['products.view']);
+});

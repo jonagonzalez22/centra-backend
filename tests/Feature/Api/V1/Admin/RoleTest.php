@@ -443,8 +443,11 @@ test('sync permissions rejects empty array', function () {
             'permissions' => [],
         ]);
 
-    $response->assertStatus(422)
-        ->assertJsonPath('errors.permissions.0', 'El array de permisos es obligatorio.');
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+
+    $role->refresh();
+    expect($role->fresh()->permissions->pluck('name')->toArray())->toBe([]);
 });
 
 test('sync permissions returns 404 for non-existent role', function () {
@@ -461,7 +464,27 @@ test('sync permissions returns 404 for non-existent role', function () {
         ->assertJsonPath('message', 'Rol no encontrado.');
 });
 
-test('sync permissions requires permissions field', function () {
+test('sync permissions accepts empty array to remove all permissions', function () {
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+
+    $role = Role::findByName('STORE_ADMIN');
+    Permission::create(['name' => 'stores.view', 'guard_name' => 'web']);
+    Permission::create(['name' => 'stores.create', 'guard_name' => 'web']);
+    $role->syncPermissions(['stores.view', 'stores.create']);
+
+    $response = $this->withHeaders(authHeaders($admin))
+        ->postJson("/api/v1/admin/roles/{$role->id}/sync-permissions", ['permissions' => []]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+
+    $role->refresh();
+    expect($role->fresh()->permissions->pluck('name')->toArray())->toBe([]);
+});
+
+test('sync permissions with empty array on role already empty returns 200', function () {
     /** @var \Tests\TestCase $this */
     $admin = User::factory()->create();
     $admin->assignRole('SUPER_ADMIN');
@@ -469,11 +492,30 @@ test('sync permissions requires permissions field', function () {
     $role = Role::findByName('STORE_ADMIN');
 
     $response = $this->withHeaders(authHeaders($admin))
-        ->postJson("/api/v1/admin/roles/{$role->id}/sync-permissions", []);
+        ->postJson("/api/v1/admin/roles/{$role->id}/sync-permissions", ['permissions' => []]);
 
-    $response->assertStatus(422)
-        ->assertJsonPath('message', 'Error de validación.')
-        ->assertJsonStructure(['errors' => ['permissions']]);
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+});
+
+test('sync permissions can recover permissions after emptying', function () {
+    /** @var \Tests\TestCase $this */
+    $admin = User::factory()->create();
+    $admin->assignRole('SUPER_ADMIN');
+
+    $role = Role::findByName('STORE_ADMIN');
+
+    $this->withHeaders(authHeaders($admin))
+        ->postJson("/api/v1/admin/roles/{$role->id}/sync-permissions", ['permissions' => []]);
+
+    $response = $this->withHeaders(authHeaders($admin))
+        ->postJson("/api/v1/admin/roles/{$role->id}/sync-permissions", ['permissions' => ['stores.view']]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
+
+    $role->refresh();
+    expect($role->fresh()->permissions->pluck('name')->toArray())->toBe(['stores.view']);
 });
 
 test('sync permissions rejects non super admin', function () {

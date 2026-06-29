@@ -16,7 +16,7 @@ class SyncPermissionsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'permissions' => ['required', 'array'],
+            'permissions' => ['present', 'array'],
             'permissions.*' => ['string'],
         ];
     }
@@ -24,7 +24,7 @@ class SyncPermissionsRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'permissions.required' => 'El array de permisos es obligatorio.',
+            'permissions.present' => 'El campo permisos es obligatorio.',
             'permissions.array' => 'El formato de permisos no es válido.',
             'permissions.*.string' => 'Cada permiso debe ser un texto.',
         ];

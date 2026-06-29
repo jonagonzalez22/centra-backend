@@ -17,8 +17,8 @@ class StoreUserPermissionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'permissions' => ['required', 'array'],
-            'permissions.*' => ['required', 'string'],
+            'permissions' => ['present', 'array'],
+            'permissions.*' => ['string'],
         ];
     }
 
