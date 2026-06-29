@@ -548,7 +548,7 @@ class RoleController extends Controller
     #[OA\Post(
         path: '/admin/roles/{id}/sync-permissions',
         summary: 'Sincronizar permisos del rol',
-        description: 'Sincroniza los permisos asociados a un rol, reemplazando los existentes. Crea permisos faltantes automáticamente.',
+        description: 'Sincroniza los permisos asociados a un rol, reemplazando los existentes. Puede enviarse un array vacío para quitar todos los permisos. Crea permisos faltantes automáticamente.',
         operationId: 'roleSyncPermissions',
         security: [['sanctum' => []]],
         tags: ['Roles']
@@ -569,7 +569,7 @@ class RoleController extends Controller
                     property: 'permissions',
                     type: 'array',
                     items: new OA\Items(type: 'string'),
-                    example: ['stores.view', 'stores.create', 'stores.edit']
+                    example: []
                 ),
             ]
         )

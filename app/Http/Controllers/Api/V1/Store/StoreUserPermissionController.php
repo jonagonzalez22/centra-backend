@@ -89,8 +89,8 @@ class StoreUserPermissionController extends Controller
      *     @OA\JsonContent(
      *       required={"permissions"},
      *
-     *       @OA\Property(property="permissions", type="array", @OA\Items(type="string", example="products.view"),
-     *         description="Lista de nombres de permisos directos a asignar")
+     *       @OA\Property(property="permissions", type="array", example=[],
+     *         description="Lista de nombres de permisos directos a asignar. Puede ser un array vacío.")
      *     )
      *   ),
      *
