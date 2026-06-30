@@ -31,6 +31,10 @@ class SuperAdminPermissionsSeeder extends Seeder
       'users.create',
       'users.edit',
       'users.delete',
+      'commercial_groups.view',
+      'commercial_groups.create',
+      'commercial_groups.edit',
+      'commercial_groups.delete',
     ];
 
     foreach ($permissions as $permission) {

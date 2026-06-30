@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
+use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
@@ -109,6 +110,14 @@ Route::prefix('v1')->group(function () {
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('store.products.destroy');
 
             Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
+
+            Route::middleware('feature:customers')->group(function () {
+                Route::get('commercial-groups', [CommercialGroupController::class, 'index'])->name('store.commercial-groups.index');
+                Route::get('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'show'])->name('store.commercial-groups.show');
+                Route::post('commercial-groups', [CommercialGroupController::class, 'store'])->name('store.commercial-groups.store');
+                Route::put('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'update'])->name('store.commercial-groups.update');
+                Route::delete('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'destroy'])->name('store.commercial-groups.destroy');
+            });
 
             Route::middleware(['role:STORE_ADMIN', 'feature:multi_user'])->group(function () {
                 Route::get('users/filter-options', [StoreUserController::class, 'filterOptions'])->name('store.users.filter-options');

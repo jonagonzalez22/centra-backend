@@ -17,6 +17,7 @@ class FeatureSeeder extends Seeder
       ['code' => 'route_mapping', 'name' => 'Hoja de Rutas', 'description' => 'Armado automático de rutas por mapas.'],
       ['code' => 'messaging', 'name' => 'Central de Mensajería', 'description' => 'Envío de notificaciones a clientes.'],
       ['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas de empleados.'],
+      ['code' => 'customers', 'name' => 'Clientes', 'description' => 'Gestión de grupos comerciales y módulo de clientes.'],
     ];
 
     foreach ($features as $feature) {
