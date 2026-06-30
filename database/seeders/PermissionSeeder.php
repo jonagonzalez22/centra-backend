@@ -46,6 +46,18 @@ class PermissionSeeder extends Seeder
       'customers.create',
       'customers.edit',
       'customers.delete',
+
+      // Module: Customer Addresses
+      'customer_addresses.view',
+      'customer_addresses.create',
+      'customer_addresses.edit',
+      'customer_addresses.delete',
+
+      // Module: Customer Contacts
+      'customer_contacts.view',
+      'customer_contacts.create',
+      'customer_contacts.edit',
+      'customer_contacts.delete',
     ];
 
     // Create each permission if it doesn't exist

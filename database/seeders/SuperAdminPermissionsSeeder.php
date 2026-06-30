@@ -39,6 +39,14 @@ class SuperAdminPermissionsSeeder extends Seeder
       'customers.create',
       'customers.edit',
       'customers.delete',
+      'customer_addresses.view',
+      'customer_addresses.create',
+      'customer_addresses.edit',
+      'customer_addresses.delete',
+      'customer_contacts.view',
+      'customer_contacts.create',
+      'customer_contacts.edit',
+      'customer_contacts.delete',
     ];
 
     foreach ($permissions as $permission) {

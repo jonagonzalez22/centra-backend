@@ -16,6 +16,8 @@ use App\Http\Controllers\Api\V1\Store\InventoryController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
+use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
+use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
@@ -124,6 +126,18 @@ Route::prefix('v1')->group(function () {
                 Route::post('customers', [CustomerController::class, 'store'])->name('store.customers.store');
                 Route::put('customers/{customer}', [CustomerController::class, 'update'])->name('store.customers.update');
                 Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('store.customers.destroy');
+
+                Route::get('customers/{customer}/addresses', [CustomerAddressController::class, 'index'])->name('store.customers.addresses.index');
+                Route::post('customers/{customer}/addresses', [CustomerAddressController::class, 'store'])->name('store.customers.addresses.store');
+                Route::get('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'show'])->name('store.customers.addresses.show');
+                Route::put('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'update'])->name('store.customers.addresses.update');
+                Route::delete('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'destroy'])->name('store.customers.addresses.destroy');
+
+                Route::get('customers/{customer}/contacts', [CustomerContactController::class, 'index'])->name('store.customers.contacts.index');
+                Route::post('customers/{customer}/contacts', [CustomerContactController::class, 'store'])->name('store.customers.contacts.store');
+                Route::get('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'show'])->name('store.customers.contacts.show');
+                Route::put('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'update'])->name('store.customers.contacts.update');
+                Route::delete('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'destroy'])->name('store.customers.contacts.destroy');
             });
 
             Route::middleware(['role:STORE_ADMIN', 'feature:multi_user'])->group(function () {

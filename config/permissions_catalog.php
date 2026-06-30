@@ -25,4 +25,16 @@ return [
         ['name' => 'commercial_groups.edit', 'label' => 'Editar'],
         ['name' => 'commercial_groups.delete', 'label' => 'Eliminar'],
     ],
+    'Direcciones de Clientes' => [
+        ['name' => 'customer_addresses.view', 'label' => 'Ver'],
+        ['name' => 'customer_addresses.create', 'label' => 'Crear'],
+        ['name' => 'customer_addresses.edit', 'label' => 'Editar'],
+        ['name' => 'customer_addresses.delete', 'label' => 'Eliminar'],
+    ],
+    'Contactos de Clientes' => [
+        ['name' => 'customer_contacts.view', 'label' => 'Ver'],
+        ['name' => 'customer_contacts.create', 'label' => 'Crear'],
+        ['name' => 'customer_contacts.edit', 'label' => 'Editar'],
+        ['name' => 'customer_contacts.delete', 'label' => 'Eliminar'],
+    ],
 ];
