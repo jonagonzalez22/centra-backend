@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\Store\InventoryController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
+use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
@@ -117,6 +118,12 @@ Route::prefix('v1')->group(function () {
                 Route::post('commercial-groups', [CommercialGroupController::class, 'store'])->name('store.commercial-groups.store');
                 Route::put('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'update'])->name('store.commercial-groups.update');
                 Route::delete('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'destroy'])->name('store.commercial-groups.destroy');
+
+                Route::get('customers', [CustomerController::class, 'index'])->name('store.customers.index');
+                Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('store.customers.show');
+                Route::post('customers', [CustomerController::class, 'store'])->name('store.customers.store');
+                Route::put('customers/{customer}', [CustomerController::class, 'update'])->name('store.customers.update');
+                Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('store.customers.destroy');
             });
 
             Route::middleware(['role:STORE_ADMIN', 'feature:multi_user'])->group(function () {
