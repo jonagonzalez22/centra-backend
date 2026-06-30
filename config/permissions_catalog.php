@@ -19,4 +19,10 @@ return [
         ['name' => 'store_users.edit', 'label' => 'Editar'],
         ['name' => 'store_users.delete', 'label' => 'Eliminar'],
     ],
+    'Grupos Comerciales' => [
+        ['name' => 'commercial_groups.view', 'label' => 'Ver'],
+        ['name' => 'commercial_groups.create', 'label' => 'Crear'],
+        ['name' => 'commercial_groups.edit', 'label' => 'Editar'],
+        ['name' => 'commercial_groups.delete', 'label' => 'Eliminar'],
+    ],
 ];

@@ -34,6 +34,12 @@ class PermissionSeeder extends Seeder
 
       // Module: Geography
       'geography.view',
+
+      // Module: Commercial Groups
+      'commercial_groups.view',
+      'commercial_groups.create',
+      'commercial_groups.edit',
+      'commercial_groups.delete',
     ];
 
     // Create each permission if it doesn't exist
