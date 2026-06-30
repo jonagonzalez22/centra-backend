@@ -31,6 +31,9 @@ class PermissionSeeder extends Seeder
       'plans.create',
       'plans.edit',
       'plans.delete',
+
+      // Module: Geography
+      'geography.view',
     ];
 
     // Create each permission if it doesn't exist

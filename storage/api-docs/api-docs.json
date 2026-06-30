@@ -3932,7 +3932,7 @@
                     "Roles"
                 ],
                 "summary": "Sincronizar permisos del rol",
-                "description": "Sincroniza los permisos asociados a un rol, reemplazando los existentes. Crea permisos faltantes automáticamente.",
+                "description": "Sincroniza los permisos asociados a un rol, reemplazando los existentes. Puede enviarse un array vacío para quitar todos los permisos. Crea permisos faltantes automáticamente.",
                 "operationId": "roleSyncPermissions",
                 "parameters": [
                     {
@@ -3960,11 +3960,7 @@
                                         "items": {
                                             "type": "string"
                                         },
-                                        "example": [
-                                            "stores.view",
-                                            "stores.create",
-                                            "stores.edit"
-                                        ]
+                                        "example": []
                                     }
                                 },
                                 "type": "object"
@@ -6329,6 +6325,180 @@
                 ]
             }
         },
+        "/geography/provinces": {
+            "get": {
+                "tags": [
+                    "Geography"
+                ],
+                "summary": "Listar provincias",
+                "description": "Retorna todas las provincias de Argentina.",
+                "operationId": "geographyProvincesIndex",
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Provincias obtenidas correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/Province"
+                                                    }
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/geography/provinces/{id}/localities": {
+            "get": {
+                "tags": [
+                    "Geography"
+                ],
+                "summary": "Listar localidades por provincia",
+                "description": "Retorna todas las localidades de una provincia específica.",
+                "operationId": "geographyProvincesLocalities",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID de la provincia",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Cantidad de resultados por página (default: 50)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 50
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Provincia no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Localidades obtenidas correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/Locality"
+                                                            }
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 202
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 50
+                                                        },
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 5
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/categories": {
             "get": {
                 "tags": [
@@ -8310,12 +8480,12 @@
                                 ],
                                 "properties": {
                                     "permissions": {
-                                        "description": "Lista de nombres de permisos directos a asignar",
+                                        "description": "Lista de nombres de permisos directos a asignar. Puede ser un array vacío.",
                                         "type": "array",
                                         "items": {
-                                            "type": "string",
-                                            "example": "products.view"
-                                        }
+                                            "type": "string"
+                                        },
+                                        "example": []
                                     }
                                 },
                                 "type": "object"
@@ -8794,6 +8964,75 @@
                 },
                 "type": "object"
             },
+            "Locality": {
+                "title": "Locality",
+                "description": "Localidad de Argentina",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "019f1234-5678-90ab-cdef-1234567890ab"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Godoy Cruz"
+                    },
+                    "zip_code": {
+                        "type": "string",
+                        "example": "5501",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-06-29 10:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-06-29 10:00:00"
+                    },
+                    "province": {
+                        "$ref": "#/components/schemas/Province"
+                    }
+                },
+                "type": "object"
+            },
+            "Province": {
+                "title": "Province",
+                "description": "Provincia de Argentina",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "019f1234-5678-90ab-cdef-1234567890ab"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Mendoza"
+                    },
+                    "iso_code": {
+                        "type": "string",
+                        "example": "AR-M"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-06-29 10:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-06-29 10:00:00"
+                    },
+                    "localities": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Locality"
+                        }
+                    },
+                    "localities_count": {
+                        "type": "integer",
+                        "example": 202,
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "SkuData": {
                 "title": "Datos del SKU generado",
                 "properties": {
@@ -9061,6 +9300,10 @@
         {
             "name": "Autenticación",
             "description": "Autenticación"
+        },
+        {
+            "name": "Geography",
+            "description": "Geography"
         },
         {
             "name": "Store - Categorías",
