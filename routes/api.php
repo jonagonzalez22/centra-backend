@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\GeographyController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
@@ -74,6 +75,13 @@ Route::prefix('v1')->group(function () {
                 Route::get('users/filter-options', [UserController::class, 'filterOptions']);
                 Route::apiResource('users', UserController::class);
             });
+        });
+
+    Route::prefix('geography')
+        ->middleware(['auth:sanctum', 'throttle:api', 'permission:geography.view'])
+        ->group(function () {
+            Route::get('provinces', [GeographyController::class, 'provinces']);
+            Route::get('provinces/{id}/localities', [GeographyController::class, 'localities']);
         });
 
     Route::prefix('store')

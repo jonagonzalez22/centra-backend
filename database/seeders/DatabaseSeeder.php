@@ -11,7 +11,9 @@ class DatabaseSeeder extends Seeder
     $this->call([
       \Database\Seeders\RoleSeeder::class,
       \Database\Seeders\Admin\BusinessTypeSeeder::class,
-      \Database\Seeders\SuperAdminPermissionsSeeder::class
+      \Database\Seeders\SuperAdminPermissionsSeeder::class,
+      \Database\Seeders\Geography\ProvinceSeeder::class,
+      \Database\Seeders\Geography\LocalitySeeder::class,
     ]);
 
 
