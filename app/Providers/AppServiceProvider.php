@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Customer;
+use App\Observers\CustomerObserver;
 use App\Support\PermissionFeatureResolver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\Access\Gate;
@@ -40,6 +42,8 @@ class AppServiceProvider extends ServiceProvider
 
   public function boot(): void
   {
+    Customer::observe(CustomerObserver::class);
+
     RateLimiter::for('api', function (Request $request) {
       return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
     });

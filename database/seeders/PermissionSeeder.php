@@ -40,6 +40,12 @@ class PermissionSeeder extends Seeder
       'commercial_groups.create',
       'commercial_groups.edit',
       'commercial_groups.delete',
+
+      // Module: Customers
+      'customers.view',
+      'customers.create',
+      'customers.edit',
+      'customers.delete',
     ];
 
     // Create each permission if it doesn't exist
