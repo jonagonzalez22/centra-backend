@@ -6499,6 +6499,73 @@
                 ]
             }
         },
+        "/catalogs/document-types": {
+            "get": {
+                "tags": [
+                    "Catálogos"
+                ],
+                "summary": "Listar tipos de documento",
+                "description": "Retorna el catálogo de tipos de documento disponibles en el sistema.",
+                "operationId": "catalogDocumentTypes",
+                "responses": {
+                    "200": {
+                        "description": "Catálogo de tipos de documento obtenido correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Tipos de documento obtenidos correctamente."
+                                                },
+                                                "data": {
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/DocumentType"
+                                                            }
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/categories": {
             "get": {
                 "tags": [
@@ -12039,6 +12106,10 @@
         {
             "name": "Geography",
             "description": "Geography"
+        },
+        {
+            "name": "Catálogos",
+            "description": "Catálogos"
         },
         {
             "name": "Store - Categorías",

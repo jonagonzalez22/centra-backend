@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
+use App\Http\Controllers\Api\V1\Store\CatalogController;
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use Illuminate\Support\Facades\Route;
 
@@ -86,6 +87,13 @@ Route::prefix('v1')->group(function () {
         ->group(function () {
             Route::get('provinces', [GeographyController::class, 'provinces']);
             Route::get('provinces/{id}/localities', [GeographyController::class, 'localities']);
+        });
+
+    Route::prefix('catalogs')
+        ->middleware(['auth:sanctum', 'throttle:api'])
+        ->group(function () {
+            Route::get('document-types', [CatalogController::class, 'documentTypes'])
+                ->name('catalogs.document-types');
         });
 
     Route::prefix('store')
