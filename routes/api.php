@@ -9,7 +9,6 @@ use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
-use App\Http\Controllers\Api\V1\GeographyController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
@@ -21,7 +20,7 @@ use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
-use App\Http\Controllers\Api\V1\Store\CatalogController;
+use App\Http\Controllers\Api\V1\CatalogsController;
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use Illuminate\Support\Facades\Route;
 
@@ -82,18 +81,15 @@ Route::prefix('v1')->group(function () {
             });
         });
 
-    Route::prefix('geography')
-        ->middleware(['auth:sanctum', 'throttle:api', 'permission:geography.view'])
-        ->group(function () {
-            Route::get('provinces', [GeographyController::class, 'provinces']);
-            Route::get('provinces/{id}/localities', [GeographyController::class, 'localities']);
-        });
-
     Route::prefix('catalogs')
         ->middleware(['auth:sanctum', 'throttle:api'])
         ->group(function () {
-            Route::get('document-types', [CatalogController::class, 'documentTypes'])
+            Route::get('document-types', [CatalogsController::class, 'documentTypes'])
                 ->name('catalogs.document-types');
+            Route::get('provinces', [CatalogsController::class, 'provinces'])
+                ->name('catalogs.provinces');
+            Route::get('provinces/{province}/localities', [CatalogsController::class, 'localities'])
+                ->name('catalogs.provinces.localities');
         });
 
     Route::prefix('store')
