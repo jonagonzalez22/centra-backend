@@ -191,29 +191,6 @@ class CatalogsController extends Controller
         )
     )]
     #[OA\Response(
-        response: 200,
-        description: 'Todas las localidades sin paginación (cuando paginate=false)',
-        content: new OA\JsonContent(
-            allOf: [
-                new OA\Schema(ref: '#/components/schemas/ApiResponse'),
-                new OA\Schema(
-                    properties: [
-                        new OA\Property(property: 'status', example: 'success'),
-                        new OA\Property(property: 'message', example: 'Etiquetas obtenidas correctamente.'),
-                        new OA\Property(
-                            property: 'data',
-                            type: 'object',
-                            properties: [
-                                new OA\Property(property: 'items', type: 'array', items: new OA\Items(ref: '#/components/schemas/Locality')),
-                            ]
-                        ),
-                        new OA\Property(property: 'errors', nullable: true, example: null),
-                    ]
-                ),
-            ]
-        )
-    )]
-    #[OA\Response(
         response: 401,
         description: 'No autenticado',
         content: new OA\JsonContent(ref: '#/components/schemas/ApiResponse')
