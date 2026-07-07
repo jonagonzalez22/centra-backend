@@ -84,7 +84,7 @@ class CustomerAddressController extends Controller
         }
 
         $addresses = $customer->addresses()
-            ->with('locality')
+            ->with(['locality', 'locality.province'])
             ->when($request->filled('type'), function ($query) use ($request) {
                 $query->where('type', $request->type);
             })
@@ -198,7 +198,7 @@ class CustomerAddressController extends Controller
             'observations' => $request->observations,
         ]);
 
-        $address->load('locality');
+        $address->load(['locality', 'locality.province']);
 
         return response()->json([
             'status' => 'success',
@@ -265,7 +265,7 @@ class CustomerAddressController extends Controller
             ], 404);
         }
 
-        $address = $customer->addresses()->with('locality')->find($id);
+        $address = $customer->addresses()->with(['locality', 'locality.province'])->find($id);
 
         if (! $address) {
             return response()->json([
@@ -380,7 +380,7 @@ class CustomerAddressController extends Controller
         }
 
         $address->update($data);
-        $address->load('locality');
+        $address->load(['locality', 'locality.province']);
 
         return response()->json([
             'status' => 'success',

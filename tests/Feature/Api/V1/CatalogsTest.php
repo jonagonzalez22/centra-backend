@@ -124,6 +124,20 @@ test('localities returns localities ordered alphabetically', function () {
     expect($items[2]['name'])->toBe('San Rafael');
 });
 
+test('localities returns all localities without pagination when paginate=false', function () {
+    $province = Province::factory()->create(['name' => 'Mendoza']);
+    Locality::factory()->count(60)->create(['province_id' => $province->id]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/catalogs/provinces/{$province->id}/localities?paginate=false");
+
+    $response->assertStatus(200)
+        ->assertJsonCount(60, 'data.items')
+        ->assertJsonMissing(['total'])
+        ->assertJsonMissing(['per_page'])
+        ->assertJsonPath('status', 'success');
+});
+
 test('localities returns 404 for non-existent province', function () {
     $fakeUuid = '00000000-0000-0000-0000-000000000000';
 
