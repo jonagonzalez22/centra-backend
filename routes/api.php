@@ -9,19 +9,20 @@ use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CatalogsController;
+use App\Http\Controllers\Api\V1\GeocodingController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
-use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
-use App\Http\Controllers\Api\V1\Store\InventoryController;
-use App\Http\Controllers\Api\V1\Store\ProductController;
-use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
 use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
+use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
+use App\Http\Controllers\Api\V1\Store\InventoryController;
+use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
+use App\Http\Controllers\Api\V1\Store\ProductController;
+use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
-use App\Http\Controllers\Api\V1\CatalogsController;
-use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -33,6 +34,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
+        Route::post('geocoding/search', [GeocodingController::class, 'search'])->name('geocoding.search');
     });
 
     Route::prefix('admin')

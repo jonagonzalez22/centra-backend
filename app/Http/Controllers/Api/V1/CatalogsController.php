@@ -143,6 +143,13 @@ class CatalogsController extends Controller
         schema: new OA\Schema(type: 'string', format: 'uuid')
     )]
     #[OA\Parameter(
+        name: 'paginate',
+        in: 'query',
+        required: false,
+        description: 'Si es false, retorna todas las localidades sin paginación (default: true)',
+        schema: new OA\Schema(type: 'boolean', example: false)
+    )]
+    #[OA\Parameter(
         name: 'per_page',
         in: 'query',
         required: false,
@@ -158,7 +165,7 @@ class CatalogsController extends Controller
     )]
     #[OA\Response(
         response: 200,
-        description: 'Localidades obtenidas correctamente',
+        description: 'Resultado paginado (cuando paginate=true o no se envía)',
         content: new OA\JsonContent(
             allOf: [
                 new OA\Schema(ref: '#/components/schemas/ApiResponse'),
@@ -195,8 +202,27 @@ class CatalogsController extends Controller
     )]
     public function localities(Request $request, Province $province): JsonResponse
     {
+        $paginate = $request->boolean('paginate', true);
+
+        if (!$paginate) {
+            $localities = $province->localities()
+                ->with('province')
+                ->orderBy('name')
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Localidades obtenidas correctamente.',
+                'data' => [
+                    'items' => LocalityResource::collection($localities),
+                ],
+                'errors' => null,
+            ]);
+        }
+
         $perPage = $request->integer('per_page', 50);
         $localities = $province->localities()
+            ->with('province')
             ->orderBy('name')
             ->paginate($perPage);
 

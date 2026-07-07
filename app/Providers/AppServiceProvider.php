@@ -4,6 +4,9 @@ namespace App\Providers;
 
 use App\Models\Customer;
 use App\Observers\CustomerObserver;
+use App\Services\Geocoding\Contracts\GeocodingProvider;
+use App\Services\Geocoding\GeocodingService;
+use App\Services\Geocoding\Providers\GoogleGeocodingProvider;
 use App\Support\PermissionFeatureResolver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Auth\Access\Gate;
@@ -15,6 +18,19 @@ class AppServiceProvider extends ServiceProvider
 {
   public function register(): void
   {
+    $this->app->bind(GeocodingProvider::class, function () {
+      $provider = config('geocoding.provider');
+
+      return match ($provider) {
+        'google' => new GoogleGeocodingProvider(),
+        default => throw new \RuntimeException("Unsupported geocoding provider: {$provider}"),
+      };
+    });
+
+    $this->app->bind(GeocodingService::class, function ($app) {
+      return new GeocodingService($app->make(GeocodingProvider::class));
+    });
+
     $this->app->resolving(Gate::class, function ($gate) {
       $gate->before(function ($user, $ability) {
         if ($user->hasRole('SUPER_ADMIN')) {

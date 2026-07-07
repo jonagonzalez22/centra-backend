@@ -6491,6 +6491,16 @@
                         }
                     },
                     {
+                        "name": "paginate",
+                        "in": "query",
+                        "description": "Si es false, retorna todas las localidades sin paginación (default: true)",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "example": false
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Cantidad de resultados por página (default: 50)",
@@ -6513,7 +6523,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Localidades obtenidas correctamente",
+                        "description": "Resultado paginado (cuando paginate=true o no se envía)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -6580,6 +6590,124 @@
                     },
                     "404": {
                         "description": "Provincia no encontrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/geocoding/search": {
+            "post": {
+                "tags": [
+                    "Geocoding"
+                ],
+                "summary": "Geocodificar una dirección",
+                "description": "Recibe una dirección y retorna las coordenadas geográficas y la dirección formateada.",
+                "operationId": "geocodingSearch",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "address"
+                                ],
+                                "properties": {
+                                    "address": {
+                                        "type": "string",
+                                        "example": "Av. Colón 77, Córdoba, Argentina"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Dirección geocodificada exitosamente.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Dirección geocodificada exitosamente."
+                                                },
+                                                "data": {
+                                                    "properties": {
+                                                        "latitude": {
+                                                            "type": "number",
+                                                            "format": "float",
+                                                            "example": -31.4201
+                                                        },
+                                                        "longitude": {
+                                                            "type": "number",
+                                                            "format": "float",
+                                                            "example": -64.1888
+                                                        },
+                                                        "formatted_address": {
+                                                            "type": "string",
+                                                            "example": "Av. Colón 77, Córdoba, X5000JJB, Argentina"
+                                                        },
+                                                        "provider": {
+                                                            "type": "string",
+                                                            "example": "google"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Error interno del servidor.",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -11500,6 +11628,31 @@
                 },
                 "type": "object"
             },
+            "GeocodingResult": {
+                "title": "GeocodingResult",
+                "description": "Resultado de la geocodificación de una dirección",
+                "properties": {
+                    "latitude": {
+                        "type": "number",
+                        "format": "float",
+                        "example": -31.4201
+                    },
+                    "longitude": {
+                        "type": "number",
+                        "format": "float",
+                        "example": -64.1888
+                    },
+                    "formatted_address": {
+                        "type": "string",
+                        "example": "Av. Colón 77, Córdoba, X5000JJB, Argentina"
+                    },
+                    "provider": {
+                        "type": "string",
+                        "example": "google"
+                    }
+                },
+                "type": "object"
+            },
             "Locality": {
                 "title": "Locality",
                 "description": "Localidad de Argentina",
@@ -12136,6 +12289,10 @@
         {
             "name": "Catálogos",
             "description": "Catálogos"
+        },
+        {
+            "name": "Geocoding",
+            "description": "Geocoding"
         },
         {
             "name": "Store - Categorías",
