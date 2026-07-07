@@ -6,7 +6,7 @@ use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
-class GeocodingSearchRequest extends FormRequest
+class LocationSearchRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -40,8 +40,10 @@ class GeocodingSearchRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'address.required' => 'La dirección es requerida.',
             'address.string' => 'La dirección debe ser una cadena de texto.',
             'address.max' => 'La dirección no puede superar los 1000 caracteres.',
+            'input.required' => 'El input es requerido.',
             'input.string' => 'El input debe ser una cadena de texto.',
             'input.max' => 'El input no puede superar los 1000 caracteres.',
         ];
