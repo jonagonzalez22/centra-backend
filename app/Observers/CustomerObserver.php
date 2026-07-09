@@ -19,7 +19,7 @@ class CustomerObserver
         }
 
         $this->normalizeDocumentNumber($customer);
-        $this->generateSearchText($customer);
+        $this->refreshSearchText($customer);
 
         if (auth()->check()) {
             $customer->store_id = $customer->store_id ?? auth()->user()->store_id;
@@ -30,7 +30,7 @@ class CustomerObserver
     public function updating(Customer $customer): void
     {
         $this->normalizeDocumentNumber($customer);
-        $this->generateSearchText($customer);
+        $this->refreshSearchText($customer);
 
         if (auth()->check()) {
             $customer->updated_by = auth()->id();
@@ -44,13 +44,23 @@ class CustomerObserver
         }
     }
 
-    private function generateSearchText(Customer $customer): void
+    public function refreshSearchText(Customer $customer): void
     {
         $parts = array_filter([
             $customer->display_name,
             $customer->document_number_normalized,
             $customer->customer_code,
         ]);
+
+        if ($customer->relationLoaded('addresses')) {
+            $streetParts = $customer->addresses->pluck('street')->filter();
+            $parts = array_merge($parts, $streetParts->toArray());
+        } else {
+            $streetParts = $customer->addresses()->pluck('street')->filter();
+            if ($streetParts->isNotEmpty()) {
+                $parts = array_merge($parts, $streetParts->toArray());
+            }
+        }
 
         $text = mb_strtolower(implode(' ', $parts), 'UTF-8');
 
@@ -62,5 +72,9 @@ class CustomerObserver
         $text = preg_replace('/[ñ]/u', 'n', $text);
 
         $customer->search_text = $text;
+
+        if ($customer->exists) {
+            $customer->saveQuietly();
+        }
     }
 }
