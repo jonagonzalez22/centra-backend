@@ -41,6 +41,9 @@ class CustomerSchema
     #[OA\Property(example: 'active', enum: ['active', 'inactive'])]
     public string $status;
 
+    #[OA\Property(example: true, description: 'Indica si el cliente tiene al menos una dirección con geolocalización')]
+    public bool $has_location;
+
     #[OA\Property(example: null, nullable: true)]
     public ?string $blocked_at;
 

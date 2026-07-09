@@ -8978,6 +8978,20 @@
                         }
                     },
                     {
+                        "name": "location_status",
+                        "in": "query",
+                        "description": "Filtrar por geolocalización",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "all",
+                                "with_location",
+                                "without_location"
+                            ]
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Resultados por página (default: 15)",
@@ -12031,6 +12045,11 @@
                             "inactive"
                         ],
                         "example": "active"
+                    },
+                    "has_location": {
+                        "description": "Indica si el cliente tiene al menos una dirección con geolocalización",
+                        "type": "boolean",
+                        "example": true
                     },
                     "blocked_at": {
                         "type": "string",

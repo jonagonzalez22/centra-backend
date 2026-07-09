@@ -2,6 +2,7 @@
 
 use App\Models\CommercialGroup;
 use App\Models\Customer;
+use App\Models\CustomerAddress;
 use App\Models\DocumentType;
 use App\Models\Feature;
 use App\Models\Plan;
@@ -414,4 +415,201 @@ test('search works with accented characters', function () {
     $response->assertStatus(200)
         ->assertJsonCount(1, 'data.items')
         ->assertJsonPath('data.items.0.display_name', 'María José Rodríguez');
+});
+
+test('returns has_location false when customer has no addresses', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers');
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.items.0.has_location', false);
+});
+
+test('returns has_location false when address has no coordinates', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    $address = CustomerAddress::factory()->forCustomer($customer)->create([
+        'latitude' => null,
+        'longitude' => null,
+    ]);
+
+    $this->assertDatabaseHas('customer_addresses', [
+        'id' => $address->id,
+        'latitude' => null,
+        'longitude' => null,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers');
+
+    $response->assertStatus(200);
+
+    $items = $response->json('data.items');
+    $customerItem = collect($items)->firstWhere('id', $customer->id);
+
+    expect($customerItem['has_location'])->toBe(false);
+});
+
+test('returns has_location true when address has coordinates', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    CustomerAddress::factory()->forCustomer($customer)->create([
+        'latitude' => -34.603722,
+        'longitude' => -58.381592,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers');
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.items.0.has_location', true);
+});
+
+test('filters by location_status with_location', function () {
+    $customerWithLocation = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+    CustomerAddress::factory()->forCustomer($customerWithLocation)->create([
+        'latitude' => -34.603722,
+        'longitude' => -58.381592,
+    ]);
+
+    $customerWithoutLocation = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+    CustomerAddress::factory()->forCustomer($customerWithoutLocation)->create([
+        'latitude' => null,
+        'longitude' => null,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?location_status=with_location');
+
+    $response->assertStatus(200)
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $customerWithLocation->id);
+});
+
+test('filters by location_status without_location', function () {
+    $customerWithLocation = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+    CustomerAddress::factory()->forCustomer($customerWithLocation)->create([
+        'latitude' => -34.603722,
+        'longitude' => -58.381592,
+    ]);
+
+    $customerWithoutLocation = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+    CustomerAddress::factory()->forCustomer($customerWithoutLocation)->create([
+        'latitude' => null,
+        'longitude' => null,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?location_status=without_location');
+
+    $response->assertStatus(200)
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $customerWithoutLocation->id);
+});
+
+test('location_status all returns all customers', function () {
+    $customerWithLocation = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+    CustomerAddress::factory()->forCustomer($customerWithLocation)->create([
+        'latitude' => -34.603722,
+        'longitude' => -58.381592,
+    ]);
+
+    $customerWithoutLocation = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?location_status=all');
+
+    $response->assertStatus(200)
+        ->assertJsonCount(2, 'data.items');
+});
+
+test('search_text includes address street names', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'display_name' => 'Juan Pérez',
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    CustomerAddress::factory()->forCustomer($customer)->create([
+        'street' => 'Av. Corrientes',
+    ]);
+
+    $customer->refresh();
+
+    expect($customer->search_text)->toContain('av. corrientes');
+});
+
+test('search_text is updated when address is created', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'display_name' => 'Juan Pérez',
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    expect($customer->search_text)->not->toContain('corrientes');
+
+    CustomerAddress::factory()->forCustomer($customer)->create([
+        'street' => 'Av. Corrientes',
+    ]);
+
+    $customer->refresh();
+
+    expect($customer->search_text)->toContain('corrientes');
+});
+
+test('search_text is updated when address street is changed', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'display_name' => 'Juan Pérez',
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    $address = CustomerAddress::factory()->forCustomer($customer)->create([
+        'street' => 'Av. Corrientes',
+    ]);
+
+    $customer->refresh();
+    expect($customer->search_text)->toContain('corrientes');
+
+    $address->update(['street' => 'Av. Santa Fe']);
+    $customer->refresh();
+
+    expect($customer->search_text)->toContain('santa fe');
+    expect($customer->search_text)->not->toContain('corrientes');
+});
+
+test('search_text is updated when address is deleted', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'display_name' => 'Juan Pérez',
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    $address = CustomerAddress::factory()->forCustomer($customer)->create([
+        'street' => 'Av. Corrientes',
+    ]);
+
+    $customer->refresh();
+    expect($customer->search_text)->toContain('corrientes');
+
+    $address->delete();
+    $customer->refresh();
+
+    expect($customer->search_text)->not->toContain('corrientes');
 });

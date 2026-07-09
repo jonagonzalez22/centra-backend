@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\Customer;
+use App\Models\CustomerAddress;
+use App\Observers\CustomerAddressObserver;
 use App\Observers\CustomerObserver;
 use App\Services\Geocoding\Contracts\GeocodingProvider;
 use App\Services\Geocoding\GeocodingService;
@@ -64,6 +66,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Customer::observe(CustomerObserver::class);
+        CustomerAddress::observe(CustomerAddressObserver::class);
 
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());

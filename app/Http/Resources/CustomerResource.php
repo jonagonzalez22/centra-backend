@@ -20,6 +20,7 @@ class CustomerResource extends JsonResource
             'document_number' => $this->document_number,
             'commercial_group' => CommercialGroupResource::make($this->whenLoaded('commercialGroup')),
             'status' => $this->status,
+            'has_location' => (bool) $this->has_location,
             'blocked_at' => $this->blocked_at?->format('Y-m-d H:i:s'),
             'notes' => $this->notes,
             'created_by' => $this->created_by,

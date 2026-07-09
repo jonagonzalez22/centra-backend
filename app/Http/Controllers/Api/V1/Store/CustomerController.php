@@ -23,6 +23,7 @@ class CustomerController extends Controller
     )]
     #[OA\Parameter(name: 'search', in: 'query', required: false, description: 'Búsqueda por nombre, documento o código', schema: new OA\Schema(type: 'string', example: 'Juan'))]
     #[OA\Parameter(name: 'status', in: 'query', required: false, description: 'Filtrar por estado', schema: new OA\Schema(type: 'string', enum: ['active', 'inactive']))]
+    #[OA\Parameter(name: 'location_status', in: 'query', required: false, description: 'Filtrar por geolocalización', schema: new OA\Schema(type: 'string', enum: ['all', 'with_location', 'without_location']))]
     #[OA\Parameter(name: 'per_page', in: 'query', required: false, description: 'Resultados por página (default: 15)', schema: new OA\Schema(type: 'integer', example: 15))]
     #[OA\Parameter(name: 'page', in: 'query', required: false, description: 'Número de página', schema: new OA\Schema(type: 'integer', example: 1))]
     #[OA\Response(
@@ -68,11 +69,23 @@ class CustomerController extends Controller
 
         $customers = Customer::forStore($storeId)
             ->with(['documentType', 'commercialGroup'])
+            ->withExists([
+                'addresses as has_location' => function ($query) {
+                    $query->whereNotNull('latitude')->whereNotNull('longitude');
+                },
+            ])
             ->when($request->filled('search'), function ($query) use ($request) {
                 $query->where('search_text', 'like', '%'.$request->search.'%');
             })
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->where('status', $request->status);
+            })
+            ->when($request->filled('location_status'), function ($query) use ($request) {
+                match ($request->location_status) {
+                    'with_location' => $query->hasLocation(),
+                    'without_location' => $query->doesntHaveLocation(),
+                    default => null,
+                };
             })
             ->orderBy('display_name')
             ->paginate($request->integer('per_page', 15));

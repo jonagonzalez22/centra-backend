@@ -90,6 +90,20 @@ class Customer extends Model
         return $query->where('search_text', 'like', '%'.$term.'%');
     }
 
+    public function scopeHasLocation(Builder $query): Builder
+    {
+        return $query->whereHas('addresses', function ($query) {
+            $query->whereNotNull('latitude')->whereNotNull('longitude');
+        });
+    }
+
+    public function scopeDoesntHaveLocation(Builder $query): Builder
+    {
+        return $query->whereDoesntHave('addresses', function ($query) {
+            $query->whereNotNull('latitude')->whereNotNull('longitude');
+        });
+    }
+
     public function addresses(): HasMany
     {
         return $this->hasMany(CustomerAddress::class);
