@@ -59,4 +59,15 @@ class UserSchema
         example: [['code' => 'pos', 'limit' => null], ['code' => 'multi_user', 'limit' => 2]]
     )]
     public array $features;
+
+    #[OA\Property(
+        property: 'cash_session',
+        anyOf: [
+            new OA\Schema(ref: '#/components/schemas/CashSessionLight'),
+            new OA\Schema(type: 'null'),
+        ],
+        nullable: true,
+        description: 'Sesión de caja activa del usuario. Presente únicamente en contexto de tienda para usuarios con rol STORE_ADMIN o STORE_USER cuya tienda tenga la feature cash habilitada. Valor null si no hay sesión abierta.'
+    )]
+    public mixed $cash_session;
 }
