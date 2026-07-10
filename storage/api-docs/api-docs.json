@@ -11767,6 +11767,84 @@
                 },
                 "type": "object"
             },
+            "CashSession": {
+                "title": "CashSession",
+                "description": "Representación de una sesión de caja",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "store": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/StoreLight"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "user": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "closed"
+                        ],
+                        "example": "open"
+                    },
+                    "opening_amount": {
+                        "description": "Monto inicial de apertura de caja",
+                        "type": "number",
+                        "format": "float",
+                        "example": 1000
+                    },
+                    "expected_amount": {
+                        "description": "Monto esperado (apertura + ventas - egresos)",
+                        "type": "number",
+                        "format": "float",
+                        "example": 1500
+                    },
+                    "real_amount": {
+                        "description": "Monto real contado al cierre",
+                        "type": "number",
+                        "format": "float",
+                        "example": 1495.5,
+                        "nullable": true
+                    },
+                    "notes": {
+                        "description": "Notas u observaciones",
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "opened_at": {
+                        "type": "string",
+                        "example": "2026-07-10 08:00:00"
+                    },
+                    "closed_at": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-07-10 08:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-07-10 18:00:00"
+                    }
+                },
+                "type": "object"
+            },
             "CategoryResource": {
                 "title": "CategoryResource",
                 "description": "Representación de una categoría de tienda",
