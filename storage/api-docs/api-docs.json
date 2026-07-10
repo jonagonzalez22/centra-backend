@@ -6724,6 +6724,285 @@
                 ]
             }
         },
+        "/store/cash/current": {
+            "get": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Obtener sesión de caja actual",
+                "description": "Retorna la sesión de caja abierta del usuario autenticado en su tienda.",
+                "operationId": "cashSessionCurrent",
+                "responses": {
+                    "200": {
+                        "description": "Sesión de caja obtenida correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Sesión de caja obtenida correctamente."
+                                                },
+                                                "data": {
+                                                    "oneOf": [
+                                                        {
+                                                            "$ref": "#/components/schemas/CashSession"
+                                                        }
+                                                    ],
+                                                    "nullable": true
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No autorizado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/open": {
+            "post": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Abrir sesión de caja",
+                "description": "Abre una nueva sesión de caja para el usuario autenticado en su tienda.",
+                "operationId": "cashSessionOpen",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "opening_amount"
+                                ],
+                                "properties": {
+                                    "opening_amount": {
+                                        "description": "Monto inicial de apertura",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 1000
+                                    },
+                                    "notes": {
+                                        "description": "Notas u observaciones",
+                                        "type": "string",
+                                        "example": "Turno mañana",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Sesión de caja abierta correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Sesión de caja abierta correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/CashSession"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No autorizado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validación fallida o sesión ya abierta",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/{cashSession}/close": {
+            "post": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Cerrar sesión de caja",
+                "description": "Cierra una sesión de caja abierta del usuario autenticado. Requiere que la sesión pertenezca a la tienda, al usuario y esté en estado open.",
+                "operationId": "cashSessionClose",
+                "parameters": [
+                    {
+                        "name": "cashSession",
+                        "in": "path",
+                        "description": "ID de la sesión de caja",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid",
+                            "example": "550e8400-e29b-41d4-a716-446655440000"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "real_amount"
+                                ],
+                                "properties": {
+                                    "real_amount": {
+                                        "description": "Monto real contado al cierre",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 1495.5
+                                    },
+                                    "notes": {
+                                        "description": "Notas u observaciones",
+                                        "type": "string",
+                                        "example": "Cierre de turno mañana",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Sesión de caja cerrada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "status": {
+                                                    "example": "success"
+                                                },
+                                                "message": {
+                                                    "example": "Sesión de caja cerrada correctamente."
+                                                },
+                                                "data": {
+                                                    "$ref": "#/components/schemas/CashSession"
+                                                },
+                                                "errors": {
+                                                    "example": null,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No autorizado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Sesión no encontrada o no cerrable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validación fallida o sesión ya cerrada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/categories": {
             "get": {
                 "tags": [
@@ -12431,6 +12710,10 @@
         {
             "name": "Geocoding",
             "description": "Geocoding"
+        },
+        {
+            "name": "Store - Caja",
+            "description": "Store - Caja"
         },
         {
             "name": "Store - Categorías",
