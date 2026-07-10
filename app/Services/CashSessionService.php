@@ -26,7 +26,7 @@ class CashSessionService
                 'user_id' => $userId,
                 'status' => 'open',
                 'opening_amount' => $openingAmount,
-                'expected_amount' => 0,
+                'expected_amount' => $openingAmount,
                 'opened_at' => now(),
             ]);
         });

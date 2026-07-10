@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogsController;
 use App\Http\Controllers\Api\V1\GeocodingController;
+use App\Http\Controllers\Api\V1\Store\CashSessionController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
@@ -119,6 +120,12 @@ Route::prefix('v1')->group(function () {
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('store.products.destroy');
 
             Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
+
+            Route::middleware('feature:cash')->group(function () {
+                Route::get('cash/current', [CashSessionController::class, 'current'])->name('store.cash.current');
+                Route::post('cash/open', [CashSessionController::class, 'open'])->name('store.cash.open');
+                Route::post('cash/{cashSession}/close', [CashSessionController::class, 'close'])->name('store.cash.close');
+            });
 
             Route::middleware('feature:customers')->group(function () {
                 Route::get('commercial-groups', [CommercialGroupController::class, 'index'])->name('store.commercial-groups.index');
