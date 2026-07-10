@@ -11767,6 +11767,35 @@
                 },
                 "type": "object"
             },
+            "CashSessionLight": {
+                "title": "CashSessionLight",
+                "description": "Versión resumida de CashSession para contexto de autenticación",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "closed"
+                        ],
+                        "example": "open"
+                    },
+                    "opening_amount": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 1000
+                    },
+                    "opened_at": {
+                        "type": "string",
+                        "example": "2026-07-10 08:00:00"
+                    }
+                },
+                "type": "object"
+            },
             "CashSession": {
                 "title": "CashSession",
                 "description": "Representación de una sesión de caja",
@@ -12330,6 +12359,18 @@
                             {
                                 "code": "multi_user",
                                 "limit": 2
+                            }
+                        ]
+                    },
+                    "cash_session": {
+                        "description": "Sesión de caja activa del usuario. Presente únicamente en contexto de tienda para usuarios con rol STORE_ADMIN o STORE_USER cuya tienda tenga la feature cash habilitada. Valor null si no hay sesión abierta.",
+                        "nullable": true,
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/CashSessionLight"
+                            },
+                            {
+                                "type": "null"
                             }
                         ]
                     }

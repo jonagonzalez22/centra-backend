@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -52,6 +54,17 @@ class User extends Authenticatable
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function cashSessions(): HasMany
+    {
+        return $this->hasMany(CashSession::class);
+    }
+
+    public function currentCashSession(): HasOne
+    {
+        return $this->hasOne(CashSession::class)
+            ->where('status', 'open');
     }
 
     public function scopeActive($query)

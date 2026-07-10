@@ -126,7 +126,11 @@ class AuthController extends Controller
     )]
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = User::with('store.businessType', 'store.plan.features')
+        $user = User::with([
+            'store.businessType',
+            'store.plan.features',
+            'currentCashSession',
+        ])
             ->where('email', $request->email)
             ->first();
 
@@ -285,7 +289,12 @@ class AuthController extends Controller
     )]
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['roles', 'store.businessType', 'store.plan.features']);
+        $user = $request->user()->load([
+            'roles',
+            'store.businessType',
+            'store.plan.features',
+            'currentCashSession',
+        ]);
 
         return response()->json([
             'status' => 'success',
@@ -300,6 +309,14 @@ class AuthController extends Controller
     /**
      * Format User for standard response.
      */
+    public function shouldIncludeCashSession(User $user): bool
+    {
+        return $user->store_id
+            && ! $user->hasRole('SUPER_ADMIN')
+            && ($user->hasRole('STORE_ADMIN') || $user->hasRole('STORE_USER'))
+            && $user->store?->hasFeature('cash');
+    }
+
     private function formatUser(User $user): array
     {
         $features = $user->store?->plan?->features->map(fn ($f) => [
@@ -307,7 +324,7 @@ class AuthController extends Controller
             'limit' => $f->pivot->limit_value,
         ])->toArray() ?? [];
 
-        return [
+        $data = [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
@@ -319,5 +336,18 @@ class AuthController extends Controller
             'permissions' => $user->getPermissionsViaRoles()->pluck('name')->toArray(),
             'features' => $features,
         ];
+
+        if ($this->shouldIncludeCashSession($user)) {
+            $session = $user->currentCashSession;
+
+            $data['cash_session'] = $session ? [
+                'id' => $session->id,
+                'status' => $session->status,
+                'opening_amount' => (float) $session->opening_amount,
+                'opened_at' => $session->opened_at->format('Y-m-d H:i:s'),
+            ] : null;
+        }
+
+        return $data;
     }
 }
