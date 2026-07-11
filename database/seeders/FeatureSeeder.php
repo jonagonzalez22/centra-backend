@@ -18,6 +18,7 @@ class FeatureSeeder extends Seeder
       ['code' => 'messaging', 'name' => 'Central de Mensajería', 'description' => 'Envío de notificaciones a clientes.'],
       ['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas de empleados.'],
       ['code' => 'customers', 'name' => 'Clientes', 'description' => 'Gestión de grupos comerciales y módulo de clientes.'],
+      ['code' => 'settings', 'name' => 'Configuración', 'description' => 'Acceso a la configuración general de la tienda.'],
     ];
 
     foreach ($features as $feature) {
