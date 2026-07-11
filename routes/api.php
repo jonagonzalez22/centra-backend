@@ -178,7 +178,7 @@ Route::prefix('v1')->group(function () {
                 Route::post('users/{user}/permissions', [StoreUserPermissionController::class, 'update'])->name('store.users.permissions.update');
             });
 
-            Route::middleware('feature:settings')->group(function () {
+            Route::middleware('feature:store_settings')->group(function () {
                 Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
                     ->name('store.payment-methods.index');
                 Route::patch('payment-methods/{paymentMethod}', [StorePaymentMethodController::class, 'update'])
