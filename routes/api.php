@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Admin\BusinessTypeController;
 use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\FeatureController;
+use App\Http\Controllers\Api\V1\Admin\PaymentMethodController as AdminPaymentMethodController;
 use App\Http\Controllers\Api\V1\Admin\PermissionController;
 use App\Http\Controllers\Api\V1\Admin\PlanController;
 use App\Http\Controllers\Api\V1\Admin\RoleController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
+use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMethodController;
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
@@ -67,6 +69,17 @@ Route::prefix('v1')->group(function () {
                 Route::apiResource('business-types', BusinessTypeController::class);
 
                 Route::apiResource('features', FeatureController::class);
+
+                Route::get('payment-methods', [AdminPaymentMethodController::class, 'index'])
+                    ->middleware('permission:payment_methods.view');
+                Route::post('payment-methods', [AdminPaymentMethodController::class, 'store'])
+                    ->middleware('permission:payment_methods.create');
+                Route::get('payment-methods/{id}', [AdminPaymentMethodController::class, 'show'])
+                    ->middleware('permission:payment_methods.view');
+                Route::put('payment-methods/{id}', [AdminPaymentMethodController::class, 'update'])
+                    ->middleware('permission:payment_methods.edit');
+                Route::delete('payment-methods/{id}', [AdminPaymentMethodController::class, 'destroy'])
+                    ->middleware('permission:payment_methods.delete');
             });
 
             Route::middleware('role:SUPER_ADMIN')->group(function () {
@@ -164,5 +177,10 @@ Route::prefix('v1')->group(function () {
                 Route::get('users/{user}/permissions', [StoreUserPermissionController::class, 'show'])->name('store.users.permissions.show');
                 Route::post('users/{user}/permissions', [StoreUserPermissionController::class, 'update'])->name('store.users.permissions.update');
             });
+
+            Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
+                ->name('store.payment-methods.index');
+            Route::patch('payment-methods/{paymentMethod}', [StorePaymentMethodController::class, 'update'])
+                ->name('store.payment-methods.update');
         });
 });
