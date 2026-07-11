@@ -58,6 +58,10 @@ class PermissionSeeder extends Seeder
       'customer_contacts.create',
       'customer_contacts.edit',
       'customer_contacts.delete',
+
+      // Module: Store Payment Methods
+      'store_payment_methods.view',
+      'store_payment_methods.configure',
     ];
 
     // Create each permission if it doesn't exist

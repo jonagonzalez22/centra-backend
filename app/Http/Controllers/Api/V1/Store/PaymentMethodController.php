@@ -196,6 +196,15 @@ class PaymentMethodController extends Controller
     )]
     public function update(UpdateStorePaymentMethodRequest $request, string $paymentMethodId): JsonResponse
     {
+        if (! $request->user()->hasRole('STORE_ADMIN')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No tenés permisos para configurar medios de pago.',
+                'data' => null,
+                'errors' => ['role' => ['Solo los administradores de tienda pueden configurar medios de pago.']],
+            ], 403);
+        }
+
         $paymentMethod = PaymentMethod::where('id', $paymentMethodId)
             ->where('is_active', true)
             ->first();
