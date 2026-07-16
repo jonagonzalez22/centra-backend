@@ -8798,6 +8798,199 @@
                 ]
             }
         },
+        "/store/operations": {
+            "get": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Listar operaciones comerciales de la tienda",
+                "description": "Display a listing of commercial operations for the authenticated user's store.",
+                "operationId": "c5a0c2759d82578e8be2ff06c70c73a6",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Filtrar por tipo de operación",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "sale",
+                                "order"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filtrar por estado",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "pending",
+                                "confirmed",
+                                "completed",
+                                "cancelled"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "customer_id",
+                        "in": "query",
+                        "description": "Filtrar por cliente",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "description": "Fecha de inicio (YYYY-MM-DD)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "description": "Fecha de fin (YYYY-MM-DD)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Operaciones comerciales obtenidas exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Operaciones comerciales obtenidas exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/CommercialOperationResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/operations/{id}": {
+            "get": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Ver una operación comercial específica",
+                "description": "Display the specified commercial operation.",
+                "operationId": "1738e38107c984f7e16359cd442e5431",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Operación comercial obtenida exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Operación comercial obtenida exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommercialOperationResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Operación comercial no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/customers/{customerId}/addresses": {
             "get": {
                 "tags": [
@@ -12667,6 +12860,165 @@
     },
     "components": {
         "schemas": {
+            "CommercialOperationResource": {
+                "title": "CommercialOperationResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "operation_number": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "customer": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "user": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "branch_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "subtotal": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "tax": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "discount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "total": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "delivery_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "completed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OperationItemResource"
+                        }
+                    },
+                    "payments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OperationPaymentResource"
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "type": "object"
+            },
+            "OperationItemResource": {
+                "title": "OperationItemResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "product_name": {
+                        "type": "string"
+                    },
+                    "quantity": {
+                        "type": "integer"
+                    },
+                    "price": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "subtotal": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "tax_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "discount_amount": {
+                        "type": "number",
+                        "format": "float"
+                    }
+                },
+                "type": "object"
+            },
+            "OperationPaymentResource": {
+                "title": "OperationPaymentResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "reference": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "payment_details": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "store_payment_method": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "code": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
             "ProductCategoryResource": {
                 "properties": {
                     "id": {
@@ -13985,6 +14337,10 @@
         {
             "name": "Store - Grupos Comerciales",
             "description": "Store - Grupos Comerciales"
+        },
+        {
+            "name": "Store - Operaciones Comerciales",
+            "description": "Store - Operaciones Comerciales"
         },
         {
             "name": "Store - Direcciones de Clientes",
