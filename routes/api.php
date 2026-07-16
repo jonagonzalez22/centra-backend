@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\GeocodingController;
 use App\Http\Controllers\Api\V1\Store\CashSessionController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
+use App\Http\Controllers\Api\V1\Store\CommercialOperationController;
 use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
 use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
@@ -138,6 +139,11 @@ Route::prefix('v1')->group(function () {
                 Route::get('cash/current', [CashSessionController::class, 'current'])->name('store.cash.current');
                 Route::post('cash/open', [CashSessionController::class, 'open'])->name('store.cash.open');
                 Route::post('cash/{cashSession}/close', [CashSessionController::class, 'close'])->name('store.cash.close');
+            });
+
+            Route::middleware('feature:pos')->group(function () {
+                Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
+                Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');
             });
 
             Route::middleware('feature:customers')->group(function () {
