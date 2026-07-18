@@ -144,6 +144,7 @@ Route::prefix('v1')->group(function () {
             Route::middleware('feature:pos')->group(function () {
                 Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
                 Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');
+                Route::post('operations', [CommercialOperationController::class, 'store'])->name('store.operations.store');
             });
 
             Route::middleware('feature:customers')->group(function () {

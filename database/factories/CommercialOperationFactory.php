@@ -18,14 +18,14 @@ class CommercialOperationFactory extends Factory
             'store_id' => Store::factory(),
             'user_id' => User::factory(),
             'customer_id' => null,
-            'operation_number' => 'V-' . $this->faker->numerify('######'),
+            'operation_number' => 'V-'.$this->faker->numerify('######'),
             'type' => 'sale',
-            'status' => 'pending',
+            'status' => 'confirmed',
             'subtotal' => $this->faker->randomFloat(2, 100, 1000),
             'tax' => $this->faker->randomFloat(2, 10, 100),
             'discount' => $this->faker->randomFloat(2, 0, 50),
             'total' => $this->faker->randomFloat(2, 100, 1000),
-            'delivery_date' => null,
+            'requested_delivery_date' => null,
             'completed_at' => null,
         ];
     }
@@ -65,10 +65,10 @@ class CommercialOperationFactory extends Factory
         ]);
     }
 
-    public function pending(): static
+    public function open(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'pending',
+            'status' => 'open',
         ]);
     }
 
@@ -79,10 +79,10 @@ class CommercialOperationFactory extends Factory
         ]);
     }
 
-    public function completed(): static
+    public function closed(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'completed',
+            'status' => 'closed',
             'completed_at' => now(),
         ]);
     }

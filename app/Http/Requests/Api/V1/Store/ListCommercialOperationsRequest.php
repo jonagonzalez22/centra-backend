@@ -20,7 +20,7 @@ class ListCommercialOperationsRequest extends FormRequest
 
         return [
             'type' => ['nullable', 'string', Rule::in(['sale', 'order'])],
-            'status' => ['nullable', 'string', Rule::in(['pending', 'confirmed', 'completed', 'cancelled'])],
+            'status' => ['nullable', 'string', Rule::in(['open', 'confirmed', 'cancelled', 'closed'])],
             'customer_id' => [
                 'nullable',
                 'uuid',
@@ -38,7 +38,7 @@ class ListCommercialOperationsRequest extends FormRequest
     {
         return [
             'type.in' => 'El tipo de operación debe ser: sale u order.',
-            'status.in' => 'El estado debe ser: pending, confirmed, completed o cancelled.',
+            'status.in' => 'El estado debe ser: open, confirmed, cancelled o closed.',
             'customer_id.uuid' => 'El ID del cliente debe ser un UUID válido.',
             'customer_id.exists' => 'El cliente no existe o no pertenece a tu tienda.',
             'date_from.date' => 'La fecha de inicio debe ser una fecha válida.',
