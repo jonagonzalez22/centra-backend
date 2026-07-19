@@ -8826,10 +8826,10 @@
                         "schema": {
                             "type": "string",
                             "enum": [
-                                "pending",
+                                "open",
                                 "confirmed",
-                                "completed",
-                                "cancelled"
+                                "cancelled",
+                                "closed"
                             ]
                         }
                     },
@@ -8924,6 +8924,135 @@
                     },
                     "401": {
                         "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Crear una operación comercial (venta o pedido)",
+                "description": "Store a newly created commercial operation.",
+                "operationId": "b2827a29f2d5edcf5ecfdb9ed0a698d4",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "type",
+                                    "items"
+                                ],
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "sale",
+                                            "order"
+                                        ],
+                                        "example": "sale"
+                                    },
+                                    "customer_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "nullable": true
+                                    },
+                                    "requested_delivery_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "nullable": true
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "product_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "quantity": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "price": {
+                                                    "type": "number",
+                                                    "example": 100
+                                                },
+                                                "tax_amount": {
+                                                    "type": "number",
+                                                    "example": 21,
+                                                    "nullable": true
+                                                },
+                                                "discount_amount": {
+                                                    "type": "number",
+                                                    "example": 0,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "payments": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "store_payment_method_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "amount": {
+                                                    "type": "number",
+                                                    "example": 100
+                                                },
+                                                "reference": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Operación comercial creada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Operación comercial creada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommercialOperationResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
                     }
                 },
                 "security": [

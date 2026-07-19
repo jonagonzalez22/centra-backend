@@ -31,7 +31,7 @@ class CommercialOperation extends Model
         'tax',
         'discount',
         'total',
-        'delivery_date',
+        'requested_delivery_date',
         'completed_at',
     ];
 
@@ -40,7 +40,7 @@ class CommercialOperation extends Model
         'tax' => 'decimal:2',
         'discount' => 'decimal:2',
         'total' => 'decimal:2',
-        'delivery_date' => 'date',
+        'requested_delivery_date' => 'date',
         'completed_at' => 'datetime',
     ];
 

@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ListCommercialOperationsRequest;
+use App\Http\Requests\Api\V1\Store\StoreCommercialOperationRequest;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
+use App\Services\CommercialOperationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class CommercialOperationController extends Controller
 {
@@ -21,7 +24,7 @@ class CommercialOperationController extends Controller
      *   security={{"sanctum":{}}},
      *
      *   @OA\Parameter(name="type", in="query", @OA\Schema(type="string", enum={"sale", "order"}), description="Filtrar por tipo de operación"),
-     *   @OA\Parameter(name="status", in="query", @OA\Schema(type="string", enum={"pending", "confirmed", "completed", "cancelled"}), description="Filtrar por estado"),
+     *   @OA\Parameter(name="status", in="query", @OA\Schema(type="string", enum={"open", "confirmed", "cancelled", "closed"}), description="Filtrar por estado"),
      *   @OA\Parameter(name="customer_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por cliente"),
      *   @OA\Parameter(name="date_from", in="query", @OA\Schema(type="string", format="date"), description="Fecha de inicio (YYYY-MM-DD)"),
      *   @OA\Parameter(name="date_to", in="query", @OA\Schema(type="string", format="date"), description="Fecha de fin (YYYY-MM-DD)"),
@@ -83,6 +86,85 @@ class CommercialOperationController extends Controller
             ],
             'errors' => null,
         ]);
+    }
+
+    /**
+     * Store a newly created commercial operation.
+     *
+     * @OA\Post(
+     *   path="/store/operations",
+     *   summary="Crear una operación comercial (venta o pedido)",
+     *   tags={"Store - Operaciones Comerciales"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"type", "items"},
+     *
+     *       @OA\Property(property="type", type="string", enum={"sale", "order"}, example="sale"),
+     *       @OA\Property(property="customer_id", type="string", format="uuid", nullable=true),
+     *       @OA\Property(property="requested_delivery_date", type="string", format="date", nullable=true),
+     *       @OA\Property(property="items", type="array",
+     *
+     *         @OA\Items(type="object",
+     *
+     *           @OA\Property(property="product_id", type="string", format="uuid"),
+     *           @OA\Property(property="quantity", type="integer", example=1),
+     *           @OA\Property(property="price", type="number", example=100.00),
+     *           @OA\Property(property="tax_amount", type="number", example=21.00, nullable=true),
+     *           @OA\Property(property="discount_amount", type="number", example=0, nullable=true)
+     *         )
+     *       ),
+     *       @OA\Property(property="payments", type="array",
+     *
+     *         @OA\Items(type="object",
+     *
+     *           @OA\Property(property="store_payment_method_id", type="string", format="uuid"),
+     *           @OA\Property(property="amount", type="number", example=100.00),
+     *           @OA\Property(property="reference", type="string", nullable=true)
+     *         )
+     *       )
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=201,
+     *     description="Operación comercial creada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Operación comercial creada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/CommercialOperationResource"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function store(StoreCommercialOperationRequest $request, CommercialOperationService $service): JsonResponse
+    {
+        try {
+            $operation = $service->create(
+                $request->validated(),
+                $request->user()->store_id,
+                $request->user()->id
+            );
+
+            $operation->load(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod']);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Operación comercial creada exitosamente.',
+                'data' => CommercialOperationResource::make($operation),
+                'errors' => null,
+            ], 201);
+        } catch (ValidationException $e) {
+            throw $e;
+        }
     }
 
     /**
