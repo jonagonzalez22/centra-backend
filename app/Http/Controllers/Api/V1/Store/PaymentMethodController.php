@@ -70,6 +70,7 @@ class PaymentMethodController extends Controller
                 'payment_methods.code',
                 'payment_methods.icon',
                 'payment_methods.is_active',
+                'store_payment_methods.id as store_payment_method_id',
                 'store_payment_methods.custom_name',
                 'store_payment_methods.is_enabled',
                 'store_payment_methods.requires_reference',

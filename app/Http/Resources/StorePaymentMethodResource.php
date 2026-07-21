@@ -11,6 +11,7 @@ class StorePaymentMethodResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'store_payment_method_id' => $this->when($this->store_payment_method_id, $this->store_payment_method_id),
             'name' => $this->name,
             'code' => $this->code,
             'icon' => $this->icon,
