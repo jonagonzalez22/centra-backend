@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ListCommercialOperationsRequest;
+use App\Http\Requests\Api\V1\Store\RescheduleDeliveryDateRequest;
 use App\Http\Requests\Api\V1\Store\StoreCommercialOperationRequest;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
@@ -217,5 +218,92 @@ class CommercialOperationController extends Controller
             'data' => CommercialOperationResource::make($operation),
             'errors' => null,
         ], 200);
+    }
+
+    /**
+     * Reschedule the delivery date of a commercial operation.
+     *
+     * @OA\Put(
+     *   path="/store/operations/{operation}/reschedule",
+     *   summary="Reprogramar fecha de entrega de un pedido",
+     *   tags={"Store - Operaciones Comerciales"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="operation", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"new_date", "reason"},
+     *
+     *       @OA\Property(property="new_date", type="string", format="date", example="2026-08-01"),
+     *       @OA\Property(property="reason", type="string", enum={"customer_requested_reschedule", "customer_absent", "address_closed", "weather_conditions", "operational_issue", "other"}, example="customer_requested_reschedule"),
+     *       @OA\Property(property="observation", type="string", nullable=true, example="El cliente solicitó cambiar la fecha.")
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Operación reprogramada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Operación reprogramada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/CommercialOperationResource"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=403, description="Sin permisos"),
+     *   @OA\Response(response=404, description="Operación no encontrada"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function reschedule(
+        RescheduleDeliveryDateRequest $request,
+        CommercialOperationService $service,
+        string $id
+    ): JsonResponse {
+        $storeId = $request->user()->store_id;
+
+        $operation = CommercialOperation::forStore($storeId)->find($id);
+
+        if (! $operation) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Operación comercial no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La operación comercial no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        try {
+            $operation = $service->rescheduleDeliveryDate(
+                $operation,
+                $request->validated('new_date'),
+                $request->validated('reason'),
+                $request->validated('observation'),
+                $request->user()
+            );
+
+            $operation->load([
+                'customer',
+                'user',
+                'items.product',
+                'payments.storePaymentMethod.paymentMethod',
+                'events.user',
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Operación reprogramada exitosamente.',
+                'data' => CommercialOperationResource::make($operation),
+                'errors' => null,
+            ], 200);
+        } catch (ValidationException $e) {
+            throw $e;
+        }
     }
 }

@@ -62,6 +62,9 @@ class PermissionSeeder extends Seeder
       // Module: Store Payment Methods
       'store_payment_methods.view',
       'store_payment_methods.configure',
+      
+      // Module: Orders
+      'orders.edit',
     ];
 
     // Create each permission if it doesn't exist

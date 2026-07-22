@@ -9120,6 +9120,108 @@
                 ]
             }
         },
+        "/store/operations/{operation}/reschedule": {
+            "put": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Reprogramar fecha de entrega de un pedido",
+                "description": "Reschedule the delivery date of a commercial operation.",
+                "operationId": "864af32d145290d27a3aa0544f1aaa13",
+                "parameters": [
+                    {
+                        "name": "operation",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "new_date",
+                                    "reason"
+                                ],
+                                "properties": {
+                                    "new_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-08-01"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                            "customer_requested_reschedule",
+                                            "customer_absent",
+                                            "address_closed",
+                                            "weather_conditions",
+                                            "operational_issue",
+                                            "other"
+                                        ],
+                                        "example": "customer_requested_reschedule"
+                                    },
+                                    "observation": {
+                                        "type": "string",
+                                        "example": "El cliente solicitó cambiar la fecha.",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Operación reprogramada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Operación reprogramada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommercialOperationResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos"
+                    },
+                    "404": {
+                        "description": "Operación no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/customers/{customerId}/addresses": {
             "get": {
                 "tags": [

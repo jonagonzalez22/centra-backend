@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'Pedidos' => [
+        ['name' => 'orders.edit', 'label' => 'Editar'],
+    ],
     'Inventario' => [
         ['name' => 'products.view', 'label' => 'Ver'],
         ['name' => 'products.create', 'label' => 'Crear'],
