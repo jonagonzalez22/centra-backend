@@ -78,6 +78,11 @@ class CommercialOperation extends Model
         return $this->hasMany(OperationPayment::class, 'operation_id');
     }
 
+    public function events(): HasMany
+    {
+        return $this->hasMany(CommercialOperationEvent::class, 'operation_id');
+    }
+
     public function scopeForStore(Builder $query, string $storeId): Builder
     {
         return $query->where('store_id', $storeId);

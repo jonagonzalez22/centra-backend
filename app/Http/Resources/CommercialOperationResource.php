@@ -51,10 +51,11 @@ class CommercialOperationResource extends JsonResource
             'tax' => (float) $this->tax,
             'discount' => (float) $this->discount,
             'total' => (float) $this->total,
-            'delivery_date' => $this->delivery_date?->format('Y-m-d'),
+            'delivery_date' => $this->requested_delivery_date?->format('Y-m-d'),
             'completed_at' => $this->completed_at?->format('Y-m-d H:i:s'),
             'items' => OperationItemResource::collection($this->whenLoaded('items')),
             'payments' => OperationPaymentResource::collection($this->whenLoaded('payments')),
+            'events' => CommercialOperationEventResource::collection($this->whenLoaded('events')),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
         ];

@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\CommercialOperation;
+use App\Models\CommercialOperationEvent;
 use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\Product;
 use App\Models\StorePaymentMethod;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -120,6 +122,61 @@ class CommercialOperationService
             }
 
             return $operation;
+        });
+    }
+
+    public function rescheduleDeliveryDate(
+        CommercialOperation $operation,
+        string $newDate,
+        string $reason,
+        ?string $observation,
+        User $user
+    ): CommercialOperation {
+        return DB::transaction(function () use ($operation, $newDate, $reason, $observation, $user) {
+            $operation = CommercialOperation::where('id', $operation->id)->lockForUpdate()->firstOrFail();
+
+            if ($operation->type !== 'order') {
+                throw ValidationException::withMessages([
+                    'type' => ['Solo los pedidos pueden ser reprogramados.'],
+                ]);
+            }
+
+            if (! in_array($operation->status, ['open', 'confirmed'], true)) {
+                throw ValidationException::withMessages([
+                    'status' => ['Solo los pedidos activos pueden ser reprogramados.'],
+                ]);
+            }
+
+            if ($operation->requested_delivery_date === null) {
+                throw ValidationException::withMessages([
+                    'requested_delivery_date' => ['La operación no tiene fecha de entrega asignada.'],
+                ]);
+            }
+
+            $currentDate = $operation->requested_delivery_date->format('Y-m-d');
+
+            if ($newDate === $currentDate) {
+                throw ValidationException::withMessages([
+                    'new_date' => ['La nueva fecha debe ser diferente a la actual.'],
+                ]);
+            }
+
+            CommercialOperationEvent::create([
+                'store_id' => $operation->store_id,
+                'operation_id' => $operation->id,
+                'event_type' => 'delivery_date_changed',
+                'previous_date' => $currentDate,
+                'new_date' => $newDate,
+                'reason' => $reason,
+                'observation' => $observation,
+                'user_id' => $user->id,
+            ]);
+
+            $operation->update([
+                'requested_delivery_date' => $newDate,
+            ]);
+
+            return $operation->fresh();
         });
     }
 
