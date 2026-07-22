@@ -9222,6 +9222,102 @@
                 ]
             }
         },
+        "/store/operations/{operation}/cancel": {
+            "put": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Cancelar un pedido",
+                "description": "Cancel a commercial operation (order only, open status only).",
+                "operationId": "1e44766cee806edc62d9574d02fa7339",
+                "parameters": [
+                    {
+                        "name": "operation",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "reason_code"
+                                ],
+                                "properties": {
+                                    "reason_code": {
+                                        "type": "string",
+                                        "enum": [
+                                            "customer_cancelled",
+                                            "payment_failed",
+                                            "out_of_stock",
+                                            "pricing_error",
+                                            "duplicate_order",
+                                            "other"
+                                        ],
+                                        "example": "customer_cancelled"
+                                    },
+                                    "reason_note": {
+                                        "type": "string",
+                                        "example": "El cliente ya no necesita el pedido.",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Operación cancelada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Operación cancelada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommercialOperationResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permisos"
+                    },
+                    "404": {
+                        "description": "Operación no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/customers/{customerId}/addresses": {
             "get": {
                 "tags": [

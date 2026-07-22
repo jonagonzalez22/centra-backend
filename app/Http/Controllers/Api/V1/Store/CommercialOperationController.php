@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Store\CancelOrderRequest;
 use App\Http\Requests\Api\V1\Store\ListCommercialOperationsRequest;
 use App\Http\Requests\Api\V1\Store\RescheduleDeliveryDateRequest;
 use App\Http\Requests\Api\V1\Store\StoreCommercialOperationRequest;
@@ -299,6 +300,91 @@ class CommercialOperationController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Operación reprogramada exitosamente.',
+                'data' => CommercialOperationResource::make($operation),
+                'errors' => null,
+            ], 200);
+        } catch (ValidationException $e) {
+            throw $e;
+        }
+    }
+
+    /**
+     * Cancel a commercial operation (order only, open status only).
+     *
+     * @OA\Put(
+     *   path="/store/operations/{operation}/cancel",
+     *   summary="Cancelar un pedido",
+     *   tags={"Store - Operaciones Comerciales"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="operation", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"reason_code"},
+     *
+     *       @OA\Property(property="reason_code", type="string", enum={"customer_cancelled", "payment_failed", "out_of_stock", "pricing_error", "duplicate_order", "other"}, example="customer_cancelled"),
+     *       @OA\Property(property="reason_note", type="string", nullable=true, example="El cliente ya no necesita el pedido.")
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Operación cancelada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Operación cancelada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/CommercialOperationResource"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=403, description="Sin permisos"),
+     *   @OA\Response(response=404, description="Operación no encontrada"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function cancel(
+        CancelOrderRequest $request,
+        CommercialOperationService $service,
+        string $id
+    ): JsonResponse {
+        $storeId = $request->user()->store_id;
+
+        $operation = CommercialOperation::forStore($storeId)->find($id);
+
+        if (! $operation) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Operación comercial no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La operación comercial no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        try {
+            $operation = $service->cancel(
+                $operation,
+                $request->validated('reason_code'),
+                $request->validated('reason_note'),
+                $request->user()
+            );
+
+            $operation->load([
+                'customer',
+                'user',
+                'items.product',
+                'payments.storePaymentMethod.paymentMethod',
+                'events.user',
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Operación cancelada exitosamente.',
                 'data' => CommercialOperationResource::make($operation),
                 'errors' => null,
             ], 200);

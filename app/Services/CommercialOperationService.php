@@ -180,6 +180,74 @@ class CommercialOperationService
         });
     }
 
+    public function cancel(
+        CommercialOperation $operation,
+        string $reasonCode,
+        ?string $reasonNote,
+        User $user
+    ): CommercialOperation {
+        return DB::transaction(function () use ($operation, $reasonCode, $reasonNote, $user) {
+            $operation = CommercialOperation::where('id', $operation->id)->lockForUpdate()->firstOrFail();
+
+            if ($operation->type !== 'order') {
+                throw ValidationException::withMessages([
+                    'type' => ['Solo los pedidos pueden ser cancelados.'],
+                ]);
+            }
+
+            if ($operation->status !== 'open') {
+                throw ValidationException::withMessages([
+                    'status' => ['Solo los pedidos abiertos pueden ser cancelados.'],
+                ]);
+            }
+
+            $previousDate = $operation->requested_delivery_date?->format('Y-m-d');
+
+            CommercialOperationEvent::create([
+                'store_id' => $operation->store_id,
+                'operation_id' => $operation->id,
+                'event_type' => 'order_cancelled',
+                'previous_date' => $previousDate,
+                'new_date' => null,
+                'reason' => $reasonCode,
+                'observation' => $reasonNote,
+                'user_id' => $user->id,
+                'previous_status' => 'open',
+                'new_status' => 'cancelled',
+                'reason_code' => $reasonCode,
+                'reason_note' => $reasonNote,
+            ]);
+
+            // Release stock_reserved for future deliveries
+            if ($operation->requested_delivery_date && $operation->requested_delivery_date->isFuture()) {
+                $items = $operation->items;
+
+                foreach ($items as $item) {
+                    $product = Product::forStore($operation->store_id)
+                        ->lockForUpdate()
+                        ->find($item->product_id);
+
+                    if ($product) {
+                        $product->stock_reserved = max(0, $product->stock_reserved - $item->quantity);
+                        $product->save();
+
+                        if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
+                            throw new \RuntimeException(
+                                "Stock integrity violation on product {$product->id}: stock={$product->stock}, reserved={$product->stock_reserved}"
+                            );
+                        }
+                    }
+                }
+            }
+
+            $operation->update([
+                'status' => 'cancelled',
+            ]);
+
+            return $operation->fresh();
+        });
+    }
+
     private function validateBusinessRules(array $data, string $storeId): void
     {
         $type = $data['type'];
