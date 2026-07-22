@@ -27,6 +27,10 @@ class CommercialOperationEvent extends Model
         'reason',
         'observation',
         'user_id',
+        'previous_status',
+        'new_status',
+        'reason_code',
+        'reason_note',
     ];
 
     protected function casts(): array
@@ -35,6 +39,9 @@ class CommercialOperationEvent extends Model
             'previous_date' => 'date',
             'new_date' => 'date',
             'created_at' => 'datetime',
+            'previous_status' => 'string',
+            'new_status' => 'string',
+            'reason_code' => 'string',
         ];
     }
 

@@ -14,7 +14,11 @@ class CommercialOperationEventResource extends JsonResource
             'event_type' => $this->event_type,
             'previous_date' => $this->previous_date?->format('Y-m-d'),
             'new_date' => $this->new_date?->format('Y-m-d'),
+            'previous_status' => $this->previous_status,
+            'new_status' => $this->new_status,
             'reason' => $this->reason,
+            'reason_code' => $this->reason_code,
+            'reason_note' => $this->reason_note,
             'observation' => $this->observation,
             'user' => $this->whenLoaded('user', fn () => [
                 'id' => $this->user_id,

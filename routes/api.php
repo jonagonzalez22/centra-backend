@@ -148,6 +148,9 @@ Route::prefix('v1')->group(function () {
                 Route::put('operations/{operation}/reschedule', [CommercialOperationController::class, 'reschedule'])
                     ->middleware('permission:orders.edit')
                     ->name('store.operations.reschedule');
+                Route::put('operations/{operation}/cancel', [CommercialOperationController::class, 'cancel'])
+                    ->middleware('permission:orders.edit')
+                    ->name('store.operations.cancel');
             });
 
             Route::middleware('feature:customers')->group(function () {
