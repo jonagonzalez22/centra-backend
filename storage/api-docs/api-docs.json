@@ -11562,6 +11562,229 @@
                 ]
             }
         },
+        "/store/orders": {
+            "get": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Listar pedidos de la tienda",
+                "description": "Listado paginado de pedidos de la tienda.",
+                "operationId": "7aa6e43494d62e32f62c517e1169bd82",
+                "parameters": [
+                    {
+                        "name": "date",
+                        "in": "query",
+                        "description": "Filtrar por fecha de entrega (YYYY-MM-DD). Ignora date_from y date_to.",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "description": "Filtrar desde fecha (YYYY-MM-DD)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "description": "Filtrar hasta fecha (YYYY-MM-DD)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filtrar por estado. Default: activos (open, confirmed)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "open",
+                                "confirmed",
+                                "cancelled",
+                                "closed"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "operation_number",
+                        "in": "query",
+                        "description": "Búsqueda por número de pedido (parcial)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "customer_name",
+                        "in": "query",
+                        "description": "Búsqueda por nombre de cliente",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "locality",
+                        "in": "query",
+                        "description": "Búsqueda por localidad del domicilio de entrega",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 20
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pedidos obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Pedidos obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/CommercialOperationListResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 20
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "Sin permisos"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/orders/{id}": {
+            "get": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Ver detalle de un pedido",
+                "description": "Detalle completo de un pedido.",
+                "operationId": "35a0e947a449f5b95dd6236c319108d2",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pedido obtenido exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Pedido obtenido exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommercialOperationResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "Sin permisos"
+                    },
+                    "404": {
+                        "description": "Pedido no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/payment-methods": {
             "get": {
                 "tags": [
@@ -13187,6 +13410,177 @@
     },
     "components": {
         "schemas": {
+            "CommercialOperationEventResource": {
+                "title": "CommercialOperationEventResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "event_type": {
+                        "type": "string"
+                    },
+                    "previous_status": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "new_status": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "reason_code": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "reason_note": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "observation": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "old_values": {
+                        "properties": {
+                            "status": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "date": {
+                                "type": "string",
+                                "format": "date",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "new_values": {
+                        "properties": {
+                            "status": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "date": {
+                                "type": "string",
+                                "format": "date",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "user": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "type": "object"
+            },
+            "CommercialOperationListResource": {
+                "title": "CommercialOperationListResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "operation_number": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "requested_delivery_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "delivery_time_from": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "delivery_time_to": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "total": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "paid_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "pending_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "items_count": {
+                        "type": "integer"
+                    },
+                    "customer": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "phone": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "delivery_address": {
+                        "properties": {
+                            "locality": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "street": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "full_address": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "branch_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "CommercialOperationResource": {
                 "title": "CommercialOperationResource",
                 "properties": {
@@ -13203,25 +13597,19 @@
                     "status": {
                         "type": "string"
                     },
-                    "customer": {
-                        "type": "object",
+                    "requested_delivery_date": {
+                        "type": "string",
+                        "format": "date",
                         "nullable": true
                     },
-                    "user": {
-                        "properties": {
-                            "id": {
-                                "type": "string",
-                                "format": "uuid"
-                            },
-                            "name": {
-                                "type": "string"
-                            }
-                        },
-                        "type": "object"
-                    },
-                    "branch_id": {
+                    "delivery_time_from": {
                         "type": "string",
-                        "format": "uuid",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "delivery_time_to": {
+                        "type": "string",
+                        "example": null,
                         "nullable": true
                     },
                     "subtotal": {
@@ -13240,14 +13628,96 @@
                         "type": "number",
                         "format": "float"
                     },
-                    "delivery_date": {
-                        "type": "string",
-                        "format": "date",
-                        "nullable": true
+                    "paid_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "pending_amount": {
+                        "type": "number",
+                        "format": "float"
                     },
                     "completed_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "branch_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "created_by": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "customer": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "phone": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "email": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "delivery_address": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "street": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "number": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "locality": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "province": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "notes": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "full_address": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object",
                         "nullable": true
                     },
                     "items": {
@@ -13262,13 +13732,11 @@
                             "$ref": "#/components/schemas/OperationPaymentResource"
                         }
                     },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "updated_at": {
-                        "type": "string",
-                        "format": "date-time"
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CommercialOperationEventResource"
+                        }
                     }
                 },
                 "type": "object"
@@ -14688,6 +15156,10 @@
         {
             "name": "Store - Inventario",
             "description": "Store - Inventario"
+        },
+        {
+            "name": "Store - Pedidos",
+            "description": "Store - Pedidos"
         },
         {
             "name": "Store - Payment Methods",

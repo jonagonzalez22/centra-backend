@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\CommercialOperationController;
 use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
+use App\Http\Controllers\Api\V1\Store\OrderController;
 use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
@@ -142,6 +143,13 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::middleware('feature:pos')->group(function () {
+                Route::get('orders', [OrderController::class, 'index'])
+                    ->middleware('permission:orders.view')
+                    ->name('store.orders.index');
+                Route::get('orders/{id}', [OrderController::class, 'show'])
+                    ->middleware('permission:orders.view')
+                    ->name('store.orders.show');
+
                 Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
                 Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');
                 Route::post('operations', [CommercialOperationController::class, 'store'])->name('store.operations.store');

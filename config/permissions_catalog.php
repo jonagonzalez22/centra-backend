@@ -2,6 +2,7 @@
 
 return [
     'Pedidos' => [
+        ['name' => 'orders.view', 'label' => 'Ver'],
         ['name' => 'orders.edit', 'label' => 'Editar'],
     ],
     'Inventario' => [
