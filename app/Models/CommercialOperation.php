@@ -115,6 +115,19 @@ class CommercialOperation extends Model
         return $query;
     }
 
+    public function getDeliveryAddressAttribute(): ?CustomerAddress
+    {
+        if ($this->relationLoaded('customer')) {
+            $customer = $this->customer;
+
+            if ($customer && $customer->relationLoaded('addresses')) {
+                return $customer->addresses->firstWhere('is_main', true);
+            }
+        }
+
+        return null;
+    }
+
     public static function generateNumber(string $type, string $storeId): string
     {
         if (! in_array($type, ['sale', 'order'])) {

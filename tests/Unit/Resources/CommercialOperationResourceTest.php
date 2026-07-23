@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Http\Resources\CommercialOperationResource;
-use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\Store;
@@ -15,7 +14,7 @@ uses(Tests\TestCase::class);
 uses(RefreshDatabase::class);
 
 describe('CommercialOperationResource', function () {
-    test('returns delivery_date from requested_delivery_date attribute', function () {
+    test('returns requested_delivery_date from requested_delivery_date attribute', function () {
         $store = Store::factory()->create();
         $customer = Customer::factory()->create(['store_id' => $store->id]);
         $user = User::factory()->create(['store_id' => $store->id]);
@@ -30,13 +29,13 @@ describe('CommercialOperationResource', function () {
         ]);
 
         $resource = CommercialOperationResource::make($operation);
-        $data = $resource->toArray(new Request());
+        $data = $resource->toArray(new Request);
 
-        expect($data)->toHaveKey('delivery_date')
-            ->and($data['delivery_date'])->toBe('2026-07-25');
+        expect($data)->toHaveKey('requested_delivery_date')
+            ->and($data['requested_delivery_date'])->toBe('2026-07-25');
     });
 
-    test('delivery_date is null when requested_delivery_date is null', function () {
+    test('requested_delivery_date is null when requested_delivery_date is null', function () {
         $store = Store::factory()->create();
         $user = User::factory()->create(['store_id' => $store->id]);
 
@@ -49,8 +48,8 @@ describe('CommercialOperationResource', function () {
         ]);
 
         $resource = CommercialOperationResource::make($operation);
-        $data = $resource->toArray(new Request());
+        $data = $resource->toArray(new Request);
 
-        expect($data['delivery_date'])->toBeNull();
+        expect($data['requested_delivery_date'])->toBeNull();
     });
 });

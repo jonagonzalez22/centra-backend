@@ -64,6 +64,7 @@ class PermissionSeeder extends Seeder
       'store_payment_methods.configure',
       
       // Module: Orders
+      'orders.view',
       'orders.edit',
     ];
 
