@@ -35,6 +35,22 @@ class PermissionSeeder extends Seeder
       // Module: Geography
       'geography.view',
 
+      // Module: POS
+      'pos.view',
+
+      // Module: Inventory
+      'inventory.view',
+      'inventory.create',
+      'inventory.edit',
+      'inventory.adjust',
+      'inventory.delete',
+
+      // Module: Categories
+      'categories.view',
+      'categories.create',
+      'categories.edit',
+      'categories.delete',
+
       // Module: Commercial Groups
       'commercial_groups.view',
       'commercial_groups.create',
@@ -66,6 +82,11 @@ class PermissionSeeder extends Seeder
       // Module: Orders
       'orders.view',
       'orders.edit',
+
+      // Module: Cash
+      'cash.view',
+      'cash.open',
+      'cash.close',
     ];
 
     // Create each permission if it doesn't exist

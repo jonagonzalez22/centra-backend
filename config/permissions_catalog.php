@@ -5,11 +5,15 @@ return [
         ['name' => 'orders.view', 'label' => 'Ver'],
         ['name' => 'orders.edit', 'label' => 'Editar'],
     ],
+    'Punto de Venta' => [
+        ['name' => 'pos.view', 'label' => 'Ver'],
+    ],
     'Inventario' => [
-        ['name' => 'products.view', 'label' => 'Ver'],
-        ['name' => 'products.create', 'label' => 'Crear'],
-        ['name' => 'products.edit', 'label' => 'Editar'],
-        ['name' => 'products.delete', 'label' => 'Eliminar'],
+        ['name' => 'inventory.view', 'label' => 'Ver'],
+        ['name' => 'inventory.create', 'label' => 'Crear'],
+        ['name' => 'inventory.edit', 'label' => 'Editar'],
+        ['name' => 'inventory.adjust', 'label' => 'Ajustar'],
+        ['name' => 'inventory.delete', 'label' => 'Eliminar'],
     ],
     'Categorías' => [
         ['name' => 'categories.view', 'label' => 'Ver'],
@@ -17,11 +21,11 @@ return [
         ['name' => 'categories.edit', 'label' => 'Editar'],
         ['name' => 'categories.delete', 'label' => 'Eliminar'],
     ],
-    'Usuarios' => [
-        ['name' => 'store_users.view', 'label' => 'Ver'],
-        ['name' => 'store_users.create', 'label' => 'Crear'],
-        ['name' => 'store_users.edit', 'label' => 'Editar'],
-        ['name' => 'store_users.delete', 'label' => 'Eliminar'],
+    'Clientes' => [
+        ['name' => 'customers.view', 'label' => 'Ver'],
+        ['name' => 'customers.create', 'label' => 'Crear'],
+        ['name' => 'customers.edit', 'label' => 'Editar'],
+        ['name' => 'customers.delete', 'label' => 'Eliminar'],
     ],
     'Grupos Comerciales' => [
         ['name' => 'commercial_groups.view', 'label' => 'Ver'],
@@ -40,5 +44,23 @@ return [
         ['name' => 'customer_contacts.create', 'label' => 'Crear'],
         ['name' => 'customer_contacts.edit', 'label' => 'Editar'],
         ['name' => 'customer_contacts.delete', 'label' => 'Eliminar'],
+    ],
+    'Caja' => [
+        ['name' => 'cash.view', 'label' => 'Ver'],
+        ['name' => 'cash.open', 'label' => 'Abrir'],
+        ['name' => 'cash.close', 'label' => 'Cerrar'],
+    ],
+    'Métodos de pago' => [
+        ['name' => 'store_payment_methods.view', 'label' => 'Ver'],
+        ['name' => 'store_payment_methods.configure', 'label' => 'Configurar'],
+    ],
+    'Usuarios' => [
+        ['name' => 'store_users.view', 'label' => 'Ver'],
+        ['name' => 'store_users.create', 'label' => 'Crear'],
+        ['name' => 'store_users.edit', 'label' => 'Editar'],
+        ['name' => 'store_users.delete', 'label' => 'Eliminar'],
+    ],
+    'Geografía' => [
+        ['name' => 'geography.view', 'label' => 'Ver'],
     ],
 ];

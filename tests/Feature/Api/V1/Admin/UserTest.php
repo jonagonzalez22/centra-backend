@@ -23,10 +23,10 @@ beforeEach(function () {
 
     Permission::create(['name' => 'store_users.edit', 'guard_name' => 'web']);
     Permission::create(['name' => 'store_users.view', 'guard_name' => 'web']);
-    Permission::create(['name' => 'products.view', 'guard_name' => 'web']);
-    Permission::create(['name' => 'products.create', 'guard_name' => 'web']);
-    Permission::create(['name' => 'products.edit', 'guard_name' => 'web']);
-    Permission::create(['name' => 'products.delete', 'guard_name' => 'web']);
+    Permission::create(['name' => 'inventory.view', 'guard_name' => 'web']);
+    Permission::create(['name' => 'inventory.create', 'guard_name' => 'web']);
+    Permission::create(['name' => 'inventory.edit', 'guard_name' => 'web']);
+    Permission::create(['name' => 'inventory.delete', 'guard_name' => 'web']);
     Permission::create(['name' => 'categories.view', 'guard_name' => 'web']);
     Permission::create(['name' => 'categories.create', 'guard_name' => 'web']);
     Permission::create(['name' => 'categories.edit', 'guard_name' => 'web']);
@@ -642,8 +642,8 @@ test('store admin can view user direct permissions', function () {
     $token = $admin->createToken('test-token')->plainTextToken;
 
     $user = User::factory()->create(['store_id' => $store->id]);
-    $user->givePermissionTo('products.view');
-    $user->givePermissionTo('products.create');
+    $user->givePermissionTo('inventory.view');
+    $user->givePermissionTo('inventory.create');
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->getJson("/api/v1/store/users/{$user->id}/permissions");
@@ -651,8 +651,8 @@ test('store admin can view user direct permissions', function () {
     $response->assertStatus(200);
 
     $permissions = $response->json('data.permissions');
-    expect($permissions)->toContain('products.view')
-        ->toContain('products.create');
+    expect($permissions)->toContain('inventory.view')
+        ->toContain('inventory.create');
 });
 
 test('store admin cannot view permissions of user from another store', function () {
@@ -694,18 +694,18 @@ test('store admin can sync user permissions', function () {
     $token = $admin->createToken('test-token')->plainTextToken;
 
     $user = User::factory()->create(['store_id' => $store->id]);
-    $user->givePermissionTo('products.view');
+    $user->givePermissionTo('inventory.view');
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/store/users/{$user->id}/permissions", [
-            'permissions' => ['products.create', 'products.view'],
+            'permissions' => ['inventory.create', 'inventory.view'],
         ]);
 
     $response->assertStatus(200)
         ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
 
     $user->refresh();
-    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['products.create', 'products.view']);
+    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['inventory.create', 'inventory.view']);
 });
 
 test('store admin cannot assign admin/backoffice permissions', function () {
@@ -749,7 +749,7 @@ test('store admin cannot assign permissions for feature not in plan', function (
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/store/users/{$user->id}/permissions", [
-            'permissions' => ['products.view'],
+            'permissions' => ['inventory.view'],
         ]);
 
     $response->assertStatus(422)
@@ -773,7 +773,7 @@ test('store admin cannot modify own permissions', function () {
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/store/users/{$admin->id}/permissions", [
-            'permissions' => ['products.view'],
+            'permissions' => ['inventory.view'],
         ]);
 
     $response->assertStatus(403)
@@ -800,7 +800,7 @@ test('store admin cannot modify super admin permissions', function () {
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/store/users/{$superAdmin->id}/permissions", [
-            'permissions' => ['products.view'],
+            'permissions' => ['inventory.view'],
         ]);
 
     $response->assertStatus(403)
@@ -838,7 +838,7 @@ test('store admin can see full permission catalog when store has all features', 
         ]);
 
     $groups = $response->json('data.groups');
-    expect($groups['Inventario'])->toHaveCount(4)
+    expect($groups['Inventario'])->toHaveCount(5)
         ->and($groups['Categorías'])->toHaveCount(4)
         ->and($groups['Usuarios'])->toHaveCount(4);
 });
@@ -927,8 +927,8 @@ test('store admin can remove all permissions by sending empty array', function (
     $token = $admin->createToken('test-token')->plainTextToken;
 
     $user = User::factory()->create(['store_id' => $store->id]);
-    $user->givePermissionTo('products.view');
-    $user->givePermissionTo('products.create');
+    $user->givePermissionTo('inventory.view');
+    $user->givePermissionTo('inventory.create');
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => []]);
@@ -985,11 +985,11 @@ test('store admin can recover permissions after emptying them', function () {
         ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => []]);
 
     $response = $this->withHeader('Authorization', "Bearer $token")
-        ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => ['products.view']]);
+        ->postJson("/api/v1/store/users/{$user->id}/permissions", ['permissions' => ['inventory.view']]);
 
     $response->assertStatus(200)
         ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
 
     $user->refresh();
-    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['products.view']);
+    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['inventory.view']);
 });
