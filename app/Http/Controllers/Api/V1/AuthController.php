@@ -333,7 +333,7 @@ class AuthController extends Controller
               ? (new SimpleStoreResource($user->store))->toArray(request())
               : null,
             'roles' => $user->getRoleNames()->toArray(),
-            'permissions' => $user->getPermissionsViaRoles()->pluck('name')->toArray(),
+            'permissions' => $user->getAllPermissions()->pluck('name')->toArray(),
             'features' => $features,
         ];
 
