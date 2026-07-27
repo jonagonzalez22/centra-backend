@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMet
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
+use App\Http\Controllers\Api\V1\Store\RouteController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
 use App\Http\Controllers\Api\V1\Store\VehicleCatalogController;
@@ -235,6 +236,51 @@ Route::prefix('v1')->group(function () {
                 Route::get('drivers', [DriverController::class, 'index'])
                     ->middleware('permission:drivers.view')
                     ->name('store.drivers.index');
+
+                // Route Management — eligible-orders BEFORE parameterized routes
+                Route::get('routes/eligible-orders', [RouteController::class, 'eligibleOrders'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.eligible-orders');
+
+                Route::get('routes', [RouteController::class, 'index'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.index');
+
+                Route::post('routes', [RouteController::class, 'store'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.store');
+
+                Route::get('routes/{route}', [RouteController::class, 'show'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.show');
+
+                Route::put('routes/{route}', [RouteController::class, 'update'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.update');
+
+                Route::post('routes/{route}/stops', [RouteController::class, 'addStop'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.stops.store');
+
+                Route::delete('routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.stops.destroy');
+
+                Route::put('routes/{route}/stops/reorder', [RouteController::class, 'reorderStops'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.stops.reorder');
+
+                Route::post('routes/{route}/plan', [RouteController::class, 'plan'])
+                    ->middleware('permission:logistics.routes.plan')
+                    ->name('store.routes.plan');
+
+                Route::post('routes/{route}/revert', [RouteController::class, 'revert'])
+                    ->middleware('permission:logistics.routes.revert')
+                    ->name('store.routes.revert');
+
+                Route::post('routes/{route}/cancel', [RouteController::class, 'cancel'])
+                    ->middleware('permission:logistics.routes.cancel')
+                    ->name('store.routes.cancel');
             });
 
             Route::middleware('feature:store_settings')->group(function () {

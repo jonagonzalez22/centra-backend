@@ -96,6 +96,13 @@ class PermissionSeeder extends Seeder
 
       // Module: Drivers
       'drivers.view',
+
+      // Module: Logistics — Route Management
+      'logistics.routes.view',
+      'logistics.routes.manage',
+      'logistics.routes.plan',
+      'logistics.routes.revert',
+      'logistics.routes.cancel',
     ];
 
     // Create each permission if it doesn't exist

@@ -12827,6 +12827,1004 @@
                 ]
             }
         },
+        "/store/routes/eligible-orders": {
+            "get": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Listar pedidos elegibles para asignar a una ruta",
+                "description": "List eligible orders for route assignment.",
+                "operationId": "d2d2fc85cd04d35edd64056abd9a1066",
+                "parameters": [
+                    {
+                        "name": "requested_delivery_date",
+                        "in": "query",
+                        "description": "Filtrar por fecha de entrega solicitada",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Buscar por número de operación o nombre de cliente",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "locality_id",
+                        "in": "query",
+                        "description": "Filtrar por localidad",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pedidos elegibles obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Pedidos elegibles obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/EligibleOrder"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 30
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes": {
+            "get": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Listar rutas de la tienda",
+                "description": "List all routes for the store.",
+                "operationId": "ba77f671eee816b33100554c6b52899b",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Número de página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filtrar por estado",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "draft",
+                                "planned",
+                                "cancelled"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "vehicle_id",
+                        "in": "query",
+                        "description": "Filtrar por vehículo",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "driver_id",
+                        "in": "query",
+                        "description": "Filtrar por conductor",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "Fecha desde (rango)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "description": "Fecha hasta (rango)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Rutas obtenidas exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Rutas obtenidas exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/DeliveryRoute"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Crear una nueva ruta",
+                "description": "Create a new delivery route.",
+                "operationId": "18b1d9cefb72c1ed1de4f9847b6eeb16",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "vehicle_id",
+                                    "driver_id",
+                                    "operational_date"
+                                ],
+                                "properties": {
+                                    "vehicle_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                                    },
+                                    "driver_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440001"
+                                    },
+                                    "operational_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-07-30"
+                                    },
+                                    "observations": {
+                                        "type": "string",
+                                        "example": "Ruta de reparto zona norte",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Ruta creada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta creada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}": {
+            "get": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Obtener una ruta",
+                "description": "Show a single route with stops and events.",
+                "operationId": "3793da7e15f069580a06715a99ea4be7",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ruta obtenida exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta obtenida exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Actualizar una ruta",
+                "description": "Update an existing draft route.",
+                "operationId": "0d0293d1996f4fa4e59104eec2b5a6a6",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "vehicle_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                                        "nullable": true
+                                    },
+                                    "driver_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440001",
+                                        "nullable": true
+                                    },
+                                    "operational_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-07-30",
+                                        "nullable": true
+                                    },
+                                    "observations": {
+                                        "type": "string",
+                                        "example": "Ruta de reparto zona norte",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Ruta actualizada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta actualizada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/stops": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Agregar un stop (pedido) a una ruta",
+                "description": "Add an order as a stop to a route.",
+                "operationId": "3239ce3ddf2a8aa30c546e5720fca6d8",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "order_id"
+                                ],
+                                "properties": {
+                                    "order_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "Pedido urgente fuera de fecha",
+                                        "nullable": true
+                                    },
+                                    "logistics_notes": {
+                                        "type": "string",
+                                        "example": "Entregar en recepción",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Stop agregado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Stop agregado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/RouteStop"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta o pedido no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/stops/{stop}": {
+            "delete": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Cancelar un stop de una ruta",
+                "description": "Remove (cancel) a stop from a route.",
+                "operationId": "77af2c5f3950f01c5cd696289590a61e",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "stop",
+                        "in": "path",
+                        "description": "ID del stop",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "reason"
+                                ],
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "Pedido cancelado por el cliente"
+                                    },
+                                    "logistics_notes": {
+                                        "type": "string",
+                                        "example": "Reasignar a otra ruta",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Stop cancelado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Stop cancelado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/RouteStop"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta o stop no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/stops/reorder": {
+            "put": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Reordenar los stops de una ruta",
+                "description": "Reorder stops in a route.",
+                "operationId": "cd708bf65930ab1265b04de3b472fe99",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "stop_ids"
+                                ],
+                                "properties": {
+                                    "stop_ids": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "example": [
+                                            "550e8400-e29b-41d4-a716-446655440000",
+                                            "550e8400-e29b-41d4-a716-446655440001"
+                                        ]
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Stops reordenados exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Stops reordenados exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/plan": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Planificar una ruta (cambia de draft a planned)",
+                "description": "Plan (finalize) a draft route.",
+                "operationId": "3a0daf7a387adbf973970456a5887b23",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ruta planificada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta planificada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/revert": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Revertir una ruta de planned a draft",
+                "description": "Revert a planned route back to draft.",
+                "operationId": "2fd3890cea1082b5a0bb6111e3ef3d12",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "reason"
+                                ],
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "Error en la asignación del vehículo"
+                                    },
+                                    "observation": {
+                                        "type": "string",
+                                        "example": "Se debe cambiar el vehículo por uno con más capacidad",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Ruta revertida exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta revertida exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/cancel": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Cancelar una ruta",
+                "description": "Cancel a route (draft or planned).",
+                "operationId": "fe8649fc4978f1762eede1b05e54eecb",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "reason"
+                                ],
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "Condiciones climáticas adversas"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Ruta cancelada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta cancelada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/users/filter-options": {
             "get": {
                 "tags": [
@@ -15488,6 +16486,145 @@
                 },
                 "type": "object"
             },
+            "DeliveryRouteEvent": {
+                "title": "DeliveryRouteEvent",
+                "description": "Representación de un evento en el historial de una ruta",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "event_type": {
+                        "type": "string",
+                        "enum": [
+                            "created",
+                            "planned",
+                            "reverted",
+                            "cancelled",
+                            "stop_added",
+                            "stop_removed"
+                        ],
+                        "example": "created"
+                    },
+                    "from_status": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "to_status": {
+                        "type": "string",
+                        "example": "draft"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "example": "Creación inicial de la ruta",
+                        "nullable": true
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "user": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "example": "550e8400-e29b-41d4-a716-446655440000"
+                            },
+                            "name": {
+                                "type": "string",
+                                "example": "Carlos López"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-07-30 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "DeliveryRoute": {
+                "title": "DeliveryRoute",
+                "description": "Representación de una ruta de entrega",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "store_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440001"
+                    },
+                    "operational_date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-07-30"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "planned",
+                            "cancelled"
+                        ],
+                        "example": "draft"
+                    },
+                    "observations": {
+                        "type": "string",
+                        "example": "Ruta de reparto zona norte",
+                        "nullable": true
+                    },
+                    "created_by": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440002",
+                        "nullable": true
+                    },
+                    "vehicle": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/VehicleResource"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "driver": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/DriverResource"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "stops": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RouteStop"
+                        }
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DeliveryRouteEvent"
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-07-30 12:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-07-30 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
             "DocumentType": {
                 "title": "DocumentType",
                 "description": "Representación de un tipo de documento",
@@ -15549,6 +16686,49 @@
                     "created_at": {
                         "type": "string",
                         "example": "2026-06-30 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "EligibleOrder": {
+                "title": "EligibleOrder",
+                "description": "Representación de un pedido elegible para ser asignado a una ruta",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "operation_number": {
+                        "type": "string",
+                        "example": "OP-000001"
+                    },
+                    "requested_delivery_date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-07-30"
+                    },
+                    "total": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 15000
+                    },
+                    "customer_name": {
+                        "type": "string",
+                        "example": "Juan Pérez"
+                    },
+                    "address": {
+                        "type": "string",
+                        "example": "Av. Corrientes 1234"
+                    },
+                    "locality_name": {
+                        "type": "string",
+                        "example": "CABA",
+                        "nullable": true
+                    },
+                    "has_coordinates": {
+                        "type": "boolean",
+                        "example": true
                     }
                 },
                 "type": "object"
@@ -15625,6 +16805,101 @@
                             }
                         },
                         "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "RouteStop": {
+                "title": "RouteStop",
+                "description": "Representación de una parada en una ruta de entrega",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "route_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440001"
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "cancelled"
+                        ],
+                        "example": "pending"
+                    },
+                    "logistics_notes": {
+                        "type": "string",
+                        "example": "Entregar en recepción",
+                        "nullable": true
+                    },
+                    "order": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "example": "550e8400-e29b-41d4-a716-446655440000"
+                            },
+                            "operation_number": {
+                                "type": "string",
+                                "example": "OP-000001"
+                            },
+                            "requested_delivery_date": {
+                                "type": "string",
+                                "format": "date",
+                                "example": "2026-07-30"
+                            },
+                            "customer": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Juan Pérez"
+                                    },
+                                    "document": {
+                                        "type": "string",
+                                        "example": "20-12345678-5"
+                                    }
+                                },
+                                "type": "object",
+                                "nullable": true
+                            },
+                            "address": {
+                                "properties": {
+                                    "street": {
+                                        "type": "string",
+                                        "example": "Av. Corrientes"
+                                    },
+                                    "number": {
+                                        "type": "string",
+                                        "example": "1234"
+                                    },
+                                    "locality": {
+                                        "type": "string",
+                                        "example": "CABA",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-07-30 12:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-07-30 12:00:00"
                     }
                 },
                 "type": "object"
@@ -15941,6 +17216,10 @@
         {
             "name": "Store - Usuarios",
             "description": "Store - Usuarios"
+        },
+        {
+            "name": "Store - Rutas",
+            "description": "Store - Rutas"
         },
         {
             "name": "Store - Vehículos",
