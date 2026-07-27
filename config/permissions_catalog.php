@@ -63,4 +63,13 @@ return [
     'Geografía' => [
         ['name' => 'geography.view', 'label' => 'Ver'],
     ],
+    'Vehículos' => [
+        ['name' => 'vehicles.view', 'label' => 'Ver'],
+        ['name' => 'vehicles.create', 'label' => 'Crear'],
+        ['name' => 'vehicles.edit', 'label' => 'Editar'],
+        ['name' => 'vehicles.delete', 'label' => 'Eliminar'],
+    ],
+    'Conductores' => [
+        ['name' => 'drivers.view', 'label' => 'Ver'],
+    ],
 ];

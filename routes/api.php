@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
 use App\Http\Controllers\Api\V1\Store\OrderController;
 use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
+use App\Http\Controllers\Api\V1\Store\DriverController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
 use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMethodController;
@@ -28,6 +29,8 @@ use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
+use App\Http\Controllers\Api\V1\Store\VehicleCatalogController;
+use App\Http\Controllers\Api\V1\Store\VehicleController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -197,6 +200,41 @@ Route::prefix('v1')->group(function () {
 
                 Route::get('users/{user}/permissions', [StoreUserPermissionController::class, 'show'])->name('store.users.permissions.show');
                 Route::post('users/{user}/permissions', [StoreUserPermissionController::class, 'update'])->name('store.users.permissions.update');
+            });
+
+            Route::middleware('feature:deliveries')->group(function () {
+                // Catalog routes — MUST be before {vehicle} to avoid capture
+                Route::get('vehicles/catalogs/types', [VehicleCatalogController::class, 'types'])
+                    ->middleware('permission:vehicles.view')
+                    ->name('store.vehicles.catalogs.types');
+                Route::get('vehicles/catalogs/reasons', [VehicleCatalogController::class, 'reasons'])
+                    ->middleware('permission:vehicles.view')
+                    ->name('store.vehicles.catalogs.reasons');
+
+                // Vehicle CRUD
+                Route::get('vehicles', [VehicleController::class, 'index'])
+                    ->middleware('permission:vehicles.view')
+                    ->name('store.vehicles.index');
+                Route::post('vehicles', [VehicleController::class, 'store'])
+                    ->middleware('permission:vehicles.create')
+                    ->name('store.vehicles.store');
+                Route::get('vehicles/{vehicle}', [VehicleController::class, 'show'])
+                    ->middleware('permission:vehicles.view')
+                    ->name('store.vehicles.show');
+                Route::put('vehicles/{vehicle}', [VehicleController::class, 'update'])
+                    ->middleware('permission:vehicles.edit')
+                    ->name('store.vehicles.update');
+                Route::delete('vehicles/{vehicle}', [VehicleController::class, 'destroy'])
+                    ->middleware('permission:vehicles.delete')
+                    ->name('store.vehicles.destroy');
+                Route::patch('vehicles/{vehicle}/toggle-active', [VehicleController::class, 'toggleActive'])
+                    ->middleware('permission:vehicles.edit')
+                    ->name('store.vehicles.toggle-active');
+
+                // Driver listing
+                Route::get('drivers', [DriverController::class, 'index'])
+                    ->middleware('permission:drivers.view')
+                    ->name('store.drivers.index');
             });
 
             Route::middleware('feature:store_settings')->group(function () {

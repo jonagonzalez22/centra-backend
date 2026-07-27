@@ -33,6 +33,8 @@ class Store extends Model
         'is_active',
         'inactive_reason',
         'inactive_at',
+        'latitude',
+        'longitude',
     ];
 
     protected $casts = [

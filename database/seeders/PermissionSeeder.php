@@ -87,6 +87,15 @@ class PermissionSeeder extends Seeder
       'cash.view',
       'cash.open',
       'cash.close',
+
+      // Module: Vehicles
+      'vehicles.view',
+      'vehicles.create',
+      'vehicles.edit',
+      'vehicles.delete',
+
+      // Module: Drivers
+      'drivers.view',
     ];
 
     // Create each permission if it doesn't exist
