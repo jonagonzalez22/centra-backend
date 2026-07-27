@@ -30,6 +30,40 @@ class RouteController extends Controller
 
     /**
      * List eligible orders for route assignment.
+     *
+     * @OA\Get(
+     *   path="/store/routes/eligible-orders",
+     *   summary="Listar pedidos elegibles para asignar a una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="requested_delivery_date", in="query", @OA\Schema(type="string", format="date"), description="Filtrar por fecha de entrega solicitada"),
+     *   @OA\Parameter(name="search", in="query", @OA\Schema(type="string"), description="Buscar por número de operación o nombre de cliente"),
+     *   @OA\Parameter(name="locality_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por localidad"),
+     *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
+     *   @OA\Parameter(name="page", in="query", @OA\Schema(type="integer", default=1), description="Número de página"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Pedidos elegibles obtenidos exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Pedidos elegibles obtenidos exitosamente."),
+     *       @OA\Property(property="data", type="object",
+     *         @OA\Property(property="items", type="array", @OA\Items(ref="#/components/schemas/EligibleOrder")),
+     *         @OA\Property(property="total", type="integer", example=30),
+     *         @OA\Property(property="per_page", type="integer", example=15),
+     *         @OA\Property(property="current_page", type="integer", example=1),
+     *         @OA\Property(property="last_page", type="integer", example=2)
+     *       ),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=401, description="No autenticado")
+     * )
      */
     public function eligibleOrders(Request $request): JsonResponse
     {
@@ -55,6 +89,42 @@ class RouteController extends Controller
 
     /**
      * List all routes for the store.
+     *
+     * @OA\Get(
+     *   path="/store/routes",
+     *   summary="Listar rutas de la tienda",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
+     *   @OA\Parameter(name="page", in="query", @OA\Schema(type="integer", default=1), description="Número de página"),
+     *   @OA\Parameter(name="status", in="query", @OA\Schema(type="string", enum={"draft", "planned", "cancelled"}), description="Filtrar por estado"),
+     *   @OA\Parameter(name="vehicle_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por vehículo"),
+     *   @OA\Parameter(name="driver_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por conductor"),
+     *   @OA\Parameter(name="from", in="query", @OA\Schema(type="string", format="date"), description="Fecha desde (rango)"),
+     *   @OA\Parameter(name="to", in="query", @OA\Schema(type="string", format="date"), description="Fecha hasta (rango)"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Rutas obtenidas exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Rutas obtenidas exitosamente."),
+     *       @OA\Property(property="data", type="object",
+     *         @OA\Property(property="items", type="array", @OA\Items(ref="#/components/schemas/DeliveryRoute")),
+     *         @OA\Property(property="total", type="integer", example=10),
+     *         @OA\Property(property="per_page", type="integer", example=15),
+     *         @OA\Property(property="current_page", type="integer", example=1),
+     *         @OA\Property(property="last_page", type="integer", example=1)
+     *       ),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=401, description="No autenticado")
+     * )
      */
     public function index(Request $request): JsonResponse
     {
@@ -99,6 +169,30 @@ class RouteController extends Controller
 
     /**
      * Show a single route with stops and events.
+     *
+     * @OA\Get(
+     *   path="/store/routes/{route}",
+     *   summary="Obtener una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta obtenida exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta obtenida exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
      */
     public function show(Request $request, string $id): JsonResponse
     {
@@ -136,6 +230,41 @@ class RouteController extends Controller
 
     /**
      * Create a new delivery route.
+     *
+     * @OA\Post(
+     *   path="/store/routes",
+     *   summary="Crear una nueva ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"vehicle_id", "driver_id", "operational_date"},
+     *
+     *       @OA\Property(property="vehicle_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *       @OA\Property(property="driver_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001"),
+     *       @OA\Property(property="operational_date", type="string", format="date", example="2026-07-30"),
+     *       @OA\Property(property="observations", type="string", example="Ruta de reparto zona norte", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=201,
+     *     description="Ruta creada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta creada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
      */
     public function store(StoreRouteRequest $request): JsonResponse
     {
@@ -159,6 +288,43 @@ class RouteController extends Controller
 
     /**
      * Update an existing draft route.
+     *
+     * @OA\Put(
+     *   path="/store/routes/{route}",
+     *   summary="Actualizar una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="vehicle_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000", nullable=true),
+     *       @OA\Property(property="driver_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001", nullable=true),
+     *       @OA\Property(property="operational_date", type="string", format="date", example="2026-07-30", nullable=true),
+     *       @OA\Property(property="observations", type="string", example="Ruta de reparto zona norte", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta actualizada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta actualizada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Ruta no encontrada"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
      */
     public function update(UpdateRouteRequest $request, string $id): JsonResponse
     {
@@ -191,6 +357,43 @@ class RouteController extends Controller
 
     /**
      * Add an order as a stop to a route.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/stops",
+     *   summary="Agregar un stop (pedido) a una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"order_id"},
+     *
+     *       @OA\Property(property="order_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *       @OA\Property(property="reason", type="string", example="Pedido urgente fuera de fecha", nullable=true),
+     *       @OA\Property(property="logistics_notes", type="string", example="Entregar en recepción", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=201,
+     *     description="Stop agregado exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Stop agregado exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/RouteStop"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta o pedido no encontrado")
+     * )
      */
     public function addStop(AddStopRequest $request, string $routeId): JsonResponse
     {
@@ -232,6 +435,43 @@ class RouteController extends Controller
 
     /**
      * Remove (cancel) a stop from a route.
+     *
+     * @OA\Delete(
+     *   path="/store/routes/{route}/stops/{stop}",
+     *   summary="Cancelar un stop de una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *   @OA\Parameter(name="stop", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID del stop"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"reason"},
+     *
+     *       @OA\Property(property="reason", type="string", example="Pedido cancelado por el cliente"),
+     *       @OA\Property(property="logistics_notes", type="string", example="Reasignar a otra ruta", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Stop cancelado exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Stop cancelado exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/RouteStop"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta o stop no encontrado")
+     * )
      */
     public function removeStop(RemoveStopRequest $request, string $routeId, string $stopId): JsonResponse
     {
@@ -271,6 +511,41 @@ class RouteController extends Controller
 
     /**
      * Reorder stops in a route.
+     *
+     * @OA\Put(
+     *   path="/store/routes/{route}/stops/reorder",
+     *   summary="Reordenar los stops de una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"stop_ids"},
+     *
+     *       @OA\Property(property="stop_ids", type="array", @OA\Items(type="string", format="uuid"), example={"550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"})
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Stops reordenados exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Stops reordenados exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
      */
     public function reorderStops(ReorderStopsRequest $request, string $routeId): JsonResponse
     {
@@ -303,6 +578,31 @@ class RouteController extends Controller
 
     /**
      * Plan (finalize) a draft route.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/plan",
+     *   summary="Planificar una ruta (cambia de draft a planned)",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta planificada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta planificada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
      */
     public function plan(PlanRouteRequest $request, string $routeId): JsonResponse
     {
@@ -333,6 +633,42 @@ class RouteController extends Controller
 
     /**
      * Revert a planned route back to draft.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/revert",
+     *   summary="Revertir una ruta de planned a draft",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"reason"},
+     *
+     *       @OA\Property(property="reason", type="string", example="Error en la asignación del vehículo"),
+     *       @OA\Property(property="observation", type="string", example="Se debe cambiar el vehículo por uno con más capacidad", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta revertida exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta revertida exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
      */
     public function revert(RevertRouteRequest $request, string $routeId): JsonResponse
     {
@@ -368,6 +704,41 @@ class RouteController extends Controller
 
     /**
      * Cancel a route (draft or planned).
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/cancel",
+     *   summary="Cancelar una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"reason"},
+     *
+     *       @OA\Property(property="reason", type="string", example="Condiciones climáticas adversas")
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta cancelada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta cancelada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
      */
     public function cancel(CancelRouteRequest $request, string $routeId): JsonResponse
     {
