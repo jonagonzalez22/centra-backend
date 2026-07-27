@@ -72,4 +72,11 @@ return [
     'Conductores' => [
         ['name' => 'drivers.view', 'label' => 'Ver'],
     ],
+    'Logística y Reparto' => [
+        ['name' => 'logistics.routes.view', 'label' => 'Ver rutas'],
+        ['name' => 'logistics.routes.manage', 'label' => 'Gestionar rutas'],
+        ['name' => 'logistics.routes.plan', 'label' => 'Planificar rutas'],
+        ['name' => 'logistics.routes.revert', 'label' => 'Revertir rutas'],
+        ['name' => 'logistics.routes.cancel', 'label' => 'Cancelar rutas'],
+    ],
 ];

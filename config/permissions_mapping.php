@@ -9,4 +9,5 @@ return [
     'store_payment_methods'  => 'payment_methods',
     'vehicles'              => 'deliveries',
     'drivers'               => 'deliveries',
+    'logistics'             => 'deliveries',
 ];
