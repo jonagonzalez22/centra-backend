@@ -47,6 +47,11 @@ class SuperAdminPermissionsSeeder extends Seeder
       'customer_contacts.create',
       'customer_contacts.edit',
       'customer_contacts.delete',
+      'vehicles.view',
+      'vehicles.create',
+      'vehicles.edit',
+      'vehicles.delete',
+      'drivers.view',
     ];
 
     foreach ($permissions as $permission) {

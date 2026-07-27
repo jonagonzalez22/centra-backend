@@ -15,5 +15,7 @@ class RoleSeeder extends Seeder
     // firstOrCreate evita duplicados si ya existen
     Role::firstOrCreate(['name' => 'SUPER_ADMIN'], ['guard_name' => 'web']);
     Role::firstOrCreate(['name' => 'STORE_ADMIN'], ['guard_name' => 'web']);
+    Role::firstOrCreate(['name' => 'STORE_USER'], ['guard_name' => 'web']);
+    Role::firstOrCreate(['name' => 'STORE_DRIVER'], ['guard_name' => 'web']);
   }
 }

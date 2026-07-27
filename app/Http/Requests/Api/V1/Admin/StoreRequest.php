@@ -84,6 +84,8 @@ class StoreRequest extends FormRequest
       'inactive_reason' => ['nullable', 'string', 'max:255'],
       'inactive_at' => ['nullable', 'date'],
       'url_logo' => ['nullable', 'string', 'url', 'max:255'],
+      'latitude' => ['nullable', 'numeric', 'min:-90', 'max:90'],
+      'longitude' => ['nullable', 'numeric', 'min:-180', 'max:180'],
     ];
   }
 
@@ -118,6 +120,14 @@ class StoreRequest extends FormRequest
       'phone.regex' => 'El teléfono debe tener formato internacional válido, por ejemplo: +541112345678.',
 
       'url_logo.url' => 'La URL del logo debe ser válida.',
+
+      'latitude.numeric' => 'La latitud debe ser un valor numérico.',
+      'latitude.min' => 'La latitud debe ser mayor o igual a -90.',
+      'latitude.max' => 'La latitud debe ser menor o igual a 90.',
+
+      'longitude.numeric' => 'La longitud debe ser un valor numérico.',
+      'longitude.min' => 'La longitud debe ser mayor o igual a -180.',
+      'longitude.max' => 'La longitud debe ser menor o igual a 180.',
     ];
   }
 

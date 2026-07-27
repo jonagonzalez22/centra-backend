@@ -11243,6 +11243,88 @@
                 ]
             }
         },
+        "/store/drivers": {
+            "get": {
+                "tags": [
+                    "Store - Conductores"
+                ],
+                "summary": "Listar conductores de la tienda",
+                "description": "Display a listing of drivers (users with STORE_DRIVER role) in the store.",
+                "operationId": "56b64ae98b5ab1688d42e3f75094c587",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Conductores obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Conductores obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/DriverResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/products/generate-sku": {
             "get": {
                 "tags": [
@@ -13406,6 +13488,591 @@
                     }
                 ]
             }
+        },
+        "/store/vehicles/catalogs/types": {
+            "get": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Listar tipos de vehículo",
+                "description": "Return the list of valid vehicle types from config.",
+                "operationId": "30da32cff71cbcd2c82b9e43e111133e",
+                "responses": {
+                    "200": {
+                        "description": "Tipos de vehículo obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Tipos de vehículo obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            },
+                                            "example": [
+                                                "auto",
+                                                "moto",
+                                                "bicicleta",
+                                                "camioneta",
+                                                "camion"
+                                            ]
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/vehicles/catalogs/reasons": {
+            "get": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Listar motivos de inactivación",
+                "description": "Return the list of valid inactivation reasons from config.",
+                "operationId": "6299f3034f3ee4bb218dfd7d1c144ad1",
+                "responses": {
+                    "200": {
+                        "description": "Motivos de inactivación obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Motivos de inactivación obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            },
+                                            "example": [
+                                                "maintenance",
+                                                "repair",
+                                                "accident",
+                                                "unavailable",
+                                                "other"
+                                            ]
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/vehicles": {
+            "get": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Listar vehículos de la tienda",
+                "description": "Display a listing of vehicles for the authenticated user's store.",
+                "operationId": "7090d1eb9a85a3866d091222988fc934",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items por página",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vehículos obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Vehículos obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/VehicleResource"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Crear un vehículo",
+                "description": "Store a newly created vehicle.",
+                "operationId": "b8bf513c37f03440d5b98b1b475230d1",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "plate",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Furgoneta Blanca"
+                                    },
+                                    "plate": {
+                                        "type": "string",
+                                        "example": "ABC-1234"
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "auto",
+                                            "moto",
+                                            "bicicleta",
+                                            "camioneta",
+                                            "camion"
+                                        ],
+                                        "example": "camioneta"
+                                    },
+                                    "capacity_kg": {
+                                        "type": "integer",
+                                        "example": 500,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Vehículo creado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Vehículo creado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/VehicleResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/vehicles/{id}": {
+            "get": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Ver un vehículo específico",
+                "description": "Display the specified vehicle.",
+                "operationId": "ee4031e027baaa8fc3f4c4b50145a020",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vehículo obtenido exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Vehículo obtenido exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/VehicleResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vehículo no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Actualizar un vehículo",
+                "description": "Update the specified vehicle.",
+                "operationId": "4d27be2d4fcbc6376d1b9436223245e4",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Furgoneta Blanca",
+                                        "nullable": true
+                                    },
+                                    "plate": {
+                                        "type": "string",
+                                        "example": "ABC-1234",
+                                        "nullable": true
+                                    },
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "auto",
+                                            "moto",
+                                            "bicicleta",
+                                            "camioneta",
+                                            "camion"
+                                        ],
+                                        "nullable": true
+                                    },
+                                    "capacity_kg": {
+                                        "type": "integer",
+                                        "example": 500,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Vehículo actualizado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Vehículo actualizado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/VehicleResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vehículo no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Eliminar un vehículo",
+                "description": "Remove the specified vehicle.",
+                "operationId": "9b7175ff37414f1455ffb50492503a1a",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vehículo eliminado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Vehículo eliminado exitosamente."
+                                        },
+                                        "data": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vehículo no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/vehicles/{id}/toggle-active": {
+            "patch": {
+                "tags": [
+                    "Store - Vehículos"
+                ],
+                "summary": "Activar o desactivar un vehículo",
+                "description": "Toggle the active state of a vehicle.",
+                "operationId": "66834b51cf0c7c3c518bd24d0f05832e",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "is_active"
+                                ],
+                                "properties": {
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "inactivation_reason": {
+                                        "description": "Requerido si is_active es false",
+                                        "type": "string",
+                                        "enum": [
+                                            "maintenance",
+                                            "repair",
+                                            "accident",
+                                            "unavailable",
+                                            "other"
+                                        ],
+                                        "nullable": true
+                                    },
+                                    "inactivation_notes": {
+                                        "type": "string",
+                                        "example": "En el taller por cambio de filtros",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Estado del vehículo actualizado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Vehículo activado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/VehicleResource"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Vehículo no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
         }
     },
     "components": {
@@ -14849,6 +15516,43 @@
                 },
                 "type": "object"
             },
+            "DriverResource": {
+                "title": "DriverResource",
+                "description": "Representación de un conductor",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Carlos López"
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "carlos@tienda.com"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "roles": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "example": [
+                            "STORE_DRIVER"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-06-30 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
             "InventoryMovementResource": {
                 "title": "InventoryMovementResource",
                 "description": "Representación de un movimiento de inventario",
@@ -14974,6 +15678,71 @@
                     "sort_order": {
                         "type": "integer",
                         "example": 1
+                    }
+                },
+                "type": "object"
+            },
+            "VehicleResource": {
+                "title": "VehicleResource",
+                "description": "Representación de un vehículo",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Furgoneta Blanca"
+                    },
+                    "plate": {
+                        "type": "string",
+                        "example": "ABC-1234"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "moto",
+                            "bicicleta",
+                            "camioneta",
+                            "camion"
+                        ],
+                        "example": "camioneta"
+                    },
+                    "capacity_kg": {
+                        "type": "integer",
+                        "example": 500,
+                        "nullable": true
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "inactivation_reason": {
+                        "type": "string",
+                        "enum": [
+                            "maintenance",
+                            "repair",
+                            "accident",
+                            "unavailable",
+                            "other"
+                        ],
+                        "example": "repair",
+                        "nullable": true
+                    },
+                    "inactivation_notes": {
+                        "type": "string",
+                        "example": "En el taller por cambio de filtros",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-06-30 12:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-06-30 12:00:00"
                     }
                 },
                 "type": "object"
@@ -15150,6 +15919,10 @@
             "description": "Store - Clientes"
         },
         {
+            "name": "Store - Conductores",
+            "description": "Store - Conductores"
+        },
+        {
             "name": "Store - Productos",
             "description": "Store - Productos"
         },
@@ -15168,6 +15941,10 @@
         {
             "name": "Store - Usuarios",
             "description": "Store - Usuarios"
+        },
+        {
+            "name": "Store - Vehículos",
+            "description": "Store - Vehículos"
         }
     ]
 }

@@ -170,6 +170,146 @@ test('filter options returns all master table values regardless of store data', 
         ->assertJsonPath('data.is_active.1.label', 'Inactivo');
 });
 
+test('api can create store with valid coordinates', function () {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole('SUPER_ADMIN');
+    $token = $user->createToken('test-token')->plainTextToken;
+
+    $businessType = BusinessType::create([
+        'name' => 'Ferretería',
+        'description' => 'Test',
+        'is_active' => true,
+    ]);
+
+    $data = [
+        'name' => 'Tienda con GPS',
+        'business_type_id' => $businessType->id,
+        'cuit' => '20345678906',
+        'address' => 'Av. Rivadavia 1000',
+        'state' => 'CABA',
+        'city' => 'CABA',
+        'country' => 'Argentina',
+        'phone' => '+541112345670',
+        'email' => 'gps@test.com',
+        'is_active' => true,
+        'latitude' => -34.603722,
+        'longitude' => -58.381592,
+    ];
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/stores', $data);
+
+    $response->assertStatus(201);
+    $this->assertDatabaseHas('stores', [
+        'name' => 'Tienda con GPS',
+        'latitude' => '-34.603722',
+        'longitude' => '-58.381592',
+    ]);
+});
+
+test('api can create store with null coordinates', function () {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole('SUPER_ADMIN');
+    $token = $user->createToken('test-token')->plainTextToken;
+
+    $businessType = BusinessType::create([
+        'name' => 'Ferretería',
+        'description' => 'Test',
+        'is_active' => true,
+    ]);
+
+    $data = [
+        'name' => 'Tienda sin GPS',
+        'business_type_id' => $businessType->id,
+        'cuit' => '20345678906',
+        'address' => 'Av. Callao 500',
+        'state' => 'CABA',
+        'city' => 'CABA',
+        'country' => 'Argentina',
+        'phone' => '+541112345671',
+        'email' => 'nocoords@test.com',
+        'is_active' => true,
+        'latitude' => null,
+        'longitude' => null,
+    ];
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/stores', $data);
+
+    $response->assertStatus(201);
+    $this->assertDatabaseHas('stores', ['name' => 'Tienda sin GPS', 'latitude' => null, 'longitude' => null]);
+});
+
+test('api rejects store with out-of-range latitude', function () {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole('SUPER_ADMIN');
+    $token = $user->createToken('test-token')->plainTextToken;
+
+    $businessType = BusinessType::create([
+        'name' => 'Ferretería',
+        'description' => 'Test',
+        'is_active' => true,
+    ]);
+
+    $data = [
+        'name' => 'Tienda Lat Invalida',
+        'business_type_id' => $businessType->id,
+        'cuit' => '20345678902',
+        'address' => 'Av. Santa Fe 2000',
+        'state' => 'CABA',
+        'city' => 'CABA',
+        'country' => 'Argentina',
+        'phone' => '+541112345672',
+        'email' => 'badlat@test.com',
+        'is_active' => true,
+        'latitude' => 200,
+        'longitude' => -58.381592,
+    ];
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/stores', $data);
+
+    $response->assertStatus(422)
+        ->assertJsonPath('errors.latitude.0', 'La latitud debe ser menor o igual a 90.');
+});
+
+test('api rejects store with out-of-range longitude', function () {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole('SUPER_ADMIN');
+    $token = $user->createToken('test-token')->plainTextToken;
+
+    $businessType = BusinessType::create([
+        'name' => 'Ferretería',
+        'description' => 'Test',
+        'is_active' => true,
+    ]);
+
+    $data = [
+        'name' => 'Tienda Lon Invalida',
+        'business_type_id' => $businessType->id,
+        'cuit' => '20345678903',
+        'address' => 'Av. Cabildo 300',
+        'state' => 'CABA',
+        'city' => 'CABA',
+        'country' => 'Argentina',
+        'phone' => '+541112345673',
+        'email' => 'badlon@test.com',
+        'is_active' => true,
+        'latitude' => -34.603722,
+        'longitude' => 300,
+    ];
+
+    $response = $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/stores', $data);
+
+    $response->assertStatus(422)
+        ->assertJsonPath('errors.longitude.0', 'La longitud debe ser menor o igual a 180.');
+});
+
 test('api cannot get filter options without SUPER_ADMIN role', function () {
     /** @var \Tests\TestCase $this */
     $user = User::factory()->create();
