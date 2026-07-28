@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests\Api\V1\Store;
 
 use Illuminate\Contracts\Validation\Validator;
@@ -15,7 +17,17 @@ class PlanRouteRequest extends FormRequest
 
     public function rules(): array
     {
-        return [];
+        return [
+            'departure_time' => ['nullable', 'string', 'date_format:H:i'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'departure_time.required' => 'El horario de salida es obligatorio.',
+            'departure_time.date_format' => 'El horario de salida debe tener el formato H:i.',
+        ];
     }
 
     protected function failedValidation(Validator $validator): void

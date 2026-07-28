@@ -66,6 +66,20 @@ class Store extends Model
         return $this->belongsTo(Plan::class);
     }
 
+    public function settings()
+    {
+        return $this->hasOne(StoreSetting::class);
+    }
+
+    public function getUnloadTimeMinutes(): int
+    {
+        if ($this->relationLoaded('settings') && $this->settings) {
+            return $this->settings->delivery_unload_time_minutes;
+        }
+
+        return $this->settings()->value('delivery_unload_time_minutes') ?? 15;
+    }
+
     public function hasFeature(string $code): bool
     {
         $cacheKey = "{$this->id}:{$code}";

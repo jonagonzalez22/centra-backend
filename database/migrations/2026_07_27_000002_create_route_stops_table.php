@@ -13,7 +13,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->uuid('route_id');
             $table->uuid('order_id');
-            $table->unsignedInteger('sequence');
+            $table->integer('sequence');
             $table->string('status')->default('pending');
             $table->text('logistics_notes')->nullable();
             $table->timestamps();

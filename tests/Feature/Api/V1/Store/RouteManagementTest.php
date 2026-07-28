@@ -593,10 +593,13 @@ test('rejects reorder with missing stops', function () {
 });
 
 // ── Status Transition Tests ─────────────────────────────────────────
-
 test('plans a draft route with stops', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);
+
+    // Store needs coordinates for plan to work with Google API
+    $this->store->update(['latitude' => -34.6037, 'longitude' => -58.3816]);
+
     $customer = createCustomerWithAddress($this->store);
     $order = createEligibleOrder($this->store, $customer);
 
@@ -618,8 +621,23 @@ test('plans a draft route with stops', function () {
         'status' => 'pending',
     ]);
 
+    // Mock Google API response for single stop
+    \Illuminate\Support\Facades\Http::fake([
+        'routes.googleapis.com/*' => \Illuminate\Support\Facades\Http::response([
+            'routes' => [[
+                'optimizedIntermediateWaypointIndex' => [0],
+                'legs' => [
+                    ['duration' => '600s', 'polyline' => ['encodedPolyline' => 'abc123']],
+                    ['duration' => '300s', 'polyline' => ['encodedPolyline' => 'def456']],
+                ],
+            ]],
+        ], 200),
+    ]);
+
     $response = $this->withHeader('Authorization', "Bearer $this->token")
-        ->postJson("/api/v1/store/routes/{$route->id}/plan");
+        ->postJson("/api/v1/store/routes/{$route->id}/plan", [
+            'departure_time' => '08:00',
+        ]);
 
     $response->assertStatus(200)
         ->assertJsonPath('data.status', 'planned');
@@ -632,6 +650,8 @@ test('rejects plan with no stops', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);
 
+    $this->store->update(['latitude' => -34.6037, 'longitude' => -58.3816]);
+
     $route = DeliveryRoute::create([
         'store_id' => $this->store->id,
         'vehicle_id' => $vehicle->id,
@@ -641,7 +661,9 @@ test('rejects plan with no stops', function () {
     ]);
 
     $response = $this->withHeader('Authorization', "Bearer $this->token")
-        ->postJson("/api/v1/store/routes/{$route->id}/plan");
+        ->postJson("/api/v1/store/routes/{$route->id}/plan", [
+            'departure_time' => '08:00',
+        ]);
 
     $response->assertStatus(422);
 });

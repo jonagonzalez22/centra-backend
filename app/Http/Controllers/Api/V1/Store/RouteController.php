@@ -206,6 +206,7 @@ class RouteController extends Controller
                 'events.user',
                 'vehicle',
                 'driver',
+                'store',
             ])
             ->find($id);
 
@@ -619,9 +620,20 @@ class RouteController extends Controller
             ], 404);
         }
 
-        $route = $this->routeService->plan($route, $request->user());
+        $departureTime = $request->departure_time ?? $route->departure_time;
 
-        $route->load(['vehicle', 'driver', 'stops', 'events']);
+        if (! $departureTime) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El horario de salida es obligatorio.',
+                'data' => null,
+                'errors' => ['departure_time' => ['El horario de salida es obligatorio.']],
+            ], 422);
+        }
+
+        $route = $this->routeService->plan($route, $departureTime, $request->user());
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events', 'store']);
 
         return response()->json([
             'status' => 'success',
@@ -692,7 +704,7 @@ class RouteController extends Controller
             $request->user()
         );
 
-        $route->load(['vehicle', 'driver', 'stops', 'events']);
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events', 'store']);
 
         return response()->json([
             'status' => 'success',
@@ -762,6 +774,61 @@ class RouteController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Ruta cancelada exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Recalculate a planned route that requires recalculation after stop reordering.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/recalculate",
+     *   summary="Recalcular una ruta planificada después de reordenar stops",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta recalculada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta recalculada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function recalculate(Request $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->recalculate($route, $request->user());
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Ruta recalculada exitosamente.',
             'data' => DeliveryRouteResource::make($route),
             'errors' => null,
         ]);

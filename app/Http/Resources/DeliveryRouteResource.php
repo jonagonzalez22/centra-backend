@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
@@ -16,6 +18,17 @@ class DeliveryRouteResource extends JsonResource
             'status' => $this->status,
             'observations' => $this->observations,
             'created_by' => $this->created_by,
+            'planned_at' => $this->planned_at?->format('Y-m-d H:i:s'),
+            'departure_time' => $this->departure_time,
+            'encoded_polyline' => $this->encoded_polyline,
+            'unload_time_minutes_snapshot' => $this->unload_time_minutes_snapshot,
+            'requires_recalculation' => $this->requires_recalculation,
+            'store' => $this->whenLoaded('store', fn () => [
+                'id' => $this->store->id,
+                'name' => $this->store->name,
+                'latitude' => $this->store->latitude,
+                'longitude' => $this->store->longitude,
+            ]),
             'vehicle' => VehicleResource::make($this->whenLoaded('vehicle')),
             'driver' => DriverResource::make($this->whenLoaded('driver')),
             'stops' => RouteStopResource::collection($this->whenLoaded('stops')),

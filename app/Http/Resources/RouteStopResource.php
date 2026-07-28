@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
@@ -15,6 +17,8 @@ class RouteStopResource extends JsonResource
             'sequence' => $this->sequence,
             'status' => $this->status,
             'logistics_notes' => $this->logistics_notes,
+            'estimated_arrival_at' => $this->estimated_arrival_at?->format('Y-m-d H:i:s'),
+            'travel_duration_seconds' => $this->travel_duration_seconds,
             'order' => $this->whenLoaded('order', fn () => [
                 'id' => $this->order->id,
                 'operation_number' => $this->order->operation_number,
@@ -32,6 +36,8 @@ class RouteStopResource extends JsonResource
                         return $mainAddress ? [
                             'street' => $mainAddress->street,
                             'number' => $mainAddress->number,
+                            'latitude' => (float) $mainAddress->latitude,
+                            'longitude' => (float) $mainAddress->longitude,
                             'locality' => $mainAddress->relationLoaded('locality') && $mainAddress->locality
                                 ? $mainAddress->locality->name
                                 : null,
