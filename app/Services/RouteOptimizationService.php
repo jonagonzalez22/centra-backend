@@ -42,9 +42,10 @@ class RouteOptimizationService
      * @param int[] $durationsSeconds Leg durations in seconds
      * @param int $unloadTimeMinutes Time spent at each stop before proceeding
      * @param int[] $stopOrder The order of stop indices
-     * @return string[] Array of ETAs in "H:i:s" format
+     * @param string $operationalDate Date in "Y-m-d" format to prepend to ETAs
+     * @return string[] Array of ETAs in "Y-m-d H:i:s" format
      */
-    public function calculateETAs(string $departureTime, array $durationsSeconds, int $unloadTimeMinutes, array $stopOrder): array
+    public function calculateETAs(string $departureTime, array $durationsSeconds, int $unloadTimeMinutes, array $stopOrder, string $operationalDate): array
     {
         if (empty($stopOrder)) {
             return [];
@@ -64,7 +65,7 @@ class RouteOptimizationService
             $unloadOffset = $position * $unloadTimeMinutes * 60;
 
             $totalSeconds = $baseTime + $cumulativeTravel + $unloadOffset;
-            $etas[$stopIndex] = $this->formatSecondsToTime($totalSeconds);
+            $etas[$stopIndex] = $operationalDate . ' ' . $this->formatSecondsToTime($totalSeconds);
         }
 
         // Ensure array is ordered by original stop index

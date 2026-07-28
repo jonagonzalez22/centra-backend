@@ -352,7 +352,7 @@ class RouteManagementService
             $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
 
             // Calculate ETAs
-            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $optimizedOrder);
+            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $optimizedOrder, $route->operational_date->format('Y-m-d'));
 
             // Persist ETAs, durations, and route data
             for ($i = 0; $i < count($optimizedOrder); $i++) {
@@ -515,7 +515,7 @@ class RouteManagementService
             // Calculate ETAs using existing order (0, 1, 2...)
             $stopCount = $activeStops->count();
             $originalOrder = range(0, $stopCount - 1);
-            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $originalOrder);
+            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $originalOrder, $route->operational_date->format('Y-m-d'));
 
             // Persist new ETAs
             foreach ($activeStops as $i => $stop) {

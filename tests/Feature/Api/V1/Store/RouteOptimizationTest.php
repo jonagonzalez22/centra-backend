@@ -255,21 +255,21 @@ test('calculateETAs returns correct arrival times', function () {
     $unloadTimeMinutes = 15;
     $stopOrder = [0, 1, 2];
 
-    $etas = $service->calculateETAs($departureTime, $durationsSeconds, $unloadTimeMinutes, $stopOrder);
+    $etas = $service->calculateETAs($departureTime, $durationsSeconds, $unloadTimeMinutes, $stopOrder, '2026-07-28');
 
-    // stop 0: 08:00 + 600s = 08:10:00
-    // stop 1: 08:00 + 600s + 450s + 15min unload = 08:10:00 + 7m30s + 15m = 08:32:30
-    // stop 2: + 300s + 15min = 08:32:30 + 5min + 15min = 08:52:30
+    // stop 0: 2026-07-28 08:00 + 600s = 08:10:00
+    // stop 1: + 450s + 15min unload = 08:32:30
+    // stop 2: + 300s + 15min = 08:52:30
     expect($etas)->toHaveCount(3);
-    expect($etas[0])->toBe('08:10:00');
-    expect($etas[1])->toBe('08:32:30');
-    expect($etas[2])->toBe('08:52:30');
+    expect($etas[0])->toBe('2026-07-28 08:10:00');
+    expect($etas[1])->toBe('2026-07-28 08:32:30');
+    expect($etas[2])->toBe('2026-07-28 08:52:30');
 });
 
 test('calculateETAs returns empty array for empty stops', function () {
     $service = new \App\Services\RouteOptimizationService();
 
-    $etas = $service->calculateETAs('08:00', [], 15, []);
+    $etas = $service->calculateETAs('08:00', [], 15, [], '2026-07-28');
 
     expect($etas)->toBe([]);
 });

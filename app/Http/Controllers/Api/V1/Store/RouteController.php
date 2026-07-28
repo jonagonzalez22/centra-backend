@@ -620,7 +620,18 @@ class RouteController extends Controller
             ], 404);
         }
 
-        $route = $this->routeService->plan($route, $request->departure_time, $request->user());
+        $departureTime = $request->departure_time ?? $route->departure_time;
+
+        if (! $departureTime) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El horario de salida es obligatorio.',
+                'data' => null,
+                'errors' => ['departure_time' => ['El horario de salida es obligatorio.']],
+            ], 422);
+        }
+
+        $route = $this->routeService->plan($route, $departureTime, $request->user());
 
         $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events', 'store']);
 
