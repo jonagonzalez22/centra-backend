@@ -13825,6 +13825,68 @@
                 ]
             }
         },
+        "/store/routes/{route}/recalculate": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Recalcular una ruta planificada después de reordenar stops",
+                "description": "Recalculate a planned route that requires recalculation after stop reordering.",
+                "operationId": "a8b63c2563dfbe0f064ca4d79b329912",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ruta recalculada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta recalculada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/users/filter-options": {
             "get": {
                 "tags": [
