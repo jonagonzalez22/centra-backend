@@ -25,11 +25,22 @@ class DeliveryRoute extends Model
         'status',
         'observations',
         'created_by',
+        'planned_at',
+        'departure_time',
+        'encoded_polyline',
+        'unload_time_minutes_snapshot',
+        'requires_recalculation',
     ];
 
-    protected $casts = [
-        'operational_date' => 'date',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'operational_date' => 'date',
+            'planned_at' => 'datetime',
+            'requires_recalculation' => 'boolean',
+            'unload_time_minutes_snapshot' => 'integer',
+        ];
+    }
 
     public function store(): BelongsTo
     {

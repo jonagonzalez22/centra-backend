@@ -22,7 +22,17 @@ class RouteStop extends Model
         'sequence',
         'status',
         'logistics_notes',
+        'estimated_arrival_at',
+        'travel_duration_seconds',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'estimated_arrival_at' => 'datetime',
+            'travel_duration_seconds' => 'integer',
+        ];
+    }
 
     public function route(): BelongsTo
     {

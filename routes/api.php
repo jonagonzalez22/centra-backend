@@ -281,6 +281,10 @@ Route::prefix('v1')->group(function () {
                 Route::post('routes/{route}/cancel', [RouteController::class, 'cancel'])
                     ->middleware('permission:logistics.routes.cancel')
                     ->name('store.routes.cancel');
+
+                Route::post('routes/{route}/recalculate', [RouteController::class, 'recalculate'])
+                    ->middleware('permission:logistics.routes.plan')
+                    ->name('store.routes.recalculate');
             });
 
             Route::middleware('feature:store_settings')->group(function () {

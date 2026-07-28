@@ -3,11 +3,14 @@
 namespace App\Services;
 
 use App\Models\CommercialOperation;
+use App\Models\CustomerAddress;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\RouteStop;
+use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\RouteOptimizationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
@@ -219,12 +222,14 @@ class RouteManagementService
 
     /**
      * Atomically reorder stops via full array replacement.
+     * Accepts both draft and planned routes.
+     * For planned routes: sets requires_recalculation and clears ETAs.
      */
     public function reorderStops(DeliveryRoute $route, array $orderedStopIds, User $user): void
     {
         DB::transaction(function () use ($route, $orderedStopIds, $user) {
-            if ($route->status !== 'draft') {
-                throw $this->validationError('Solo se pueden reordenar los stops en rutas draft.');
+            if (! in_array($route->status, ['draft', 'planned'])) {
+                throw $this->validationError('Solo se pueden reordenar los stops en rutas draft o planned.');
             }
 
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
@@ -245,7 +250,6 @@ class RouteManagementService
             }
 
             foreach ($orderedStopIds as $index => $stopId) {
-                // Use negative temporary sequences to avoid UNIQUE constraint conflicts
                 RouteStop::where('id', $stopId)
                     ->where('route_id', $route->id)
                     ->update(['sequence' => -($index + 1)]);
@@ -257,25 +261,46 @@ class RouteManagementService
                     ->update(['sequence' => $index + 1]);
             }
 
-            $this->createEvent(
-                $route,
-                $route->store_id,
-                $user->id,
-                'stops_reordered',
-                null,
-                null,
-                null,
-                ['previous_order' => $activeStops->pluck('id', 'sequence')->toArray(), 'new_order' => array_flip($orderedStopIds)]
-            );
+            if ($route->status === 'planned') {
+                // Clear calculated fields since order changed
+                $route->update(['requires_recalculation' => true]);
+
+                RouteStop::where('route_id', $route->id)->update([
+                    'estimated_arrival_at' => null,
+                    'travel_duration_seconds' => null,
+                ]);
+
+                $this->createEvent(
+                    $route,
+                    $route->store_id,
+                    $user->id,
+                    'stops_reordered_planned',
+                    null,
+                    null,
+                    null,
+                    ['previous_order' => $activeStops->pluck('id', 'sequence')->toArray(), 'new_order' => array_flip($orderedStopIds)]
+                );
+            } else {
+                $this->createEvent(
+                    $route,
+                    $route->store_id,
+                    $user->id,
+                    'stops_reordered',
+                    null,
+                    null,
+                    null,
+                    ['previous_order' => $activeStops->pluck('id', 'sequence')->toArray(), 'new_order' => array_flip($orderedStopIds)]
+                );
+            }
         });
     }
 
     /**
-     * Transition route from draft to planned.
+     * Transition route from draft to planned with Google Routes optimization.
      */
-    public function plan(DeliveryRoute $route, User $user): DeliveryRoute
+    public function plan(DeliveryRoute $route, string $departureTime, User $user): DeliveryRoute
     {
-        return DB::transaction(function () use ($route, $user) {
+        return DB::transaction(function () use ($route, $departureTime, $user) {
             if ($route->status !== 'draft') {
                 throw $this->validationError('Solo se pueden planificar rutas en estado draft.');
             }
@@ -284,22 +309,94 @@ class RouteManagementService
 
             $activeStops = RouteStop::where('route_id', $route->id)
                 ->where('status', '!=', 'cancelled')
-                ->count();
+                ->orderBy('sequence')
+                ->get();
 
-            if ($activeStops < 1) {
+            if ($activeStops->count() < 1) {
                 throw $this->validationError('La ruta debe tener al menos un stop para ser planificada.');
             }
 
-            $route->update(['status' => 'planned']);
+            // Validate store has coordinates
+            $store = Store::find($route->store_id);
+            if (! $store || ! $store->latitude || ! $store->longitude) {
+                throw $this->validationError('La tienda no tiene coordenadas configuradas.');
+            }
 
-            $this->createEvent($route, $route->store_id, $user->id, 'planned', 'draft', 'planned');
+            // Validate all stops have geolocated delivery addresses
+            $this->validateStopCoordinates($activeStops);
+
+            // Get store unload time
+            $unloadTime = $store->getUnloadTimeMinutes();
+
+            // Build waypoints from active stops in current sequence order
+            $origin = [(float) $store->latitude, (float) $store->longitude];
+            $destination = [(float) $store->latitude, (float) $store->longitude]; // round trip
+            $intermediates = [];
+            $stopIdMap = [];
+
+            foreach ($activeStops as $stop) {
+                $address = $this->getStopMainAddress($stop);
+                $intermediates[] = [(float) $address->latitude, (float) $address->longitude];
+                $stopIdMap[] = $stop->id;
+            }
+
+            // Call Google Routes API with optimization
+            $optimizer = new RouteOptimizationService();
+            $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, true);
+
+            $optimizedOrder = $result['optimizedOrder'];
+            $durations = $result['durations'];
+            $polyline = $result['polyline'];
+
+            // Reorder stops based on optimized order
+            $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
+
+            // Calculate ETAs
+            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $optimizedOrder);
+
+            // Persist ETAs, durations, and route data
+            for ($i = 0; $i < count($optimizedOrder); $i++) {
+                $stopIndex = $optimizedOrder[$i];
+                $stopId = $stopIdMap[$stopIndex];
+
+                RouteStop::where('id', $stopId)
+                    ->where('route_id', $route->id)
+                    ->update([
+                        'estimated_arrival_at' => $etas[$i] ?? null,
+                        'travel_duration_seconds' => $durations[$i] ?? 0,
+                    ]);
+            }
+
+            $route->update([
+                'status' => 'planned',
+                'planned_at' => now(),
+                'departure_time' => $departureTime,
+                'encoded_polyline' => $polyline,
+                'unload_time_minutes_snapshot' => $unloadTime,
+                'requires_recalculation' => false,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'planned',
+                'draft',
+                'planned',
+                null,
+                [
+                    'departure_time' => $departureTime,
+                    'optimized' => true,
+                    'unload_snapshot' => $unloadTime,
+                ]
+            );
 
             return $route;
         });
     }
 
     /**
-     * Revert route from planned back to draft.
+     * Revert route from planned back to draft, clearing all calculated fields.
      */
     public function revert(DeliveryRoute $route, string $reason, ?string $observation, User $user): DeliveryRoute
     {
@@ -310,9 +407,21 @@ class RouteManagementService
 
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
 
+            // Clear calculated fields on route
             $route->update([
                 'status' => 'draft',
                 'observations' => $observation ?? $route->observations,
+                'planned_at' => null,
+                'departure_time' => null,
+                'encoded_polyline' => null,
+                'unload_time_minutes_snapshot' => null,
+                'requires_recalculation' => false,
+            ]);
+
+            // Clear calculated fields on all stops
+            RouteStop::where('route_id', $route->id)->update([
+                'estimated_arrival_at' => null,
+                'travel_duration_seconds' => null,
             ]);
 
             $this->createEvent($route, $route->store_id, $user->id, 'reverted', 'planned', 'draft', $reason);
@@ -343,6 +452,96 @@ class RouteManagementService
             $route->update(['status' => 'cancelled']);
 
             $this->createEvent($route, $route->store_id, $user->id, 'cancelled', $fromStatus, 'cancelled', $reason);
+
+            return $route;
+        });
+    }
+
+    /**
+     * Recalculate a planned route that requires recalculation.
+     * Uses original departure time and unload snapshot. Respects current stop order.
+     */
+    public function recalculate(DeliveryRoute $route, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $user) {
+            if ($route->status !== 'planned') {
+                throw $this->validationError('Solo se pueden recalcular rutas planificadas.');
+            }
+
+            if (! $route->requires_recalculation) {
+                throw $this->validationError('La ruta no requiere recálculo.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            $activeStops = RouteStop::where('route_id', $route->id)
+                ->where('status', '!=', 'cancelled')
+                ->orderBy('sequence')
+                ->get();
+
+            if ($activeStops->count() < 1) {
+                throw $this->validationError('La ruta debe tener al menos un stop para ser recalculada.');
+            }
+
+            // Validate store coordinates
+            $store = Store::find($route->store_id);
+            if (! $store || ! $store->latitude || ! $store->longitude) {
+                throw $this->validationError('La tienda no tiene coordenadas configuradas.');
+            }
+
+            // Validate all stops have geolocated addresses
+            $this->validateStopCoordinates($activeStops);
+
+            $departureTime = $route->departure_time;
+            $unloadTime = $route->unload_time_minutes_snapshot ?? 15;
+
+            // Build waypoints in CURRENT sequence order (don't optimize)
+            $origin = [(float) $store->latitude, (float) $store->longitude];
+            $destination = [(float) $store->latitude, (float) $store->longitude];
+            $intermediates = [];
+
+            foreach ($activeStops as $stop) {
+                $address = $this->getStopMainAddress($stop);
+                $intermediates[] = [(float) $address->latitude, (float) $address->longitude];
+            }
+
+            // Call Google Routes API WITHOUT optimization (respect manual order)
+            $optimizer = new RouteOptimizationService();
+            $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, false);
+
+            $durations = $result['durations'];
+            $polyline = $result['polyline'];
+
+            // Calculate ETAs using existing order (0, 1, 2...)
+            $stopCount = $activeStops->count();
+            $originalOrder = range(0, $stopCount - 1);
+            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $originalOrder);
+
+            // Persist new ETAs
+            foreach ($activeStops as $i => $stop) {
+                RouteStop::where('id', $stop->id)
+                    ->where('route_id', $route->id)
+                    ->update([
+                        'estimated_arrival_at' => $etas[$i] ?? null,
+                        'travel_duration_seconds' => $durations[$i] ?? 0,
+                    ]);
+            }
+
+            $route->update([
+                'encoded_polyline' => $polyline,
+                'requires_recalculation' => false,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'route_recalculated',
+                null,
+                null,
+                null,
+                ['departure_time' => $departureTime, 'unload_snapshot' => $unloadTime]
+            );
 
             return $route;
         });
@@ -503,5 +702,56 @@ class RouteManagementService
                 'errors' => ['error' => [$message]],
             ], 422)
         );
+    }
+
+    /**
+     * Validate that all active stops have geolocated delivery addresses.
+     */
+    private function validateStopCoordinates(\Illuminate\Database\Eloquent\Collection $stops): void
+    {
+        foreach ($stops as $stop) {
+            $address = $this->getStopMainAddress($stop);
+
+            if (! $address || ! $address->latitude || ! $address->longitude) {
+                throw $this->validationError('Uno o más pedidos no tienen una dirección de entrega geolocalizada.');
+            }
+        }
+    }
+
+    /**
+     * Get the main delivery address for a stop's order.
+     */
+    private function getStopMainAddress(RouteStop $stop): ?CustomerAddress
+    {
+        $order = $stop->order()->with(['customer.addresses'])->first();
+
+        if (! $order || ! $order->customer) {
+            return null;
+        }
+
+        return $order->customer->addresses->firstWhere('is_main', true);
+    }
+
+    /**
+     * Apply Google's optimized stop order to the route.
+     * Uses temporary negative sequences to avoid UNIQUE constraint conflicts.
+     */
+    private function applyOptimizedOrder(string $routeId, array $stopIdMap, array $optimizedOrder): void
+    {
+        // Phase 1: move to temporary negative sequences
+        foreach ($optimizedOrder as $newIndex => $oldIndex) {
+            $stopId = $stopIdMap[$oldIndex];
+            RouteStop::where('id', $stopId)
+                ->where('route_id', $routeId)
+                ->update(['sequence' => -($newIndex + 1)]);
+        }
+
+        // Phase 2: reassign to final positive sequences
+        foreach ($optimizedOrder as $newIndex => $oldIndex) {
+            $stopId = $stopIdMap[$oldIndex];
+            RouteStop::where('id', $stopId)
+                ->where('route_id', $routeId)
+                ->update(['sequence' => $newIndex + 1]);
+        }
     }
 }
