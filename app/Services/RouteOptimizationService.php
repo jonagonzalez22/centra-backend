@@ -126,7 +126,7 @@ class RouteOptimizationService
     private function callGoogleAPI(array $payload): array
     {
         $response = Http::withHeaders([
-            'X-Goog-FieldMask' => 'routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.legs.polyline.encodedPolyline',
+            'X-Goog-FieldMask' => 'routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.polyline.encodedPolyline',
             'X-Goog-Api-Key' => $this->apiKey,
             'Content-Type' => 'application/json',
         ])->post($this->baseUrl, $payload);
@@ -144,19 +144,15 @@ class RouteOptimizationService
         $optimizedOrder = $route['optimizedIntermediateWaypointIndex'] ?? range(0, $waypointCount - 1);
 
         $durations = [];
-        $polyline = '';
-
         $legs = $route['legs'] ?? [];
 
         foreach ($legs as $leg) {
             $durationStr = $leg['duration'] ?? '0s';
             $durations[] = (int) rtrim($durationStr, 's');
-
-            $legPolyline = $leg['polyline']['encodedPolyline'] ?? '';
-            if ($legPolyline) {
-                $polyline = $legPolyline;
-            }
         }
+
+        // Global polyline for the entire route (store → stops → store)
+        $polyline = $route['polyline']['encodedPolyline'] ?? '';
 
         return [
             'optimizedOrder' => array_map('intval', $optimizedOrder),

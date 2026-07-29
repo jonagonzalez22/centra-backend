@@ -110,6 +110,7 @@ function mockGoogleApiSuccess(array $optimizedIndices = [0]): void
             'routes' => [[
                 'optimizedIntermediateWaypointIndex' => $optimizedIndices,
                 'legs' => $legs,
+                'polyline' => ['encodedPolyline' => 'global_polyline_abc123'],
             ]],
         ], 200),
     ]);
@@ -228,6 +229,7 @@ test('optimizeRoute preserves order when optimizeOrder is false', function () {
         'routes.googleapis.com/*' => Http::response([
             'routes' => [[
                 'legs' => $legs,
+                'polyline' => ['encodedPolyline' => 'global_polyline_def456'],
             ]],
         ], 200),
     ]);
@@ -663,6 +665,7 @@ test('recalculate updates ETAs and clears requires_recalculation flag', function
         'routes.googleapis.com/*' => Http::response([
             'routes' => [[
                 'legs' => $legs,
+                'polyline' => ['encodedPolyline' => 'global_polyline_recalc'],
             ]],
         ], 200),
     ]);
@@ -675,7 +678,7 @@ test('recalculate updates ETAs and clears requires_recalculation flag', function
 
     $route->refresh();
     expect($route->requires_recalculation)->toBeFalse();
-    expect($route->encoded_polyline)->toBe('new_leg2'); // last leg polyline
+    expect($route->encoded_polyline)->toBe('global_polyline_recalc');
 
     // Stops should have new ETAs
     $stops = $route->stops()->orderBy('sequence')->get();
