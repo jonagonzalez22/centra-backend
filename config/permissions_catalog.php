@@ -78,5 +78,7 @@ return [
         ['name' => 'logistics.routes.plan', 'label' => 'Planificar rutas'],
         ['name' => 'logistics.routes.revert', 'label' => 'Revertir rutas'],
         ['name' => 'logistics.routes.cancel', 'label' => 'Cancelar rutas'],
+        ['name' => 'logistics.routes.load', 'label' => 'Confirmar carga'],
+        ['name' => 'logistics.routes.dispatch', 'label' => 'Despachar ruta'],
     ],
 ];

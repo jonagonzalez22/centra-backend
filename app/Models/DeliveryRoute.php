@@ -30,6 +30,10 @@ class DeliveryRoute extends Model
         'encoded_polyline',
         'unload_time_minutes_snapshot',
         'requires_recalculation',
+        'loaded_at',
+        'loaded_by',
+        'dispatched_at',
+        'dispatched_by',
     ];
 
     protected function casts(): array
@@ -37,6 +41,8 @@ class DeliveryRoute extends Model
         return [
             'operational_date' => 'date',
             'planned_at' => 'datetime',
+            'loaded_at' => 'datetime',
+            'dispatched_at' => 'datetime',
             'requires_recalculation' => 'boolean',
             'unload_time_minutes_snapshot' => 'integer',
         ];
@@ -62,6 +68,16 @@ class DeliveryRoute extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function loadedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'loaded_by');
+    }
+
+    public function dispatchedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'dispatched_by');
+    }
+
     public function stops(): HasMany
     {
         return $this->hasMany(RouteStop::class, 'route_id');
@@ -84,7 +100,12 @@ class DeliveryRoute extends Model
 
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereIn('status', ['draft', 'planned']);
+        return $query->whereIn('status', ['draft', 'planned', 'loaded', 'dispatched']);
+    }
+
+    public function isActive(): bool
+    {
+        return in_array($this->status, ['draft', 'planned', 'loaded', 'dispatched'], true);
     }
 
     public function scopeForVehicle(Builder $query, string $vehicleId): Builder

@@ -6,7 +6,9 @@ use App\Models\CommercialOperation;
 use App\Models\CustomerAddress;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
+use App\Models\RouteLoadAdjustment;
 use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -436,8 +438,11 @@ class RouteManagementService
     public function cancel(DeliveryRoute $route, string $reason, User $user): DeliveryRoute
     {
         return DB::transaction(function () use ($route, $reason, $user) {
-            if (! in_array($route->status, ['draft', 'planned'])) {
-                throw $this->validationError('Solo se pueden cancelar rutas en estado draft o planned.');
+            if (! in_array($route->status, ['draft', 'planned', 'loaded'])) {
+                if ($route->status === 'dispatched') {
+                    throw $this->validationError('No se puede cancelar una ruta despachada.');
+                }
+                throw $this->validationError('Solo se pueden cancelar rutas en estado draft, planned o loaded.');
             }
 
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
@@ -451,7 +456,15 @@ class RouteManagementService
 
             $route->update(['status' => 'cancelled']);
 
-            $this->createEvent($route, $route->store_id, $user->id, 'cancelled', $fromStatus, 'cancelled', $reason);
+            $metadata = [];
+
+            // If cancelling from loaded, log the need for physical return
+            if ($fromStatus === 'loaded') {
+                $metadata['physical_return_required'] = true;
+                $metadata['note'] = 'La mercadería cargada debe ser devuelta físicamente al depósito.';
+            }
+
+            $this->createEvent($route, $route->store_id, $user->id, 'cancelled', $fromStatus, 'cancelled', $reason, $metadata ?: null);
 
             return $route;
         });
@@ -541,6 +554,285 @@ class RouteManagementService
                 null,
                 null,
                 ['departure_time' => $departureTime, 'unload_snapshot' => $unloadTime]
+            );
+
+            return $route;
+        });
+    }
+
+    // ── Execution Methods ────────────────────────────────────────────
+
+    /**
+     * Assign items (products) to a stop in a draft route.
+     * Validates that the total planned quantity across all active routes
+     * does not exceed the order item quantity.
+     */
+    public function assignItems(DeliveryRoute $route, RouteStop $stop, array $items, User $user): void
+    {
+        DB::transaction(function () use ($route, $stop, $items, $user) {
+            if ($route->status !== 'draft') {
+                throw $this->validationError('Solo se pueden asignar items en rutas draft.');
+            }
+
+            if ($stop->route_id !== $route->id) {
+                throw $this->validationError('El stop no pertenece a esta ruta.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+            $stop = RouteStop::where('id', $stop->id)->lockForUpdate()->first();
+
+            // Load order items for validation
+            $order = CommercialOperation::with('items')->find($stop->order_id);
+            if (! $order) {
+                throw $this->validationError('El pedido asociado al stop no existe.');
+            }
+
+            foreach ($items as $item) {
+                $productId = $item['product_id'];
+                $quantityPlanned = (int) $item['quantity_planned'];
+
+                if ($quantityPlanned < 1) {
+                    throw $this->validationError('La cantidad planificada debe ser al menos 1.');
+                }
+
+                // Validate product exists in the order
+                $orderItem = $order->items->firstWhere('product_id', $productId);
+                if (! $orderItem) {
+                    throw $this->validationError("El producto {$productId} no pertenece a este pedido.");
+                }
+
+                // Calculate already-assigned quantity for this product across ALL active routes
+                $alreadyAssigned = RouteStopItem::where('product_id', $productId)
+                    ->whereHas('routeStop', function (Builder $q) use ($stop) {
+                        $q->where('order_id', $stop->order_id)
+                            ->where('status', '!=', 'cancelled');
+                    })
+                    ->whereNot('route_stop_id', $stop->id) // exclude current stop (for updates)
+                    ->sum('quantity_planned');
+
+                $totalAfter = $alreadyAssigned + $quantityPlanned;
+
+                if ($totalAfter > $orderItem->quantity) {
+                    throw $this->validationError(
+                        "La cantidad planificada ({$quantityPlanned}) más la ya asignada ({$alreadyAssigned}) "
+                        ."supera la cantidad del pedido ({$orderItem->quantity}) para el producto."
+                    );
+                }
+
+                // Create or update (unique on route_stop_id + product_id)
+                RouteStopItem::updateOrCreate(
+                    [
+                        'route_stop_id' => $stop->id,
+                        'product_id' => $productId,
+                    ],
+                    [
+                        'quantity_planned' => $quantityPlanned,
+                        'quantity_loaded' => 0,
+                        'quantity_delivered' => 0,
+                    ]
+                );
+            }
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'items_assigned',
+                null,
+                null,
+                null,
+                ['stop_id' => $stop->id, 'item_count' => count($items)]
+            );
+        });
+    }
+
+    /**
+     * Get a consolidated load sheet for warehouse picking.
+     */
+    public function getLoadSheet(DeliveryRoute $route): array
+    {
+        $stops = $route->stops()
+            ->with(['items.product', 'order'])
+            ->where('status', '!=', 'cancelled')
+            ->orderBy('sequence')
+            ->get();
+
+        $byProduct = [];
+        $byStop = [];
+
+        foreach ($stops as $stop) {
+            $stopItems = [];
+            foreach ($stop->items as $item) {
+                $productId = $item->product_id;
+                $productName = $item->product?->name ?? 'Producto desconocido';
+
+                $stopItems[] = [
+                    'route_stop_item_id' => $item->id,
+                    'product_id' => $productId,
+                    'product_name' => $productName,
+                    'quantity_planned' => $item->quantity_planned,
+                    'quantity_loaded' => $item->quantity_loaded,
+                ];
+
+                if (! isset($byProduct[$productId])) {
+                    $byProduct[$productId] = [
+                        'product_id' => $productId,
+                        'product_name' => $productName,
+                        'total_planned' => 0,
+                        'total_loaded' => 0,
+                    ];
+                }
+
+                $byProduct[$productId]['total_planned'] += $item->quantity_planned;
+                $byProduct[$productId]['total_loaded'] += $item->quantity_loaded;
+            }
+
+            if (! empty($stopItems)) {
+                $byStop[] = [
+                    'stop_id' => $stop->id,
+                    'sequence' => $stop->sequence,
+                    'order_number' => $stop->order?->operation_number,
+                    'customer_name' => $stop->order?->customer?->display_name ?? $stop->order?->customer?->name,
+                    'items' => $stopItems,
+                ];
+            }
+        }
+
+        return [
+            'route_id' => $route->id,
+            'status' => $route->status,
+            'operational_date' => $route->operational_date?->format('Y-m-d'),
+            'by_product' => array_values($byProduct),
+            'by_stop' => $byStop,
+            'total_items' => array_sum(array_column($byProduct, 'total_planned')),
+        ];
+    }
+
+    /**
+     * Confirm load: transition route from planned to loaded.
+     * Records adjustments when loaded quantities differ from planned.
+     */
+    public function confirmLoad(DeliveryRoute $route, array $loadedQuantities, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $loadedQuantities, $user) {
+            if ($route->status !== 'planned') {
+                throw $this->validationError('Solo se puede confirmar carga de rutas planificadas.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            $hasLoaded = false;
+
+            foreach ($loadedQuantities as $entry) {
+                $routeStopItemId = $entry['route_stop_item_id'];
+                $quantityLoaded = (int) $entry['quantity_loaded'];
+
+                $stopItem = RouteStopItem::where('id', $routeStopItemId)
+                    ->whereHas('routeStop', function (Builder $q) use ($route) {
+                        $q->where('route_id', $route->id)
+                            ->where('status', '!=', 'cancelled');
+                    })
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $stopItem) {
+                    throw $this->validationError("El item {$routeStopItemId} no pertenece a esta ruta.");
+                }
+
+                if ($quantityLoaded > $stopItem->quantity_planned) {
+                    throw $this->validationError(
+                        "La cantidad cargada ({$quantityLoaded}) no puede superar la planificada ({$stopItem->quantity_planned})."
+                    );
+                }
+
+                if ($quantityLoaded < $stopItem->quantity_planned) {
+                    if (empty($entry['reason'])) {
+                        throw $this->validationError(
+                            'Se requiere un motivo cuando la cantidad cargada es menor a la planificada.'
+                        );
+                    }
+                }
+
+                // Create adjustment if quantity changed
+                $oldQuantity = $stopItem->quantity_loaded;
+                if ($oldQuantity !== $quantityLoaded) {
+                    RouteLoadAdjustment::create([
+                        'route_stop_item_id' => $stopItem->id,
+                        'user_id' => $user->id,
+                        'old_quantity' => $oldQuantity,
+                        'new_quantity' => $quantityLoaded,
+                        'reason' => $entry['reason'] ?? 'other',
+                        'notes' => $entry['notes'] ?? null,
+                    ]);
+                }
+
+                $stopItem->update(['quantity_loaded' => $quantityLoaded]);
+
+                if ($quantityLoaded > 0) {
+                    $hasLoaded = true;
+                }
+            }
+
+            if (! $hasLoaded) {
+                throw $this->validationError('Al menos un producto debe tener cantidad cargada mayor a cero.');
+            }
+
+            $route->update([
+                'status' => 'loaded',
+                'loaded_at' => now(),
+                'loaded_by' => $user->id,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'route_loaded',
+                'planned',
+                'loaded',
+                null,
+                ['item_count' => count($loadedQuantities)]
+            );
+
+            return $route;
+        });
+    }
+
+    /**
+     * Dispatch a loaded route: transition to dispatched.
+     */
+    public function dispatch(DeliveryRoute $route, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $user) {
+            if ($route->status !== 'loaded') {
+                throw $this->validationError('Solo se pueden despachar rutas en estado loaded.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            // At least one stop must have items with quantity_loaded > 0
+            $hasLoadedItems = RouteStopItem::whereHas('routeStop', function (Builder $q) use ($route) {
+                $q->where('route_id', $route->id)
+                    ->where('status', '!=', 'cancelled');
+            })->where('quantity_loaded', '>', 0)->exists();
+
+            if (! $hasLoadedItems) {
+                throw $this->validationError('La ruta debe tener al menos un producto cargado para ser despachada.');
+            }
+
+            $route->update([
+                'status' => 'dispatched',
+                'dispatched_at' => now(),
+                'dispatched_by' => $user->id,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'route_dispatched',
+                'loaded',
+                'dispatched'
             );
 
             return $route;

@@ -103,6 +103,8 @@ class PermissionSeeder extends Seeder
       'logistics.routes.plan',
       'logistics.routes.revert',
       'logistics.routes.cancel',
+      'logistics.routes.load',
+      'logistics.routes.dispatch',
     ];
 
     // Create each permission if it doesn't exist

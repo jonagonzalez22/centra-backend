@@ -285,6 +285,23 @@ Route::prefix('v1')->group(function () {
                 Route::post('routes/{route}/recalculate', [RouteController::class, 'recalculate'])
                     ->middleware('permission:logistics.routes.plan')
                     ->name('store.routes.recalculate');
+
+                // Execution endpoints
+                Route::post('routes/{route}/stops/{stop}/items', [RouteController::class, 'assignItems'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.stops.items.store');
+
+                Route::get('routes/{route}/load-sheet', [RouteController::class, 'loadSheet'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.load-sheet');
+
+                Route::post('routes/{route}/confirm-load', [RouteController::class, 'confirmLoad'])
+                    ->middleware('permission:logistics.routes.load')
+                    ->name('store.routes.confirm-load');
+
+                Route::post('routes/{route}/dispatch', [RouteController::class, 'dispatch'])
+                    ->middleware('permission:logistics.routes.dispatch')
+                    ->name('store.routes.dispatch');
             });
 
             Route::middleware('feature:store_settings')->group(function () {

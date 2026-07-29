@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RouteStop extends Model
 {
@@ -42,6 +43,11 @@ class RouteStop extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(CommercialOperation::class, 'order_id');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(RouteStopItem::class, 'route_stop_id');
     }
 
     public function scopeActive(Builder $query): Builder

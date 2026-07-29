@@ -57,6 +57,8 @@ class SuperAdminPermissionsSeeder extends Seeder
       'logistics.routes.plan',
       'logistics.routes.revert',
       'logistics.routes.cancel',
+      'logistics.routes.load',
+      'logistics.routes.dispatch',
     ];
 
     foreach ($permissions as $permission) {
