@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
       \Database\Seeders\SuperAdminPermissionsSeeder::class,
       \Database\Seeders\Geography\ProvinceSeeder::class,
       \Database\Seeders\Geography\LocalitySeeder::class,
+      \Database\Seeders\DeliveryRejectionReasonSeeder::class,
     ]);
 
 

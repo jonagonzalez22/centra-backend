@@ -25,6 +25,10 @@ class RouteStop extends Model
         'logistics_notes',
         'estimated_arrival_at',
         'travel_duration_seconds',
+        'completed_by',
+        'completed_at',
+        'gps_lat',
+        'gps_lon',
     ];
 
     protected function casts(): array
@@ -32,6 +36,9 @@ class RouteStop extends Model
         return [
             'estimated_arrival_at' => 'datetime',
             'travel_duration_seconds' => 'integer',
+            'completed_at' => 'datetime',
+            'gps_lat' => 'decimal:7',
+            'gps_lon' => 'decimal:7',
         ];
     }
 
@@ -48,6 +55,11 @@ class RouteStop extends Model
     public function items(): HasMany
     {
         return $this->hasMany(RouteStopItem::class, 'route_stop_id');
+    }
+
+    public function completedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'completed_by');
     }
 
     public function scopeActive(Builder $query): Builder

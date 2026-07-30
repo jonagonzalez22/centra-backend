@@ -7486,6 +7486,309 @@
                 ]
             }
         },
+        "/driver/active-route": {
+            "get": {
+                "tags": [
+                    "Driver"
+                ],
+                "summary": "Obtener ruta activa del conductor",
+                "description": "Get the active (dispatched) route for the authenticated driver.",
+                "operationId": "a482d5f5ff2bce4bf88c76bfbda0c447",
+                "responses": {
+                    "200": {
+                        "description": "Ruta activa obtenida exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DriverActiveRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "meta": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No se encontró una ruta despachada para este conductor.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "error"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "No se encontró una ruta activa para este conductor."
+                                        },
+                                        "data": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "example": {
+                                                "error": [
+                                                    "No se encontró una ruta despachada para este conductor."
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/driver/stops/{stop}/arrive": {
+            "post": {
+                "tags": [
+                    "Driver"
+                ],
+                "summary": "Registrar llegada a una parada",
+                "description": "Mark arrival at a stop, optionally recording GPS coordinates.",
+                "operationId": "457b246627f6aa6ea58093c110884f0b",
+                "parameters": [
+                    {
+                        "name": "stop",
+                        "in": "path",
+                        "description": "ID del RouteStop",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "gps_lat": {
+                                        "type": "number",
+                                        "example": -34.6037,
+                                        "nullable": true
+                                    },
+                                    "gps_lon": {
+                                        "type": "number",
+                                        "example": -58.3816,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Llegada registrada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/RouteStop"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "meta": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Conductor no asignado a esta parada"
+                    },
+                    "404": {
+                        "description": "Parada no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/driver/stops/{stop}/complete": {
+            "post": {
+                "tags": [
+                    "Driver"
+                ],
+                "summary": "Completar entrega de una parada",
+                "description": "Complete a stop delivery with item-level quantities.",
+                "operationId": "aacfaad4cd48b090679cd774f775d497",
+                "parameters": [
+                    {
+                        "name": "stop",
+                        "in": "path",
+                        "description": "ID del RouteStop",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "status",
+                                    "items"
+                                ],
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "completed",
+                                            "failed"
+                                        ],
+                                        "example": "completed"
+                                    },
+                                    "gps_lat": {
+                                        "type": "number",
+                                        "example": -34.6037,
+                                        "nullable": true
+                                    },
+                                    "gps_lon": {
+                                        "type": "number",
+                                        "example": -58.3816,
+                                        "nullable": true
+                                    },
+                                    "rejection_reason_id": {
+                                        "description": "Requerido si status=failed",
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "nullable": true
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "route_stop_item_id",
+                                                "quantity_delivered"
+                                            ],
+                                            "properties": {
+                                                "route_stop_item_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "quantity_delivered": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "rejection_reason_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Entrega completada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/RouteStop"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "meta": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Conductor no asignado a esta parada"
+                    },
+                    "404": {
+                        "description": "Parada no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/geocoding/search": {
             "post": {
                 "tags": [
@@ -16333,6 +16636,88 @@
                 },
                 "type": "object"
             },
+            "DriverActiveRoute": {
+                "title": "DriverActiveRoute",
+                "description": "Ruta activa del conductor con vehiculo, conductor y paradas",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "planned",
+                            "dispatched",
+                            "cancelled"
+                        ],
+                        "example": "dispatched"
+                    },
+                    "vehicle": {
+                        "$ref": "#/components/schemas/VehicleResource"
+                    },
+                    "driver": {
+                        "$ref": "#/components/schemas/DriverResource"
+                    },
+                    "stops": {
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "example": "550e8400-e29b-41d4-a716-446655440010"
+                                },
+                                "sequence": {
+                                    "type": "integer",
+                                    "example": 1
+                                },
+                                "status": {
+                                    "type": "string",
+                                    "example": "pending"
+                                },
+                                "client": {
+                                    "properties": {
+                                        "name": {
+                                            "type": "string",
+                                            "example": "Juan Pérez"
+                                        },
+                                        "address": {
+                                            "type": "string",
+                                            "example": "Av. Corrientes 1234, CABA"
+                                        }
+                                    },
+                                    "type": "object"
+                                },
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "product_name": {
+                                                "type": "string",
+                                                "example": "Leche entera 1L"
+                                            },
+                                            "quantity_loaded": {
+                                                "type": "integer",
+                                                "example": 10
+                                            },
+                                            "quantity_delivered": {
+                                                "type": "integer",
+                                                "example": 0
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                },
+                "type": "object"
+            },
             "GeocodingResult": {
                 "title": "GeocodingResult",
                 "description": "Resultado de la geocodificación de una dirección",
@@ -17694,6 +18079,10 @@
         {
             "name": "Catálogos",
             "description": "Catálogos"
+        },
+        {
+            "name": "Driver",
+            "description": "Driver"
         },
         {
             "name": "Geocoding",

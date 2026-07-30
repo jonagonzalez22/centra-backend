@@ -47,6 +47,10 @@ class RouteStopResource extends JsonResource
             ]),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
+            'items' => RouteStopItemResource::collection($this->whenLoaded('items')),
+            'completed_at' => $this->completed_at?->format('Y-m-d H:i:s'),
+            'gps_lat' => $this->gps_lat,
+            'gps_lon' => $this->gps_lon,
         ];
     }
 }

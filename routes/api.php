@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\Admin\StoreController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogsController;
+use App\Http\Controllers\Api\V1\Driver\DriverExecutionController;
 use App\Http\Controllers\Api\V1\GeocodingController;
 use App\Http\Controllers\Api\V1\Store\CashSessionController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
@@ -44,6 +45,13 @@ Route::prefix('v1')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
         Route::post('geocoding/search', [GeocodingController::class, 'search'])->name('geocoding.search');
+    });
+
+    // Driver Execution API — authenticated drivers complete their assigned deliveries
+    Route::middleware(['auth:sanctum', 'role:STORE_DRIVER'])->prefix('driver')->group(function () {
+        Route::get('active-route', [DriverExecutionController::class, 'activeRoute']);
+        Route::post('stops/{stop}/arrive', [DriverExecutionController::class, 'arrive']);
+        Route::post('stops/{stop}/complete', [DriverExecutionController::class, 'complete']);
     });
 
     Route::prefix('admin')
