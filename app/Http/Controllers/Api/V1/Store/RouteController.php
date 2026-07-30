@@ -5,14 +5,20 @@ namespace App\Http\Controllers\Api\V1\Store;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\AddStopRequest;
 use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
+use App\Http\Requests\Api\V1\Store\ConfirmLoadRequest;
+use App\Http\Requests\Api\V1\Store\DispatchRouteRequest;
 use App\Http\Requests\Api\V1\Store\PlanRouteRequest;
 use App\Http\Requests\Api\V1\Store\RemoveStopRequest;
 use App\Http\Requests\Api\V1\Store\ReorderStopsRequest;
 use App\Http\Requests\Api\V1\Store\RevertRouteRequest;
+use App\Http\Requests\Api\V1\Store\StoreRouteItemsRequest;
 use App\Http\Requests\Api\V1\Store\StoreRouteRequest;
 use App\Http\Requests\Api\V1\Store\UpdateRouteRequest;
 use App\Http\Resources\DeliveryRouteResource;
 use App\Http\Resources\EligibleOrderResource;
+use App\Http\Resources\LoadSheetResource;
+use App\Http\Resources\RouteStopItemResource;
+use App\Http\Resources\RouteStopResource;
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRoute;
 use App\Models\RouteStop;
@@ -829,6 +835,270 @@ class RouteController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Ruta recalculada exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
+    // ── Execution Endpoints ──────────────────────────────────────────
+
+    /**
+     * Assign items (products) to a stop.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/stops/{stop}/items",
+     *   summary="Asignar items a un stop de la ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *   @OA\Parameter(name="stop", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID del stop"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *     @OA\JsonContent(
+     *       required={"items"},
+     *       @OA\Property(
+     *         property="items",
+     *         type="array",
+     *         @OA\Items(
+     *           required={"product_id", "quantity_planned"},
+     *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *           @OA\Property(property="quantity_planned", type="integer", example=5)
+     *         )
+     *       )
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=201,
+     *     description="Items asignados exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Items asignados exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/RouteStop"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta o stop no encontrado")
+     * )
+     */
+    public function assignItems(StoreRouteItemsRequest $request, string $routeId, string $stopId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $stop = RouteStop::where('id', $stopId)->where('route_id', $routeId)->first();
+
+        if (! $stop) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Stop no encontrado.',
+                'data' => null,
+                'errors' => ['stop_id' => ['El stop no existe o no pertenece a esta ruta.']],
+            ], 404);
+        }
+
+        $this->routeService->assignItems($route, $stop, $request->input('items'), $request->user());
+
+        $stop->load(['items.product']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Items asignados exitosamente.',
+            'data' => RouteStopResource::make($stop),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Get consolidated load sheet for warehouse picking.
+     *
+     * @OA\Get(
+     *   path="/store/routes/{route}/load-sheet",
+     *   summary="Obtener hoja de carga consolidada para picking",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Hoja de carga obtenida exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Hoja de carga obtenida exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/LoadSheet"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function loadSheet(Request $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->with(['stops' => fn ($q) => $q->orderBy('sequence')])->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $loadSheet = $this->routeService->getLoadSheet($route);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Hoja de carga obtenida exitosamente.',
+            'data' => LoadSheetResource::make($loadSheet),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Confirm load: transition route from planned to loaded.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/confirm-load",
+     *   summary="Confirmar carga de la ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *     @OA\JsonContent(
+     *       required={"items"},
+     *       @OA\Property(
+     *         property="items",
+     *         type="array",
+     *         @OA\Items(
+     *           required={"route_stop_item_id", "quantity_loaded"},
+     *           @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *           @OA\Property(property="quantity_loaded", type="integer", example=5),
+     *           @OA\Property(property="reason", type="string", example="Rotura de mercadería", nullable=true)
+     *         )
+     *       )
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Carga confirmada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Carga confirmada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function confirmLoad(ConfirmLoadRequest $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->confirmLoad($route, $request->input('items'), $request->user());
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.items.product', 'vehicle', 'driver', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Carga confirmada exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Dispatch a loaded route.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/dispatch",
+     *   summary="Despachar una ruta cargada",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta despachada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta despachada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function dispatch(DispatchRouteRequest $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->dispatch($route, $request->user());
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.items.product', 'vehicle', 'driver', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Ruta despachada exitosamente.',
             'data' => DeliveryRouteResource::make($route),
             'errors' => null,
         ]);

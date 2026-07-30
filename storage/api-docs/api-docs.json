@@ -13887,6 +13887,338 @@
                 ]
             }
         },
+        "/store/routes/{route}/stops/{stop}/items": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Asignar items a un stop de la ruta",
+                "description": "Assign items (products) to a stop.",
+                "operationId": "3f465537ecd16610297c3bdf1da9cf03",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "stop",
+                        "in": "path",
+                        "description": "ID del stop",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "product_id",
+                                                "quantity_planned"
+                                            ],
+                                            "properties": {
+                                                "product_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "quantity_planned": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Items asignados exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Items asignados exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/RouteStop"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta o stop no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/load-sheet": {
+            "get": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Obtener hoja de carga consolidada para picking",
+                "description": "Get consolidated load sheet for warehouse picking.",
+                "operationId": "059c647efc60f22a460490f568902f9d",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Hoja de carga obtenida exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Hoja de carga obtenida exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/LoadSheet"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/confirm-load": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Confirmar carga de la ruta",
+                "description": "Confirm load: transition route from planned to loaded.",
+                "operationId": "b81f3d82f28b9fff2c5f2fc5beba3fa8",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "route_stop_item_id",
+                                                "quantity_loaded"
+                                            ],
+                                            "properties": {
+                                                "route_stop_item_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "quantity_loaded": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "reason": {
+                                                    "type": "string",
+                                                    "example": "Rotura de mercadería",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Carga confirmada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Carga confirmada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/dispatch": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Despachar una ruta cargada",
+                "description": "Dispatch a loaded route.",
+                "operationId": "cf49e22a6549a18234ee4a18e6945cb9",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ruta despachada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta despachada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/users/filter-options": {
             "get": {
                 "tags": [
@@ -16867,6 +17199,146 @@
                             }
                         },
                         "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "LoadSheet": {
+                "title": "LoadSheet",
+                "description": "Hoja de carga consolidada para picking en depósito",
+                "properties": {
+                    "route_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "planned"
+                    },
+                    "operational_date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-07-30"
+                    },
+                    "by_product": {
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "product_id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                                },
+                                "product_name": {
+                                    "type": "string",
+                                    "example": "Leche entera 1L"
+                                },
+                                "total_planned": {
+                                    "type": "integer",
+                                    "example": 30
+                                },
+                                "total_loaded": {
+                                    "type": "integer",
+                                    "example": 0
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "by_stop": {
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "stop_id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                                },
+                                "sequence": {
+                                    "type": "integer",
+                                    "example": 1
+                                },
+                                "order_number": {
+                                    "type": "string",
+                                    "example": "OP-000001",
+                                    "nullable": true
+                                },
+                                "customer_name": {
+                                    "type": "string",
+                                    "example": "Juan Pérez",
+                                    "nullable": true
+                                },
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "route_stop_item_id": {
+                                                "type": "string",
+                                                "format": "uuid",
+                                                "example": "550e8400-e29b-41d4-a716-446655440003"
+                                            },
+                                            "product_id": {
+                                                "type": "string",
+                                                "format": "uuid",
+                                                "example": "550e8400-e29b-41d4-a716-446655440001"
+                                            },
+                                            "product_name": {
+                                                "type": "string",
+                                                "example": "Leche entera 1L"
+                                            },
+                                            "quantity_planned": {
+                                                "type": "integer",
+                                                "example": 10
+                                            },
+                                            "quantity_loaded": {
+                                                "type": "integer",
+                                                "example": 0
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "total_items": {
+                        "type": "integer",
+                        "example": 30
+                    }
+                },
+                "type": "object"
+            },
+            "RouteStopItem": {
+                "title": "RouteStopItem",
+                "description": "Representación de un item asignado a una parada de ruta",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440001"
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "example": "Leche entera 1L"
+                    },
+                    "quantity_planned": {
+                        "type": "integer",
+                        "example": 10
+                    },
+                    "quantity_loaded": {
+                        "type": "integer",
+                        "example": 10
+                    },
+                    "quantity_delivered": {
+                        "type": "integer",
+                        "example": 0
                     }
                 },
                 "type": "object"

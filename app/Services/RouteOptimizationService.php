@@ -141,7 +141,24 @@ class RouteOptimizationService
     {
         $route = $response['routes'][0] ?? [];
 
-        $optimizedOrder = $route['optimizedIntermediateWaypointIndex'] ?? range(0, $waypointCount - 1);
+        $optimizedOrder = $route['optimizedIntermediateWaypointIndex'] ?? null;
+
+        // Fallback: if Google returns empty or null (single stop, nothing to optimize),
+        // use natural order
+        if (empty($optimizedOrder) || ! is_array($optimizedOrder)) {
+            $optimizedOrder = range(0, max(0, $waypointCount - 1));
+        }
+
+        // Filter out invalid indices (Google may return -1 for unreachable waypoints)
+        $optimizedOrder = array_values(array_filter(
+            array_map('intval', $optimizedOrder),
+            fn (int $index) => $index >= 0 && $index < $waypointCount
+        ));
+
+        // If filtering removed all entries, fall back to natural order
+        if (empty($optimizedOrder)) {
+            $optimizedOrder = range(0, max(0, $waypointCount - 1));
+        }
 
         $durations = [];
         $legs = $route['legs'] ?? [];
