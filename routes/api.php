@@ -310,6 +310,10 @@ Route::prefix('v1')->group(function () {
                 Route::post('routes/{route}/dispatch', [RouteController::class, 'dispatch'])
                     ->middleware('permission:logistics.routes.dispatch')
                     ->name('store.routes.dispatch');
+
+                Route::post('routes/{route}/process-deliveries', [RouteController::class, 'processDeliveries'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.routes.process-deliveries');
             });
 
             Route::middleware('feature:store_settings')->group(function () {

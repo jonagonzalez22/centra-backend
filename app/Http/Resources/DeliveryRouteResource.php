@@ -22,6 +22,12 @@ class DeliveryRouteResource extends JsonResource
             'departure_time' => $this->departure_time,
             'encoded_polyline' => $this->encoded_polyline,
             'unload_time_minutes_snapshot' => $this->unload_time_minutes_snapshot,
+            'loaded_at' => $this->loaded_at?->format('Y-m-d H:i:s'),
+            'loaded_by' => $this->loaded_by,
+            'dispatched_at' => $this->dispatched_at?->format('Y-m-d H:i:s'),
+            'dispatched_by' => $this->dispatched_by,
+            'processed_at' => $this->processed_at?->format('Y-m-d H:i:s'),
+            'processed_by' => $this->processed_by,
             'requires_recalculation' => $this->requires_recalculation,
             'store' => $this->whenLoaded('store', fn () => [
                 'id' => $this->store->id,
