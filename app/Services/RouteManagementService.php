@@ -88,11 +88,6 @@ class RouteManagementService
                         ->whereNotNull('latitude')
                         ->whereNotNull('longitude');
                 });
-            })
-            ->whereNotIn('id', function ($subQuery) {
-                $subQuery->select('order_id')
-                    ->from('route_stops')
-                    ->where('status', '!=', 'cancelled');
             });
 
         if (! empty($filters['requested_delivery_date'])) {
@@ -134,6 +129,16 @@ class RouteManagementService
 
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
             $order = CommercialOperation::where('id', $order->id)->lockForUpdate()->first();
+
+            // Prevent duplicate stop for the same order in the same route
+            $duplicateInSameRoute = RouteStop::where('route_id', $route->id)
+                ->where('order_id', $order->id)
+                ->where('status', '!=', 'cancelled')
+                ->exists();
+
+            if ($duplicateInSameRoute) {
+                throw $this->validationError('El pedido ya tiene una parada activa en esta ruta.');
+            }
 
             $this->validateOrderEligible($order, $route->store_id);
 
@@ -359,6 +364,9 @@ class RouteManagementService
             // Persist ETAs, durations, and route data
             for ($i = 0; $i < count($optimizedOrder); $i++) {
                 $stopIndex = $optimizedOrder[$i];
+                if (! isset($stopIdMap[$stopIndex])) {
+                    continue;
+                }
                 $stopId = $stopIdMap[$stopIndex];
 
                 RouteStop::where('id', $stopId)
@@ -920,14 +928,9 @@ class RouteManagementService
             throw $this->validationError('El pedido no tiene una dirección de entrega geolocalizada.');
         }
 
-        // Check not already in an active route
-        $alreadyAssigned = RouteStop::where('order_id', $order->id)
-            ->where('status', '!=', 'cancelled')
-            ->exists();
-
-        if ($alreadyAssigned) {
-            throw $this->validationError('El pedido ya está asignado a una ruta activa.');
-        }
+        // Note: A single order CAN be split across multiple active routes.
+        // The correct control is at the product quantity level via
+        // route_stop_items.quantity_planned, validated in assignItems().
     }
 
     /**
@@ -1030,8 +1033,17 @@ class RouteManagementService
      */
     private function applyOptimizedOrder(string $routeId, array $stopIdMap, array $optimizedOrder): void
     {
+        // Guard: if optimizedOrder is empty (single stop, nothing to optimize),
+        // use natural order 0, 1, 2...
+        if (empty($optimizedOrder)) {
+            $optimizedOrder = range(0, count($stopIdMap) - 1);
+        }
+
         // Phase 1: move to temporary negative sequences
         foreach ($optimizedOrder as $newIndex => $oldIndex) {
+            if (! isset($stopIdMap[$oldIndex])) {
+                continue; // skip invalid indices
+            }
             $stopId = $stopIdMap[$oldIndex];
             RouteStop::where('id', $stopId)
                 ->where('route_id', $routeId)
@@ -1040,6 +1052,9 @@ class RouteManagementService
 
         // Phase 2: reassign to final positive sequences
         foreach ($optimizedOrder as $newIndex => $oldIndex) {
+            if (! isset($stopIdMap[$oldIndex])) {
+                continue;
+            }
             $stopId = $stopIdMap[$oldIndex];
             RouteStop::where('id', $stopId)
                 ->where('route_id', $routeId)

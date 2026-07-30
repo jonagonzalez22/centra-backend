@@ -384,7 +384,7 @@ test('rejects stop with exceptional assignment without reason', function () {
     $response->assertStatus(422);
 });
 
-test('rejects duplicate order in active route', function () {
+test('rejects duplicate order in same route', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);
     $customer = createCustomerWithAddress($this->store);
@@ -408,7 +408,7 @@ test('rejects duplicate order in active route', function () {
         'status' => 'pending',
     ]);
 
-    // Try adding same order again
+    // Try adding same order to SAME route — should be rejected
     $response = $this->withHeader('Authorization', "Bearer $this->token")
         ->postJson("/api/v1/store/routes/{$route->id}/stops", [
             'order_id' => $order->id,
@@ -416,6 +416,49 @@ test('rejects duplicate order in active route', function () {
         ]);
 
     $response->assertStatus(422);
+});
+
+test('allows same order in different active routes', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $customer = createCustomerWithAddress($this->store);
+    $order = createEligibleOrder($this->store, $customer);
+
+    // Route 1
+    $route1 = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'draft',
+    ]);
+
+    $order->update(['requested_delivery_date' => $route1->operational_date->format('Y-m-d')]);
+
+    RouteStop::create([
+        'route_id' => $route1->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    // Route 2 — same order, different route
+    $route2 = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDays(2)->format('Y-m-d'),
+        'status' => 'draft',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route2->id}/stops", [
+            'order_id' => $order->id,
+            'reason' => 'adelanto acordado',
+        ]);
+
+    $response->assertStatus(201);
+    expect(RouteStop::where('order_id', $order->id)->where('status', '!=', 'cancelled')->count())->toBe(2);
 });
 
 test('rejects ineligible order (wrong store)', function () {
@@ -835,7 +878,7 @@ test('returns eligible orders', function () {
         ->assertJsonPath('data.total', 2);
 });
 
-test('eligible orders excludes orders already in active routes', function () {
+test('eligible orders includes orders already in active routes (split allowed)', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);
     $customer = createCustomerWithAddress($this->store);
@@ -865,10 +908,11 @@ test('eligible orders excludes orders already in active routes', function () {
         ->getJson('/api/v1/store/routes/eligible-orders');
 
     $response->assertStatus(200);
-    // Should only return order2 (order1 is already assigned)
+    // Should return BOTH orders (splitting across routes is allowed)
     $items = $response->json('data.items');
     $orderIds = array_column($items, 'id');
-    expect($orderIds)->not->toContain($order1->id);
+    expect($orderIds)->toContain($order1->id);
+    expect($orderIds)->toContain($order2->id);
 });
 
 test('eligible orders filters by requested_delivery_date', function () {
