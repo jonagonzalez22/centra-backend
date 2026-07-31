@@ -19,6 +19,9 @@ class CompleteStopRequest extends FormRequest
             'status' => ['required', 'string', 'in:completed,failed'],
             'gps_lat' => ['nullable', 'numeric'],
             'gps_lon' => ['nullable', 'numeric'],
+            'signature_uri' => ['nullable', 'string', 'max:500'],
+            'evidence_uris' => ['nullable', 'array'],
+            'evidence_uris.*' => ['string'],
             'rejection_reason_id' => [
                 'required_if:status,failed',
                 'uuid',
@@ -40,6 +43,26 @@ class CompleteStopRequest extends FormRequest
                 'uuid',
                 'exists:delivery_rejection_reasons,id',
             ],
+            'payments' => ['nullable', 'array'],
+            'payments.*.store_payment_method_id' => [
+                'required',
+                'uuid',
+                'exists:store_payment_methods,id',
+            ],
+            'payments.*.amount' => [
+                'required',
+                'numeric',
+                'min:0.01',
+            ],
+            'payments.*.reference' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'payments.*.notes' => [
+                'nullable',
+                'string',
+            ],
         ];
     }
 
@@ -57,6 +80,11 @@ class CompleteStopRequest extends FormRequest
             'items.*.quantity_delivered.integer' => 'La cantidad debe ser un número entero.',
             'items.*.quantity_delivered.min' => 'La cantidad entregada no puede ser negativa.',
             'items.*.rejection_reason_id.exists' => 'El motivo de rechazo no es válido.',
+            'payments.*.store_payment_method_id.required' => 'El método de pago es obligatorio.',
+            'payments.*.store_payment_method_id.exists' => 'El método de pago no es válido.',
+            'payments.*.amount.required' => 'El monto del pago es obligatorio.',
+            'payments.*.amount.numeric' => 'El monto debe ser un número.',
+            'payments.*.amount.min' => 'El monto debe ser mayor a 0.',
         ];
     }
 

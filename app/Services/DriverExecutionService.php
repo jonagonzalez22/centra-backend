@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\RouteStop;
+use App\Models\RouteStopCollection;
 use App\Models\RouteStopItem;
+use App\Models\StorePaymentMethod;
 use App\Models\User;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +31,9 @@ class DriverExecutionService
                 },
                 'stops.items.product',
                 'stops.order.customer',
+                'stops.order.items',
+                'stops.order.payments',
+                'stops.order.payments.storePaymentMethod.paymentMethod',
             ])
             ->first();
     }
@@ -41,6 +46,7 @@ class DriverExecutionService
         $route = $this->validateDriverRoute($stop, $driver);
 
         $stop->update([
+            'status' => 'arrived',
             'gps_lat' => $data['gps_lat'] ?? null,
             'gps_lon' => $data['gps_lon'] ?? null,
         ]);
@@ -60,7 +66,7 @@ class DriverExecutionService
             // Lock the stop to prevent race conditions
             $stop = RouteStop::where('id', $stop->id)->lockForUpdate()->first();
 
-            if ($stop->status !== 'pending') {
+            if (! in_array($stop->status, ['pending', 'arrived'])) {
                 throw $this->validationError('Este stop ya fue procesado.');
             }
 
@@ -114,12 +120,74 @@ class DriverExecutionService
             // Determine final status
             $finalStatus = $allZero ? 'failed' : 'completed';
 
+            // ── Process payments (collections) ──────────────────────────
+            $payments = $data['payments'] ?? [];
+
+            if (! empty($payments)) {
+                $order = $stop->order()
+                    ->with(['items', 'payments'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $order) {
+                    throw $this->validationError('No se encontró el pedido asociado a este stop.');
+                }
+
+                // Calculate pending balance
+                $totalAmount = (float) $order->items->sum(function ($item) {
+                    return (float) $item->quantity * (float) $item->price;
+                });
+
+                $paidAmount = (float) $order->payments->sum('amount');
+                $pendingBalance = $totalAmount - $paidAmount;
+
+                if ($pendingBalance <= 0) {
+                    throw $this->validationError('El pedido no tiene saldo pendiente.');
+                }
+
+                $declaredTotal = array_sum(array_map(fn ($p) => (float) $p['amount'], $payments));
+
+                if ($declaredTotal > $pendingBalance) {
+                    throw $this->validationError('El total declarado supera el saldo pendiente del pedido.');
+                }
+
+                // Validate each payment and create collection
+                foreach ($payments as $payment) {
+                    $storePaymentMethod = StorePaymentMethod::where('id', $payment['store_payment_method_id'])
+                        ->where('store_id', $route->store_id)
+                        ->first();
+
+                    if (! $storePaymentMethod) {
+                        throw $this->validationError('El método de pago no pertenece a la tienda.');
+                    }
+
+                    if ($storePaymentMethod->requires_reference && empty($payment['reference'])) {
+                        throw $this->validationError('El método de pago requiere una referencia.');
+                    }
+
+                    RouteStopCollection::create([
+                        'store_id' => $route->store_id,
+                        'route_stop_id' => $stop->id,
+                        'commercial_operation_id' => $order->id,
+                        'store_payment_method_id' => $payment['store_payment_method_id'],
+                        'amount' => $payment['amount'],
+                        'reference' => $payment['reference'] ?? null,
+                        'notes' => $payment['notes'] ?? null,
+                        'declared_by' => $driver->id,
+                        'declared_at' => now(),
+                        'status' => 'declared',
+                    ]);
+                }
+            }
+
             $stop->update([
                 'status' => $finalStatus,
                 'completed_by' => $driver->id,
                 'completed_at' => now(),
                 'gps_lat' => $data['gps_lat'] ?? null,
                 'gps_lon' => $data['gps_lon'] ?? null,
+                'signature_uri' => $data['signature_uri'] ?? null,
+                'evidence_uris' => $data['evidence_uris'] ?? null,
             ]);
 
             // Create event

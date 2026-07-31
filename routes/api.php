@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMet
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
+use App\Http\Controllers\Api\V1\Store\RejectionReasonController;
 use App\Http\Controllers\Api\V1\Store\RouteController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
@@ -212,6 +213,10 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::middleware('feature:deliveries')->group(function () {
+                // Rejection reasons — global + store-specific
+                Route::get('logistics/rejection-reasons', [RejectionReasonController::class, 'index'])
+                    ->name('store.logistics.rejection-reasons');
+
                 // Catalog routes — MUST be before {vehicle} to avoid capture
                 Route::get('vehicles/catalogs/types', [VehicleCatalogController::class, 'types'])
                     ->middleware('permission:vehicles.view')
