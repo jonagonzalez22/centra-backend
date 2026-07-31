@@ -7510,7 +7510,18 @@
                                             "example": null
                                         },
                                         "data": {
-                                            "$ref": "#/components/schemas/DriverActiveRoute"
+                                            "properties": {
+                                                "route": {
+                                                    "$ref": "#/components/schemas/DeliveryRoute"
+                                                },
+                                                "available_payment_methods": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/DriverPaymentMethod"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
                                         },
                                         "errors": {
                                             "type": "null",
@@ -7702,6 +7713,20 @@
                                         "example": -58.3816,
                                         "nullable": true
                                     },
+                                    "signature_uri": {
+                                        "type": "string",
+                                        "maxLength": 500,
+                                        "example": "https://cdn.example.com/signatures/img001.png",
+                                        "nullable": true
+                                    },
+                                    "evidence_uris": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "https://cdn.example.com/evidence/img001.png"
+                                        },
+                                        "nullable": true
+                                    },
                                     "rejection_reason_id": {
                                         "description": "Requerido si status=failed",
                                         "type": "string",
@@ -7733,6 +7758,30 @@
                                             },
                                             "type": "object"
                                         }
+                                    },
+                                    "payments": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "store_payment_method_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "amount": {
+                                                    "type": "number",
+                                                    "format": "decimal",
+                                                    "example": 1500
+                                                },
+                                                "reference": {
+                                                    "type": "string",
+                                                    "example": "TRX-001234",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -13130,6 +13179,57 @@
                 ]
             }
         },
+        "/store/logistics/rejection-reasons": {
+            "get": {
+                "tags": [
+                    "Store - Logística"
+                ],
+                "summary": "Listar motivos de rechazo",
+                "description": "List active rejection reasons — global plus store-specific.",
+                "operationId": "fdf211e232f5a901d5a42830fa427cf9",
+                "responses": {
+                    "200": {
+                        "description": "Listado de motivos de rechazo",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/RejectionReason"
+                                            }
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        },
+                                        "meta": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/routes/eligible-orders": {
             "get": {
                 "tags": [
@@ -16783,6 +16883,43 @@
                 },
                 "type": "object"
             },
+            "DriverPaymentMethod": {
+                "title": "DriverPaymentMethod",
+                "description": "Método de pago disponible para el conductor",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "custom_name": {
+                        "type": "string",
+                        "example": "Transferencia Bco. Chile",
+                        "nullable": true
+                    },
+                    "is_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "requires_reference": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "payment_method": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/PaymentMethod"
+                            }
+                        ],
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "GeocodingResult": {
                 "title": "GeocodingResult",
                 "description": "Resultado de la geocodificación de una dirección",
@@ -16873,6 +17010,30 @@
                         "type": "integer",
                         "example": 202,
                         "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "RejectionReason": {
+                "title": "RejectionReason",
+                "description": "Motivo de rechazo de una entrega",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "code": {
+                        "type": "string",
+                        "example": "CUSTOMER_NOT_HOME"
+                    },
+                    "label": {
+                        "type": "string",
+                        "example": "Cliente no se encontraba en el domicilio"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
                     }
                 },
                 "type": "object"
@@ -18204,6 +18365,10 @@
         {
             "name": "Store - Usuarios",
             "description": "Store - Usuarios"
+        },
+        {
+            "name": "Store - Logística",
+            "description": "Store - Logística"
         },
         {
             "name": "Store - Rutas",

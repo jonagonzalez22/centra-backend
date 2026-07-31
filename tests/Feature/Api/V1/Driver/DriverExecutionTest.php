@@ -115,10 +115,10 @@ test('active route returns dispatched route for assigned driver', function () {
         ->getJson('/api/v1/driver/active-route');
 
     $response->assertStatus(200)
-        ->assertJsonPath('data.id', $data['route']->id)
-        ->assertJsonPath('data.status', 'dispatched')
-        ->assertJsonPath('data.stops.0.id', $data['stops'][0]->id)
-        ->assertJsonPath('data.stops.1.id', $data['stops'][1]->id);
+        ->assertJsonPath('data.route.id', $data['route']->id)
+        ->assertJsonPath('data.route.status', 'dispatched')
+        ->assertJsonPath('data.route.stops.0.id', $data['stops'][0]->id)
+        ->assertJsonPath('data.route.stops.1.id', $data['stops'][1]->id);
 });
 
 test('active route returns 404 when driver has no dispatched route', function () {
@@ -156,8 +156,8 @@ test('active route loads vehicle, stops, items, and customer relations', functio
         ->getJson('/api/v1/driver/active-route');
 
     $response->assertStatus(200)
-        ->assertJsonPath('data.vehicle.id', $this->vehicle->id)
-        ->assertJsonPath('data.stops.0.items.0.id', $data['items'][0]->id);
+        ->assertJsonPath('data.route.vehicle.id', $this->vehicle->id)
+        ->assertJsonPath('data.route.stops.0.items.0.id', $data['items'][0]->id);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

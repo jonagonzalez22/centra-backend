@@ -115,6 +115,30 @@ class CommercialOperation extends Model
         return $query;
     }
 
+    /**
+     * Sum of (quantity * price) across all operation items.
+     */
+    public function getTotalAmountAttribute(): float
+    {
+        return (float) $this->items()->sum(DB::raw('quantity * price'));
+    }
+
+    /**
+     * Sum of all recorded payments for this operation.
+     */
+    public function getPaidAmountAttribute(): float
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    /**
+     * total_amount minus paid_amount.
+     */
+    public function getPendingBalanceAttribute(): float
+    {
+        return $this->total_amount - $this->paid_amount;
+    }
+
     public function getDeliveryAddressAttribute(): ?CustomerAddress
     {
         if ($this->relationLoaded('customer')) {
