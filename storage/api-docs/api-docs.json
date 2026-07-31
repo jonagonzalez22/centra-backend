@@ -14522,6 +14522,71 @@
                 ]
             }
         },
+        "/store/routes/{route}/process-deliveries": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Procesar entregas de una ruta (reconciliación)",
+                "description": "Process deliveries: reconcile completed/failed stops, update inventory,\nrelease stock_reserved, update order statuses, and complete the route.",
+                "operationId": "3bd8a854594b2f5230d3a13e5b9b98d1",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Entregas procesadas exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Entregas procesadas exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Ruta ya procesada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/users/filter-options": {
             "get": {
                 "tags": [

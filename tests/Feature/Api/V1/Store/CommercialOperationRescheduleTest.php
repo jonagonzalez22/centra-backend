@@ -232,13 +232,16 @@ describe('PUT /api/v1/store/operations/{operation}/reschedule', function () {
     });
 
     test('it creates event record with correct dates on reschedule', function () {
+        $originalDate = now()->subDays(3)->format('Y-m-d');
+        $newDate = now()->addDays(5)->format('Y-m-d');
+
         $user = makeAuthUser($this->store, 'STORE_ADMIN', ['orders.edit']);
         $order = makeOrderForStore($this->store, [
-            'requested_delivery_date' => '2026-07-25',
+            'requested_delivery_date' => $originalDate,
         ]);
 
         $response = rescheduleOp($user, $order->id, [
-            'new_date' => '2026-07-30',
+            'new_date' => $newDate,
             'reason' => 'customer_requested_reschedule',
             'observation' => 'Pushed at customer request',
         ]);
@@ -247,8 +250,8 @@ describe('PUT /api/v1/store/operations/{operation}/reschedule', function () {
 
         $event = \App\Models\CommercialOperationEvent::where('operation_id', $order->id)->first();
         expect($event)->not->toBeNull()
-            ->and($event->previous_date->format('Y-m-d'))->toBe('2026-07-25')
-            ->and($event->new_date->format('Y-m-d'))->toBe('2026-07-30')
+            ->and($event->previous_date->format('Y-m-d'))->toBe($originalDate)
+            ->and($event->new_date->format('Y-m-d'))->toBe($newDate)
             ->and($event->reason)->toBe('customer_requested_reschedule')
             ->and($event->observation)->toBe('Pushed at customer request')
             ->and($event->store_id)->toBe($this->store->id);

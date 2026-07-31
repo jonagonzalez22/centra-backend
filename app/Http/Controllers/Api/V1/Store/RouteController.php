@@ -1103,4 +1103,61 @@ class RouteController extends Controller
             'errors' => null,
         ]);
     }
+
+    /**
+     * Process deliveries: reconcile completed/failed stops, update inventory,
+     * release stock_reserved, update order statuses, and complete the route.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/process-deliveries",
+     *   summary="Procesar entregas de una ruta (reconciliación)",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Entregas procesadas exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Entregas procesadas exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=409, description="Ruta ya procesada"),
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function processDeliveries(Request $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->processDeliveries($route, $request->user());
+
+        $route->load(['stops', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Entregas procesadas exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
 }

@@ -6,12 +6,15 @@ use App\Models\CommercialOperation;
 use App\Models\CustomerAddress;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
+use App\Models\InventoryMovement;
+use App\Models\Product;
 use App\Models\RouteLoadAdjustment;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\InventoryMovementService;
 use App\Services\RouteOptimizationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -841,6 +844,130 @@ class RouteManagementService
                 'route_dispatched',
                 'loaded',
                 'dispatched'
+            );
+
+            return $route;
+        });
+    }
+
+    /**
+     * Process deliveries: reconcile completed/failed stops, update inventory,
+     * release stock_reserved, update order statuses, and complete the route.
+     */
+    public function processDeliveries(DeliveryRoute $route, User $user): DeliveryRoute
+    {
+        try {
+            return $this->executeProcessDeliveries($route, $user);
+        } catch (\InvalidArgumentException $e) {
+            throw $this->validationError($e->getMessage());
+        }
+    }
+
+    /**
+     * Execute the processDeliveries logic inside a transaction.
+     */
+    private function executeProcessDeliveries(DeliveryRoute $route, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $user) {
+            // 1. Idempotency — check BEFORE status validation
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            if ($route->processed_at !== null) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'status' => 'error',
+                        'message' => 'La ruta ya fue procesada.',
+                        'data' => null,
+                        'errors' => ['error' => ['La ruta ya fue procesada.']],
+                    ], 409)
+                );
+            }
+
+            // 2. Validate pre-conditions
+            if ($route->status !== 'awaiting_reconciliation') {
+                throw $this->validationError('Solo se pueden procesar entregas de rutas en estado awaiting_reconciliation.');
+            }
+
+            // All stops must be completed, failed, or cancelled (no pending/arrived)
+            $pendingExists = RouteStop::where('route_id', $route->id)
+                ->whereNotIn('status', ['completed', 'failed', 'cancelled'])
+                ->exists();
+
+            if ($pendingExists) {
+                throw $this->validationError('Hay paradas pendientes de completar.');
+            }
+
+            // Store_id match
+            if ($route->store_id !== $user->store_id) {
+                throw $this->validationError('La ruta no pertenece a la tienda del usuario.');
+            }
+
+            // 3. Process each completed stop
+            $inventoryService = new InventoryMovementService();
+            $orderDelivered = [];
+
+            $completedStops = $route->stops()
+                ->where('status', 'completed')
+                ->with('items.product')
+                ->get();
+
+            foreach ($completedStops as $stop) {
+                foreach ($stop->items as $item) {
+                    if ($item->quantity_delivered <= 0) {
+                        continue;
+                    }
+
+                    // a. Record inventory movement (output)
+                    $inventoryService->recordMovement(
+                        $item->product,
+                        $user,
+                        'output',
+                        $item->quantity_delivered,
+                        "Entrega ruta {$route->id} — Pedido {$stop->order_id}"
+                    );
+
+                    // b. Release stock_reserved
+                    $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                    $newReserved = max(0, $product->stock_reserved - $item->quantity_delivered);
+                    $product->update(['stock_reserved' => $newReserved]);
+
+                    // c. Track delivered quantity per order
+                    $orderDelivered[$stop->order_id] = ($orderDelivered[$stop->order_id] ?? 0) + $item->quantity_delivered;
+                }
+            }
+
+            // 4. Update order statuses
+            foreach ($orderDelivered as $orderId => $deliveredQty) {
+                $order = CommercialOperation::find($orderId);
+
+                if (! $order) {
+                    continue;
+                }
+
+                $totalOrdered = $order->items()->sum('quantity');
+
+                if ($deliveredQty >= $totalOrdered) {
+                    $order->update(['status' => 'delivered']);
+                } elseif ($deliveredQty > 0) {
+                    $order->update(['status' => 'partially_delivered']);
+                }
+                // deliveredQty == 0 (failed stop): order status unchanged
+            }
+
+            // 5. Complete route
+            $route->update([
+                'status' => 'completed',
+                'processed_at' => now(),
+                'processed_by' => $user->id,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'route_processed',
+                'awaiting_reconciliation',
+                'completed'
             );
 
             return $route;
