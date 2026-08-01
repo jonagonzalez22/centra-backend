@@ -213,9 +213,18 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::middleware('feature:deliveries')->group(function () {
-                // Rejection reasons — global + store-specific
+                // Rejection reasons — CRUD (global + store-specific)
                 Route::get('logistics/rejection-reasons', [RejectionReasonController::class, 'index'])
-                    ->name('store.logistics.rejection-reasons');
+                    ->name('store.logistics.rejection-reasons.index');
+                Route::post('logistics/rejection-reasons', [RejectionReasonController::class, 'store'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.logistics.rejection-reasons.store');
+                Route::put('logistics/rejection-reasons/{id}', [RejectionReasonController::class, 'update'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.logistics.rejection-reasons.update');
+                Route::delete('logistics/rejection-reasons/{id}', [RejectionReasonController::class, 'destroy'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.logistics.rejection-reasons.destroy');
 
                 // Catalog routes — MUST be before {vehicle} to avoid capture
                 Route::get('vehicles/catalogs/types', [VehicleCatalogController::class, 'types'])

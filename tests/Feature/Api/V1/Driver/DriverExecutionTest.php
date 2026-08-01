@@ -281,7 +281,7 @@ test('complete stop with partial delivery and rejection reasons', function () {
     $item1 = $data['items'][0];
     $item2 = $data['items'][1];
 
-    $reason = DeliveryRejectionReason::where('code', 'cliente_ausente')->first();
+    $reason = DeliveryRejectionReason::where('code', 'customer_absent')->first();
 
     $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
         ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
@@ -330,7 +330,7 @@ test('complete stop with zero delivered is failed and requires rejection_reason_
     $item1 = $data['items'][0];
     $item2 = $data['items'][1];
 
-    $reason = DeliveryRejectionReason::where('code', 'cliente_ausente')->first();
+    $reason = DeliveryRejectionReason::where('code', 'customer_absent')->first();
 
     $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
         ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
@@ -512,7 +512,7 @@ test('transition awaits all stops when mix of completed and failed', function ()
     $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
     $stop1 = $data['stops'][0];
     $stop2 = $data['stops'][1];
-    $reason = DeliveryRejectionReason::where('code', 'cliente_ausente')->first();
+    $reason = DeliveryRejectionReason::where('code', 'customer_absent')->first();
 
     $itemsStop1 = RouteStopItem::where('route_stop_id', $stop1->id)->get();
     $itemsStop2 = RouteStopItem::where('route_stop_id', $stop2->id)->get();
