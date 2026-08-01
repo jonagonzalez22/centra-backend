@@ -10,12 +10,12 @@ class DeliveryRejectionReasonSeeder extends Seeder
     public function run(): void
     {
         $reasons = [
-            ['code' => 'cliente_ausente', 'label' => 'Cliente ausente'],
-            ['code' => 'producto_danado', 'label' => 'Producto dañado'],
-            ['code' => 'error_pedido', 'label' => 'Error en pedido / producto equivocado'],
-            ['code' => 'local_cerrado', 'label' => 'Local cerrado'],
-            ['code' => 'cliente_sin_espacio', 'label' => 'Cliente sin espacio'],
-            ['code' => 'otros', 'label' => 'Otros'],
+            ['code' => 'customer_absent', 'label' => 'Cliente ausente'],
+            ['code' => 'wrong_address', 'label' => 'Dirección incorrecta'],
+            ['code' => 'rejected_by_customer', 'label' => 'Mercadería rechazada por el cliente'],
+            ['code' => 'access_issue', 'label' => 'Problema de acceso al domicilio'],
+            ['code' => 'damaged_goods', 'label' => 'Mercadería dañada'],
+            ['code' => 'no_payment', 'label' => 'Cliente sin efectivo para abonar'],
         ];
 
         foreach ($reasons as $reason) {
