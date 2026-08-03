@@ -328,6 +328,27 @@ Route::prefix('v1')->group(function () {
                 Route::post('routes/{route}/process-deliveries', [RouteController::class, 'processDeliveries'])
                     ->middleware('permission:logistics.routes.manage')
                     ->name('store.routes.process-deliveries');
+
+                // Reconciliation endpoints
+                Route::get('routes/{route}/reconciliation', [RouteController::class, 'reconciliation'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.reconciliation');
+
+                Route::post('routes/{route}/collections/{collection}/verify', [RouteController::class, 'verifyCollection'])
+                    ->middleware('permission:logistics.routes.reconcile')
+                    ->name('store.routes.collections.verify');
+
+                Route::post('routes/{route}/collections/{collection}/reject', [RouteController::class, 'rejectCollection'])
+                    ->middleware('permission:logistics.routes.reconcile')
+                    ->name('store.routes.collections.reject');
+
+                Route::post('routes/{route}/discrepancies', [RouteController::class, 'resolveDiscrepancy'])
+                    ->middleware('permission:logistics.routes.reconcile')
+                    ->name('store.routes.discrepancies.resolve');
+
+                Route::post('routes/{route}/finalize-reconciliation', [RouteController::class, 'finalizeReconciliation'])
+                    ->middleware('permission:logistics.routes.reconcile')
+                    ->name('store.routes.finalize-reconciliation');
             });
 
             Route::middleware('feature:store_settings')->group(function () {

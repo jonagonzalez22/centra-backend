@@ -7,21 +7,28 @@ use App\Http\Requests\Api\V1\Store\AddStopRequest;
 use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
 use App\Http\Requests\Api\V1\Store\ConfirmLoadRequest;
 use App\Http\Requests\Api\V1\Store\DispatchRouteRequest;
+use App\Http\Requests\Api\V1\Store\FinalizeReconciliationRequest;
 use App\Http\Requests\Api\V1\Store\PlanRouteRequest;
+use App\Http\Requests\Api\V1\Store\RejectCollectionRequest;
 use App\Http\Requests\Api\V1\Store\RemoveStopRequest;
 use App\Http\Requests\Api\V1\Store\ReorderStopsRequest;
+use App\Http\Requests\Api\V1\Store\ResolveDiscrepancyRequest;
 use App\Http\Requests\Api\V1\Store\RevertRouteRequest;
 use App\Http\Requests\Api\V1\Store\StoreRouteItemsRequest;
 use App\Http\Requests\Api\V1\Store\StoreRouteRequest;
 use App\Http\Requests\Api\V1\Store\UpdateRouteRequest;
+use App\Http\Requests\Api\V1\Store\VerifyCollectionRequest;
 use App\Http\Resources\DeliveryRouteResource;
 use App\Http\Resources\EligibleOrderResource;
 use App\Http\Resources\LoadSheetResource;
+use App\Http\Resources\ReconciliationResource;
 use App\Http\Resources\RouteStopItemResource;
 use App\Http\Resources\RouteStopResource;
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRoute;
 use App\Models\RouteStop;
+use App\Models\RouteStopCollection;
+use App\Models\RouteStopItem;
 use App\Services\RouteManagementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -1156,6 +1163,388 @@ class RouteController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Entregas procesadas exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
+    // ── Reconciliation Endpoints ─────────────────────────────────────
+
+    /**
+     * Get reconciliation summary for a route.
+     *
+     * @OA\Get(
+     *   path="/store/routes/{route}/reconciliation",
+     *   summary="Obtener resumen de conciliación de una ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Resumen de conciliación obtenido exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Resumen de conciliación obtenido exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/Reconciliation"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function reconciliation(Request $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $summary = $this->routeService->getReconciliation($route);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Resumen de conciliación obtenido exitosamente.',
+            'data' => ReconciliationResource::make($summary),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Verify a declared collection.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/collections/{collection}/verify",
+     *   summary="Verificar una cobranza declarada",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *   @OA\Parameter(name="collection", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la cobranza"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Cobranza verificada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Cobranza verificada exitosamente."),
+     *       @OA\Property(property="data", type="object",
+     *         @OA\Property(property="id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *         @OA\Property(property="status", type="string", example="verified"),
+     *         @OA\Property(property="operation_payment_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001", nullable=true)
+     *       ),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=403, description="No autorizado"),
+     *   @OA\Response(response=404, description="Ruta o cobranza no encontrada"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function verifyCollection(VerifyCollectionRequest $request, string $routeId, string $collectionId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $collection = RouteStopCollection::forStore($storeId)->find($collectionId);
+
+        if (! $collection) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cobranza no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La cobranza no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $collection = $this->routeService->verifyCollection($collection, $request->user());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cobranza verificada exitosamente.',
+            'data' => [
+                'id' => $collection->id,
+                'status' => $collection->status,
+                'operation_payment_id' => $collection->operation_payment_id,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Reject a declared collection.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/collections/{collection}/reject",
+     *   summary="Rechazar una cobranza declarada",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *   @OA\Parameter(name="collection", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la cobranza"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"reason"},
+     *
+     *       @OA\Property(property="reason", type="string", example="El monto declarado no coincide con el comprobante")
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Cobranza rechazada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Cobranza rechazada exitosamente."),
+     *       @OA\Property(property="data", type="object",
+     *         @OA\Property(property="id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *         @OA\Property(property="status", type="string", example="rejected"),
+     *         @OA\Property(property="rejection_reason", type="string", example="El monto declarado no coincide con el comprobante")
+     *       ),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=403, description="No autorizado"),
+     *   @OA\Response(response=404, description="Ruta o cobranza no encontrada"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function rejectCollection(RejectCollectionRequest $request, string $routeId, string $collectionId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $collection = RouteStopCollection::forStore($storeId)->find($collectionId);
+
+        if (! $collection) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cobranza no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La cobranza no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $collection = $this->routeService->rejectCollection($collection, $request->reason, $request->user());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cobranza rechazada exitosamente.',
+            'data' => [
+                'id' => $collection->id,
+                'status' => $collection->status,
+                'rejection_reason' => $collection->rejection_reason,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Resolve a delivery discrepancy.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/discrepancies",
+     *   summary="Resolver una discrepancia de entrega",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"route_stop_item_id", "resolution_type", "quantity_to_resolve"},
+     *
+     *       @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000", description="ID del item de parada con discrepancia"),
+     *       @OA\Property(property="resolution_type", type="string", enum={"returned", "pending_redelivery", "missing", "damaged", "rejected_by_customer", "other"}, example="returned"),
+     *       @OA\Property(property="quantity_to_resolve", type="integer", example=2),
+     *       @OA\Property(property="notes", type="string", example="Cliente rechazó 2 unidades por vencimiento", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Discrepancia resuelta exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Discrepancia resuelta exitosamente."),
+     *       @OA\Property(property="data", type="object",
+     *         @OA\Property(property="id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *         @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001"),
+     *         @OA\Property(property="resolution_type", type="string", example="returned"),
+     *         @OA\Property(property="difference_quantity", type="integer", example=2)
+     *       ),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Ruta o item no encontrado"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function resolveDiscrepancy(ResolveDiscrepancyRequest $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $item = RouteStopItem::find($request->route_stop_item_id);
+
+        if (! $item) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Item de parada no encontrado.',
+                'data' => null,
+                'errors' => ['route_stop_item_id' => ['El item no existe.']],
+            ], 404);
+        }
+
+        // Validate the item belongs to a stop on this route
+        $stopBelongsToRoute = RouteStop::where('id', $item->route_stop_id)
+            ->where('route_id', $route->id)
+            ->exists();
+
+        if (! $stopBelongsToRoute) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El item no pertenece a esta ruta.',
+                'data' => null,
+                'errors' => ['route_stop_item_id' => ['El item no pertenece a esta ruta.']],
+            ], 422);
+        }
+
+        $discrepancy = $this->routeService->resolveDiscrepancy($item, $request->validated(), $request->user());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Discrepancia resuelta exitosamente.',
+            'data' => [
+                'id' => $discrepancy->id,
+                'route_stop_item_id' => $discrepancy->route_stop_item_id,
+                'resolution_type' => $discrepancy->resolution_type,
+                'difference_quantity' => $discrepancy->difference_quantity,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Finalize reconciliation and complete the route.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/finalize-reconciliation",
+     *   summary="Finalizar conciliación y completar la ruta",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="observations", type="string", example="Ruta conciliada sin novedades", nullable=true)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta conciliada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta conciliada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Ruta no encontrada"),
+     *   @OA\Response(response=409, description="La ruta tiene discrepancias pendientes"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function finalizeReconciliation(FinalizeReconciliationRequest $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->finalizeReconciliation(
+            $route,
+            $request->user(),
+            $request->observations ?? null
+        );
+
+        $route->load(['stops', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Ruta conciliada exitosamente.',
             'data' => DeliveryRouteResource::make($route),
             'errors' => null,
         ]);

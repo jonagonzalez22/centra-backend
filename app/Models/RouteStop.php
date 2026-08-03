@@ -60,6 +60,11 @@ class RouteStop extends Model
         return $this->hasMany(RouteStopItem::class, 'route_stop_id');
     }
 
+    public function collections(): HasMany
+    {
+        return $this->hasMany(RouteStopCollection::class, 'route_stop_id');
+    }
+
     public function completedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'completed_by');

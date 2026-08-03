@@ -260,11 +260,11 @@ describe('PUT /api/v1/store/operations/{operation}/reschedule', function () {
     test('it updates operation requested_delivery_date', function () {
         $user = makeAuthUser($this->store, 'STORE_ADMIN', ['orders.edit']);
         $order = makeOrderForStore($this->store, [
-            'requested_delivery_date' => '2026-07-20',
+            'requested_delivery_date' => now()->subDays(5)->format('Y-m-d'),
         ]);
 
         $response = rescheduleOp($user, $order->id, [
-            'new_date' => '2026-08-01',
+            'new_date' => now()->addDays(5)->format('Y-m-d'),
             'reason' => 'operational_issue',
         ]);
 

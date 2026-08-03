@@ -62,11 +62,9 @@ class OrderController extends Controller
             ->byType('order')
             ->with(['customer.addresses.locality', 'items', 'payments']);
 
-        // Status: default solo activos
+        // Status filter: applied only when explicitly provided
         if ($request->filled('status')) {
             $query->byStatus($request->status);
-        } else {
-            $query->whereIn('status', ['open', 'confirmed']);
         }
 
         // Filtros de fecha
