@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class RouteStopItem extends Model
+class DeliveryDiscrepancy extends Model
 {
     use HasFactory, HasUuids;
 
@@ -17,25 +17,30 @@ class RouteStopItem extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'route_stop_id',
+        'route_stop_item_id',
         'product_id',
-        'quantity_planned',
         'quantity_loaded',
         'quantity_delivered',
+        'difference_quantity',
+        'resolution_type',
+        'notes',
+        'resolved_by',
+        'resolved_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'quantity_planned' => 'integer',
             'quantity_loaded' => 'integer',
             'quantity_delivered' => 'integer',
+            'difference_quantity' => 'integer',
+            'resolved_at' => 'datetime',
         ];
     }
 
-    public function routeStop(): BelongsTo
+    public function routeStopItem(): BelongsTo
     {
-        return $this->belongsTo(RouteStop::class, 'route_stop_id');
+        return $this->belongsTo(RouteStopItem::class, 'route_stop_item_id');
     }
 
     public function product(): BelongsTo
@@ -43,13 +48,13 @@ class RouteStopItem extends Model
         return $this->belongsTo(Product::class);
     }
 
-    public function adjustments(): HasMany
+    public function resolvedBy(): BelongsTo
     {
-        return $this->hasMany(RouteLoadAdjustment::class, 'route_stop_item_id');
+        return $this->belongsTo(User::class, 'resolved_by');
     }
 
-    public function discrepancy(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function scopeUnresolved(Builder $query): Builder
     {
-        return $this->hasOne(DeliveryDiscrepancy::class, 'route_stop_item_id');
+        return $query->whereNull('resolution_type');
     }
 }

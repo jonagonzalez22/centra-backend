@@ -4,12 +4,15 @@ namespace App\Services;
 
 use App\Models\CommercialOperation;
 use App\Models\CustomerAddress;
+use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\InventoryMovement;
+use App\Models\OperationPayment;
 use App\Models\Product;
 use App\Models\RouteLoadAdjustment;
 use App\Models\RouteStop;
+use App\Models\RouteStopCollection;
 use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
@@ -966,6 +969,360 @@ class RouteManagementService
                 $route->store_id,
                 $user->id,
                 'route_processed',
+                'awaiting_reconciliation',
+                'completed'
+            );
+
+            return $route;
+        });
+    }
+
+    // ── Reconciliation Methods ───────────────────────────────────────
+
+    /**
+     * Get the full reconciliation summary for a route.
+     * Read-only — no transaction needed.
+     */
+    public function getReconciliation(DeliveryRoute $route): array
+    {
+        if ($route->status !== 'awaiting_reconciliation') {
+            throw $this->validationError('La ruta no está en estado de conciliación.');
+        }
+
+        $route->load([
+            'stops' => fn ($q) => $q->where('status', '!=', 'cancelled')->orderBy('sequence'),
+            'stops.items.product',
+            'stops.items.discrepancy',
+            'stops.order' => fn ($q) => $q->with(['customer', 'payments.storePaymentMethod.paymentMethod']),
+            'stops.collections' => fn ($q) => $q->with(['storePaymentMethod.paymentMethod', 'declaredBy']),
+            'vehicle',
+            'driver',
+            'events' => fn ($q) => $q->orderBy('created_at'),
+        ]);
+
+        $declaredAmount = 0;
+        $verifiedAmount = 0;
+        $rejectedAmount = 0;
+        $hasDeclaredCollections = false;
+        $allDiscrepanciesResolved = true;
+        $hasNegativeDifferences = false;
+
+        $stopsData = [];
+
+        foreach ($route->stops as $stop) {
+            $stopItems = [];
+            $stopHasUnresolved = false;
+
+            foreach ($stop->items as $item) {
+                $diff = $item->quantity_loaded - $item->quantity_delivered;
+                $discrepancy = $item->discrepancy ?? null;
+
+                $stopItems[] = [
+                    'route_stop_item_id' => $item->id,
+                    'product_id' => $item->product_id,
+                    'product_name' => $item->product?->name,
+                    'quantity_loaded' => $item->quantity_loaded,
+                    'quantity_delivered' => $item->quantity_delivered,
+                    'difference' => $diff,
+                    'discrepancy' => $discrepancy ? [
+                        'id' => $discrepancy->id,
+                        'resolution_type' => $discrepancy->resolution_type,
+                        'notes' => $discrepancy->notes,
+                        'resolved_at' => $discrepancy->resolved_at?->format('Y-m-d H:i:s'),
+                    ] : null,
+                ];
+
+                if ($diff > 0 && ! $discrepancy) {
+                    $stopHasUnresolved = true;
+                    $allDiscrepanciesResolved = false;
+                }
+
+                if ($diff < 0) {
+                    $hasNegativeDifferences = true;
+                }
+            }
+
+            $stopCollections = [];
+            $stopOrderData = null;
+
+            if ($stop->order) {
+                foreach ($stop->collections as $collection) {
+                    $collectionAmount = (float) $collection->amount;
+
+                    if ($collection->status === 'declared') {
+                        $declaredAmount += $collectionAmount;
+                        $hasDeclaredCollections = true;
+                    } elseif ($collection->status === 'verified') {
+                        $verifiedAmount += $collectionAmount;
+                    } elseif ($collection->status === 'rejected') {
+                        $rejectedAmount += $collectionAmount;
+                    }
+
+                    $stopCollections[] = [
+                        'id' => $collection->id,
+                        'status' => $collection->status,
+                        'amount' => $collectionAmount,
+                        'reference' => $collection->reference,
+                        'notes' => $collection->notes,
+                        'payment_method' => $collection->storePaymentMethod?->paymentMethod?->name
+                            ?? $collection->storePaymentMethod?->custom_name,
+                        'declared_by' => $collection->declaredBy?->name,
+                        'declared_at' => $collection->declared_at?->format('Y-m-d H:i:s'),
+                        'verified_at' => $collection->verified_at?->format('Y-m-d H:i:s'),
+                    ];
+                }
+
+                $stopOrderData = [
+                    'id' => $stop->order->id,
+                    'operation_number' => $stop->order->operation_number,
+                    'customer_name' => $stop->order->customer?->display_name ?? $stop->order->customer?->name,
+                    'total_amount' => (float) $stop->order->items?->sum(fn ($i) => (float) $i->quantity * (float) $i->price) ?? 0,
+                    'paid_amount' => (float) ($stop->order->payments?->sum('amount') ?? 0),
+                ];
+                $stopOrderData['pending_balance'] = $stopOrderData['total_amount'] - $stopOrderData['paid_amount'];
+            }
+
+            $stopsData[] = [
+                'stop_id' => $stop->id,
+                'sequence' => $stop->sequence,
+                'status' => $stop->status,
+                'order' => $stopOrderData,
+                'items' => $stopItems,
+                'collections' => $stopCollections,
+            ];
+        }
+
+        $canClose = ! $hasDeclaredCollections && ! $hasNegativeDifferences && $allDiscrepanciesResolved;
+
+        return [
+            'route_id' => $route->id,
+            'status' => $route->status,
+            'operational_date' => $route->operational_date?->format('Y-m-d'),
+            'vehicle' => $route->vehicle?->plate_number ?? $route->vehicle?->name,
+            'driver' => $route->driver?->name,
+            'stops' => $stopsData,
+            'totals' => [
+                'declared_amount' => $declaredAmount,
+                'verified_amount' => $verifiedAmount,
+                'rejected_amount' => $rejectedAmount,
+            ],
+            'can_close' => $canClose,
+        ];
+    }
+
+    /**
+     * Verify a declared collection and create the corresponding OperationPayment.
+     */
+    public function verifyCollection(RouteStopCollection $collection, User $user): RouteStopCollection
+    {
+        return DB::transaction(function () use ($collection, $user) {
+            if ($collection->status !== 'declared') {
+                throw $this->validationError('La cobranza ya fue procesada.');
+            }
+
+            if ($collection->operation_payment_id !== null) {
+                throw $this->validationError('La cobranza ya tiene un pago asociado.');
+            }
+
+            $collection = RouteStopCollection::where('id', $collection->id)->lockForUpdate()->first();
+
+            $order = CommercialOperation::with(['items', 'payments'])->find($collection->commercial_operation_id);
+
+            if (! $order) {
+                throw $this->validationError('El pedido asociado a la cobranza no existe.');
+            }
+
+            $totalAmount = (float) $order->items->sum(fn ($i) => (float) $i->quantity * (float) $i->price);
+            $paidAmount = (float) $order->payments->sum('amount');
+            $pendingBalance = $totalAmount - $paidAmount;
+
+            if ((float) $collection->amount > $pendingBalance) {
+                throw $this->validationError('El monto supera el saldo pendiente del pedido.');
+            }
+
+            $payment = OperationPayment::create([
+                'operation_id' => $collection->commercial_operation_id,
+                'store_payment_method_id' => $collection->store_payment_method_id,
+                'amount' => $collection->amount,
+                'reference' => $collection->reference,
+                'payment_details' => [
+                    'route_stop_collection_id' => $collection->id,
+                    'declared_by' => $collection->declared_by,
+                ],
+            ]);
+
+            $collection->update([
+                'status' => 'verified',
+                'verified_by' => $user->id,
+                'verified_at' => now(),
+                'operation_payment_id' => $payment->id,
+            ]);
+
+            return $collection;
+        });
+    }
+
+    /**
+     * Reject a declared collection (no OperationPayment created).
+     */
+    public function rejectCollection(RouteStopCollection $collection, string $reason, User $user): RouteStopCollection
+    {
+        return DB::transaction(function () use ($collection, $reason, $user) {
+            if ($collection->status !== 'declared') {
+                throw $this->validationError('La cobranza ya fue procesada.');
+            }
+
+            $collection = RouteStopCollection::where('id', $collection->id)->lockForUpdate()->first();
+
+            $collection->update([
+                'status' => 'rejected',
+                'rejection_reason' => $reason,
+                'verified_by' => $user->id,
+                'verified_at' => now(),
+            ]);
+
+            return $collection;
+        });
+    }
+
+    /**
+     * Resolve a delivery discrepancy for a RouteStopItem.
+     */
+    public function resolveDiscrepancy(RouteStopItem $item, array $data, User $user): DeliveryDiscrepancy
+    {
+        return DB::transaction(function () use ($item, $data, $user) {
+            $diff = $item->quantity_loaded - $item->quantity_delivered;
+
+            if ($diff <= 0) {
+                throw $this->validationError('No hay diferencia que resolver.');
+            }
+
+            $quantityToResolve = (int) $data['quantity_to_resolve'];
+
+            if ($quantityToResolve > $diff) {
+                throw $this->validationError('La cantidad a resolver supera la diferencia real.');
+            }
+
+            $discrepancy = DeliveryDiscrepancy::updateOrCreate(
+                ['route_stop_item_id' => $item->id],
+                [
+                    'product_id' => $item->product_id,
+                    'quantity_loaded' => $item->quantity_loaded,
+                    'quantity_delivered' => $item->quantity_delivered,
+                    'difference_quantity' => $diff,
+                    'resolution_type' => $data['resolution_type'],
+                    'notes' => $data['notes'] ?? null,
+                    'resolved_by' => $user->id,
+                    'resolved_at' => now(),
+                ]
+            );
+
+            return $discrepancy;
+        });
+    }
+
+    /**
+     * Finalize the reconciliation and complete the route.
+     * Validates: no pending collections, all discrepancies resolved,
+     * no negative differences, then transitions to completed.
+     */
+    public function finalizeReconciliation(DeliveryRoute $route, User $user, ?string $observations = null): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $user, $observations) {
+            // Idempotency check — must be BEFORE status validation
+            if ($route->processed_at !== null) {
+                throw new HttpResponseException(
+                    response()->json([
+                        'status' => 'error',
+                        'message' => 'La ruta ya fue conciliada.',
+                        'data' => null,
+                        'errors' => ['error' => ['La ruta ya fue conciliada.']],
+                    ], 409)
+                );
+            }
+
+            if ($route->status !== 'awaiting_reconciliation') {
+                throw $this->validationError('La ruta no está en estado de conciliación.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            $stops = $route->stops()
+                ->where('status', '!=', 'cancelled')
+                ->with(['items', 'collections'])
+                ->get();
+
+            // Check for any declared (unprocessed) collections
+            $declaredCollections = RouteStopCollection::whereIn(
+                'route_stop_id',
+                $stops->pluck('id')
+            )->where('status', 'declared')->exists();
+
+            if ($declaredCollections) {
+                throw $this->validationError('Hay cobranzas pendientes de verificar o rechazar.');
+            }
+
+            // Check all discrepancies are resolved
+            foreach ($stops as $stop) {
+                foreach ($stop->items as $item) {
+                    $diff = $item->quantity_loaded - $item->quantity_delivered;
+
+                    if ($diff < 0) {
+                        throw $this->validationError('Hay items con cantidad entregada mayor a la cargada.');
+                    }
+
+                    if ($diff > 0) {
+                        $hasResolution = DeliveryDiscrepancy::where('route_stop_item_id', $item->id)
+                            ->whereNotNull('resolution_type')
+                            ->exists();
+
+                        if (! $hasResolution) {
+                            throw $this->validationError('Hay discrepancias sin resolver.');
+                        }
+                    }
+                }
+            }
+
+            // Update order statuses based on delivered quantities
+            $orderDelivered = [];
+            foreach ($stops as $stop) {
+                if ($stop->status !== 'completed') {
+                    continue;
+                }
+                foreach ($stop->items as $item) {
+                    if ($item->quantity_delivered <= 0) {
+                        continue;
+                    }
+                    $orderDelivered[$stop->order_id] = ($orderDelivered[$stop->order_id] ?? 0) + $item->quantity_delivered;
+                }
+            }
+
+            foreach ($orderDelivered as $orderId => $deliveredQty) {
+                $order = CommercialOperation::find($orderId);
+                if (! $order) {
+                    continue;
+                }
+                $totalOrdered = $order->items()->sum('quantity');
+                if ($deliveredQty >= $totalOrdered) {
+                    $order->update(['status' => 'delivered']);
+                } elseif ($deliveredQty > 0) {
+                    $order->update(['status' => 'partially_delivered']);
+                }
+            }
+
+            // Update route
+            $route->update([
+                'status' => 'completed',
+                'processed_at' => now(),
+                'processed_by' => $user->id,
+                'observations' => $observations ?? $route->observations,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'route_reconciliation_completed',
                 'awaiting_reconciliation',
                 'completed'
             );

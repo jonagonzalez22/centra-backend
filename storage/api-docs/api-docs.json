@@ -14908,6 +14908,474 @@
                 ]
             }
         },
+        "/store/routes/{route}/reconciliation": {
+            "get": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Obtener resumen de conciliación de una ruta",
+                "description": "Get reconciliation summary for a route.",
+                "operationId": "20b069c9970fcf48448096a8c6c466b7",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resumen de conciliación obtenido exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Resumen de conciliación obtenido exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/Reconciliation"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/collections/{collection}/verify": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Verificar una cobranza declarada",
+                "description": "Verify a declared collection.",
+                "operationId": "beb92d3aa710cd6dfe337d75f9ec5c30",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "description": "ID de la cobranza",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Cobranza verificada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Cobranza verificada exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "verified"
+                                                },
+                                                "operation_payment_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440001",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No autorizado"
+                    },
+                    "404": {
+                        "description": "Ruta o cobranza no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/collections/{collection}/reject": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Rechazar una cobranza declarada",
+                "description": "Reject a declared collection.",
+                "operationId": "34aa9e2668191b5f4196874551572882",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "description": "ID de la cobranza",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "reason"
+                                ],
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "El monto declarado no coincide con el comprobante"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cobranza rechazada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Cobranza rechazada exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "rejected"
+                                                },
+                                                "rejection_reason": {
+                                                    "type": "string",
+                                                    "example": "El monto declarado no coincide con el comprobante"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No autorizado"
+                    },
+                    "404": {
+                        "description": "Ruta o cobranza no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/discrepancies": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Resolver una discrepancia de entrega",
+                "description": "Resolve a delivery discrepancy.",
+                "operationId": "ef20d4020073fb9791f2777b9f3d0584",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "route_stop_item_id",
+                                    "resolution_type",
+                                    "quantity_to_resolve"
+                                ],
+                                "properties": {
+                                    "route_stop_item_id": {
+                                        "description": "ID del item de parada con discrepancia",
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                                    },
+                                    "resolution_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "returned",
+                                            "pending_redelivery",
+                                            "missing",
+                                            "damaged",
+                                            "rejected_by_customer",
+                                            "other"
+                                        ],
+                                        "example": "returned"
+                                    },
+                                    "quantity_to_resolve": {
+                                        "type": "integer",
+                                        "example": 2
+                                    },
+                                    "notes": {
+                                        "type": "string",
+                                        "example": "Cliente rechazó 2 unidades por vencimiento",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Discrepancia resuelta exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Discrepancia resuelta exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "route_stop_item_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                                                },
+                                                "resolution_type": {
+                                                    "type": "string",
+                                                    "example": "returned"
+                                                },
+                                                "difference_quantity": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta o item no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/finalize-reconciliation": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Finalizar conciliación y completar la ruta",
+                "description": "Finalize reconciliation and complete the route.",
+                "operationId": "80aaee541f9c79b931b8efc66a3ffeb2",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "observations": {
+                                        "type": "string",
+                                        "example": "Ruta conciliada sin novedades",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Ruta conciliada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta conciliada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    },
+                    "409": {
+                        "description": "La ruta tiene discrepancias pendientes"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/users/filter-options": {
             "get": {
                 "tags": [
@@ -17712,6 +18180,74 @@
                 },
                 "type": "object"
             },
+            "DeliveryDiscrepancy": {
+                "title": "DeliveryDiscrepancy",
+                "description": "Discrepancia de entrega detectada durante la conciliación de una ruta",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "route_stop_item_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440001"
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440002"
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "example": "Leche entera 1L"
+                    },
+                    "quantity_loaded": {
+                        "type": "integer",
+                        "example": 10
+                    },
+                    "quantity_delivered": {
+                        "type": "integer",
+                        "example": 8
+                    },
+                    "difference_quantity": {
+                        "type": "integer",
+                        "example": 2
+                    },
+                    "resolution_type": {
+                        "type": "string",
+                        "enum": [
+                            "returned",
+                            "pending_redelivery",
+                            "missing",
+                            "damaged",
+                            "rejected_by_customer",
+                            "other"
+                        ],
+                        "example": "returned",
+                        "nullable": true
+                    },
+                    "notes": {
+                        "type": "string",
+                        "example": "El cliente rechazó 2 unidades por vencimiento",
+                        "nullable": true
+                    },
+                    "resolved_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-07-30 12:00:00",
+                        "nullable": true
+                    },
+                    "resolved_by": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440003",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "DeliveryRouteEvent": {
                 "title": "DeliveryRouteEvent",
                 "description": "Representación de un evento en el historial de una ruta",
@@ -18138,6 +18674,158 @@
                     "total_items": {
                         "type": "integer",
                         "example": 30
+                    }
+                },
+                "type": "object"
+            },
+            "Reconciliation": {
+                "title": "Reconciliation",
+                "description": "Resumen de conciliación de una ruta de entrega",
+                "properties": {
+                    "route_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "dispatched"
+                    },
+                    "operational_date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-07-30"
+                    },
+                    "vehicle": {
+                        "properties": {
+                            "plate": {
+                                "type": "string",
+                                "example": "ABC123"
+                            },
+                            "description": {
+                                "type": "string",
+                                "example": "Ford Transit Blanca"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "driver": {
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "example": "Carlos Rodríguez"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "stops": {
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "stop_id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                                },
+                                "sequence": {
+                                    "type": "integer",
+                                    "example": 1
+                                },
+                                "customer_name": {
+                                    "type": "string",
+                                    "example": "Juan Pérez"
+                                },
+                                "address": {
+                                    "type": "string",
+                                    "example": "Av. Corrientes 1234"
+                                },
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "route_stop_item_id": {
+                                                "type": "string",
+                                                "format": "uuid",
+                                                "example": "550e8400-e29b-41d4-a716-446655440002"
+                                            },
+                                            "product_id": {
+                                                "type": "string",
+                                                "format": "uuid",
+                                                "example": "550e8400-e29b-41d4-a716-446655440003"
+                                            },
+                                            "product_name": {
+                                                "type": "string",
+                                                "example": "Leche entera 1L"
+                                            },
+                                            "quantity_loaded": {
+                                                "type": "integer",
+                                                "example": 10
+                                            },
+                                            "quantity_delivered": {
+                                                "type": "integer",
+                                                "example": 8
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "discrepancies": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/DeliveryDiscrepancy"
+                                    }
+                                },
+                                "collections": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "id": {
+                                                "type": "string",
+                                                "format": "uuid",
+                                                "example": "550e8400-e29b-41d4-a716-446655440004"
+                                            },
+                                            "status": {
+                                                "type": "string",
+                                                "example": "pending"
+                                            },
+                                            "declared_amount": {
+                                                "type": "number",
+                                                "format": "float",
+                                                "example": 2500.5
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "totals": {
+                        "properties": {
+                            "declared_amount": {
+                                "type": "number",
+                                "format": "float",
+                                "example": 5000
+                            },
+                            "verified_amount": {
+                                "type": "number",
+                                "format": "float",
+                                "example": 2500.5
+                            },
+                            "rejected_amount": {
+                                "type": "number",
+                                "format": "float",
+                                "example": 2499.5
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "can_close": {
+                        "type": "boolean",
+                        "example": true
                     }
                 },
                 "type": "object"

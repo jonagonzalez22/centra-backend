@@ -80,5 +80,6 @@ return [
         ['name' => 'logistics.routes.cancel', 'label' => 'Cancelar rutas'],
         ['name' => 'logistics.routes.load', 'label' => 'Confirmar carga'],
         ['name' => 'logistics.routes.dispatch', 'label' => 'Despachar ruta'],
+        ['name' => 'logistics.routes.reconcile', 'label' => 'Conciliar ruta'],
     ],
 ];
