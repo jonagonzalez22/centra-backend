@@ -164,7 +164,7 @@ describe('GET /api/v1/store/orders — Orders List', function () {
             ->not()->toContain($openOrder->id);
     });
 
-    test('default filter shows only open and confirmed orders', function () {
+    test('without status filter returns all orders', function () {
         $openOrder = createOrderForStore($this->store, ['status' => 'open']);
         $confirmedOrder = createOrderForStore($this->store, ['status' => 'confirmed']);
         $cancelledOrder = createOrderForStore($this->store, ['status' => 'cancelled']);
@@ -176,8 +176,8 @@ describe('GET /api/v1/store/orders — Orders List', function () {
         $ids = collect($response->json('data.items'))->pluck('id')->toArray();
         expect($ids)->toContain($openOrder->id)
             ->toContain($confirmedOrder->id)
-            ->not()->toContain($cancelledOrder->id)
-            ->not()->toContain($closedOrder->id);
+            ->toContain($cancelledOrder->id)
+            ->toContain($closedOrder->id);
     });
 
     test('filters by requested_delivery_date', function () {
