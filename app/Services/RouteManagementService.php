@@ -1310,6 +1310,9 @@ class RouteManagementService
                 }
             }
 
+            // Process discrepancy inventory impacts
+            $this->processDiscrepancyInventory($route, $stops, $user);
+
             // Update route
             $route->update([
                 'status' => 'completed',
@@ -1543,6 +1546,81 @@ class RouteManagementService
             RouteStop::where('id', $stopId)
                 ->where('route_id', $routeId)
                 ->update(['sequence' => $newIndex + 1]);
+        }
+    }
+
+    /**
+     * Process inventory impacts for all discrepancies in a route.
+     * Called during finalizeReconciliation. Idempotent via processed_at.
+     */
+    private function processDiscrepancyInventory(DeliveryRoute $route, $stops, User $user): void
+    {
+        $inventoryService = new InventoryMovementService();
+
+        foreach ($stops as $stop) {
+            foreach ($stop->items as $item) {
+                $discrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $item->id)
+                    ->whereNotNull('resolution_type')
+                    ->whereNull('processed_at')
+                    ->first();
+
+                if (! $discrepancy) {
+                    continue;
+                }
+
+                $product = Product::where('id', $discrepancy->product_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $product) {
+                    continue;
+                }
+
+                $diff = $discrepancy->difference_quantity;
+                $orderId = $stop->order_id;
+
+                switch ($discrepancy->resolution_type) {
+                    case 'returned':
+                    case 'rejected_by_customer':
+                        // Release stock_reserved, no stock change
+                        $product->update([
+                            'stock_reserved' => max(0, $product->stock_reserved - $diff),
+                        ]);
+                        $inventoryService->recordMovement(
+                            $product, $user, 'input', $diff,
+                            "Reingreso logístico — Ruta {$route->id} — Pedido {$orderId}"
+                        );
+                        break;
+
+                    case 'missing':
+                        // Release reserve + decrease stock
+                        $product->update([
+                            'stock_reserved' => max(0, $product->stock_reserved - $diff),
+                        ]);
+                        $inventoryService->recordMovement(
+                            $product, $user, 'output', $diff,
+                            "Ajuste por faltante — Ruta {$route->id} — Pedido {$orderId}"
+                        );
+                        break;
+
+                    case 'damaged':
+                        // Release reserve + decrease stock
+                        $product->update([
+                            'stock_reserved' => max(0, $product->stock_reserved - $diff),
+                        ]);
+                        $inventoryService->recordMovement(
+                            $product, $user, 'output', $diff,
+                            "Salida por daño logístico — Ruta {$route->id} — Pedido {$orderId}"
+                        );
+                        break;
+
+                    case 'pending_redelivery':
+                        // Keep stock_reserved, release from route. No inventory movement.
+                        break;
+                }
+
+                $discrepancy->update(['processed_at' => now()]);
+            }
         }
     }
 }

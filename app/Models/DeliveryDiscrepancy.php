@@ -26,6 +26,7 @@ class DeliveryDiscrepancy extends Model
         'notes',
         'resolved_by',
         'resolved_at',
+        'processed_at',
     ];
 
     protected function casts(): array
@@ -35,7 +36,13 @@ class DeliveryDiscrepancy extends Model
             'quantity_delivered' => 'integer',
             'difference_quantity' => 'integer',
             'resolved_at' => 'datetime',
+            'processed_at' => 'datetime',
         ];
+    }
+
+    public function scopeUnprocessed(Builder $query): Builder
+    {
+        return $query->whereNull('processed_at');
     }
 
     public function routeStopItem(): BelongsTo
