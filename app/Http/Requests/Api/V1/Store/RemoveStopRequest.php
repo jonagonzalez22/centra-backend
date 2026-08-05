@@ -16,16 +16,14 @@ class RemoveStopRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reason' => ['required', 'string'],
+            'reason' => ['nullable', 'string'],
             'logistics_notes' => ['nullable', 'string'],
         ];
     }
 
     public function messages(): array
     {
-        return [
-            'reason.required' => 'El motivo es obligatorio.',
-        ];
+        return [];
     }
 
     protected function failedValidation(Validator $validator): void

@@ -13487,6 +13487,15 @@
                         }
                     },
                     {
+                        "name": "exclude_route_id",
+                        "in": "query",
+                        "description": "Excluir pedidos ya asignados a esta ruta",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Items por página",

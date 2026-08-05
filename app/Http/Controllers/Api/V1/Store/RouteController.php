@@ -53,6 +53,7 @@ class RouteController extends Controller
      *   @OA\Parameter(name="requested_delivery_date", in="query", @OA\Schema(type="string", format="date"), description="Filtrar por fecha de entrega solicitada"),
      *   @OA\Parameter(name="search", in="query", @OA\Schema(type="string"), description="Buscar por número de operación o nombre de cliente"),
      *   @OA\Parameter(name="locality_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por localidad"),
+     *   @OA\Parameter(name="exclude_route_id", in="query", @OA\Schema(type="string", format="uuid"), description="Excluir pedidos ya asignados a esta ruta"),
      *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
      *   @OA\Parameter(name="page", in="query", @OA\Schema(type="integer", default=1), description="Número de página"),
      *
@@ -83,7 +84,7 @@ class RouteController extends Controller
         $storeId = $request->user()->store_id;
 
         $orders = $this->routeService->eligibleOrders($storeId, $request->only([
-            'requested_delivery_date', 'search', 'locality_id', 'per_page',
+            'requested_delivery_date', 'search', 'locality_id', 'per_page', 'exclude_route_id',
         ]));
 
         return response()->json([

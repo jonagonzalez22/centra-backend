@@ -87,7 +87,7 @@ class RouteManagementService
     {
         $query = CommercialOperation::forStore($storeId)
             ->byType('order')
-            ->whereNotIn('status', ['cancelled', 'closed'])
+            ->whereNotIn('status', ['cancelled', 'closed', 'delivered'])
             ->whereHas('customer', function (Builder $q) {
                 $q->whereHas('addresses', function (Builder $aq) {
                     $aq->where('is_main', true)
@@ -114,6 +114,15 @@ class RouteManagementService
         if (! empty($filters['locality_id'])) {
             $query->whereHas('customer.addresses', function (Builder $q) use ($filters) {
                 $q->where('locality_id', $filters['locality_id']);
+            });
+        }
+
+        // Exclude orders already assigned to a specific route (prevents showing
+        // orders that were just added to the current route in the eligible list).
+        if (! empty($filters['exclude_route_id'])) {
+            $query->whereDoesntHave('routeStops', function (Builder $q) use ($filters) {
+                $q->where('route_id', $filters['exclude_route_id'])
+                    ->where('status', '!=', 'cancelled');
             });
         }
 
@@ -200,15 +209,6 @@ class RouteManagementService
             }
 
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
-
-            // Check not last active stop
-            $activeCount = RouteStop::where('route_id', $route->id)
-                ->where('status', '!=', 'cancelled')
-                ->count();
-
-            if ($activeCount <= 1) {
-                throw $this->validationError('No se puede cancelar el último stop activo. Cancelá la ruta en su lugar.');
-            }
 
             $stop->update([
                 'status' => 'cancelled',
@@ -1400,8 +1400,8 @@ class RouteManagementService
             throw $this->validationError('Solo se pueden asignar pedidos a una ruta.');
         }
 
-        if (in_array($order->status, ['cancelled', 'closed'])) {
-            throw $this->validationError('El pedido está cancelado o cerrado.');
+        if (in_array($order->status, ['cancelled', 'closed', 'delivered'])) {
+            throw $this->validationError('El pedido está cancelado, cerrado o ya fue entregado completamente.');
         }
 
         // Check order has a geolocated delivery address

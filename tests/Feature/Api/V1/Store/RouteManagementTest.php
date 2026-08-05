@@ -534,7 +534,7 @@ test('cancels a stop from a draft route', function () {
     expect($stop2->fresh()->sequence)->toBe(1);
 });
 
-test('rejects canceling last active stop', function () {
+test('allows canceling last active stop when route is draft', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);
     $customer = createCustomerWithAddress($this->store);
@@ -563,7 +563,8 @@ test('rejects canceling last active stop', function () {
             'reason' => 'Cancelar último',
         ]);
 
-    $response->assertStatus(422);
+    $response->assertStatus(200);
+    expect($stop->fresh()->status)->toBe('cancelled');
 });
 
 test('reorders stops atomically', function () {
