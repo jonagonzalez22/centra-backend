@@ -1425,10 +1425,12 @@ class RouteManagementService
      */
     private function renormalizeSequences(string $routeId): void
     {
-        // Phase 0: Move all cancelled stops' sequences out of the way (use NULL or negative)
+        // Phase 0: Move cancelled stops out of the sequence space.
+        // NULL sequences are ignored by the UNIQUE(route_id, sequence) constraint,
+        // allowing multiple cancelled stops in the same route.
         RouteStop::where('route_id', $routeId)
             ->where('status', 'cancelled')
-            ->update(['sequence' => 0]);
+            ->update(['sequence' => null]);
 
         // Phase 1: move all active stops to temporary negative sequences
         $activeStops = RouteStop::where('route_id', $routeId)
