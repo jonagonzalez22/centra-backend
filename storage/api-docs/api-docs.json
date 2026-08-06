@@ -13900,6 +13900,12 @@
                                         "example": "2026-07-30",
                                         "nullable": true
                                     },
+                                    "departure_time": {
+                                        "type": "string",
+                                        "format": "time",
+                                        "example": "08:00",
+                                        "nullable": true
+                                    },
                                     "observations": {
                                         "type": "string",
                                         "example": "Ruta de reparto zona norte",

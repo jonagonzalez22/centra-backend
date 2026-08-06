@@ -68,10 +68,7 @@ class RouteOptimizationService
             $etas[$stopIndex] = $operationalDate . ' ' . $this->formatSecondsToTime($totalSeconds);
         }
 
-        // Ensure array is ordered by original stop index
-        ksort($etas);
-
-        return array_values($etas);
+        return $etas;
     }
 
     /**

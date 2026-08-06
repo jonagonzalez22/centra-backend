@@ -378,7 +378,7 @@ class RouteManagementService
                 RouteStop::where('id', $stopId)
                     ->where('route_id', $route->id)
                     ->update([
-                        'estimated_arrival_at' => $etas[$i] ?? null,
+                        'estimated_arrival_at' => $etas[$stopIndex] ?? null,
                         'travel_duration_seconds' => $durations[$i] ?? 0,
                     ]);
             }

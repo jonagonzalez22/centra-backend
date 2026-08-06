@@ -320,6 +320,7 @@ class RouteController extends Controller
      *       @OA\Property(property="vehicle_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000", nullable=true),
      *       @OA\Property(property="driver_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001", nullable=true),
      *       @OA\Property(property="operational_date", type="string", format="date", example="2026-07-30", nullable=true),
+     *       @OA\Property(property="departure_time", type="string", format="time", example="08:00", nullable=true),
      *       @OA\Property(property="observations", type="string", example="Ruta de reparto zona norte", nullable=true)
      *     )
      *   ),

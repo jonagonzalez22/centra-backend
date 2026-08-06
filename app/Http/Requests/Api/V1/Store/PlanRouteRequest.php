@@ -18,7 +18,7 @@ class PlanRouteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'departure_time' => ['nullable', 'string', 'date_format:H:i'],
+            'departure_time' => ['nullable', 'string', 'date_format:H:i,H:i:s'],
         ];
     }
 
