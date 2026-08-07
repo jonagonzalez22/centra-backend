@@ -308,6 +308,10 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:logistics.routes.plan')
                     ->name('store.routes.recalculate');
 
+                Route::post('routes/{route}/optimize', [RouteController::class, 'optimize'])
+                    ->middleware('permission:logistics.routes.plan')
+                    ->name('store.routes.optimize');
+
                 // Execution endpoints
                 Route::post('routes/{route}/stops/{stop}/items', [RouteController::class, 'assignItems'])
                     ->middleware('permission:logistics.routes.manage')
