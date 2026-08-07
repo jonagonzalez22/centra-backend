@@ -14526,6 +14526,68 @@
                 ]
             }
         },
+        "/store/routes/{route}/optimize": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Reoptimizar una ruta planificada",
+                "description": "Re-optimize a planned route using Google Routes API.\nKeeps the route in planned state while re-running automatic stop ordering.",
+                "operationId": "dc20ee14438163580ace19ff39bdfc42",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ruta reoptimizada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ruta reoptimizada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/routes/{route}/stops/{stop}/items": {
             "post": {
                 "tags": [

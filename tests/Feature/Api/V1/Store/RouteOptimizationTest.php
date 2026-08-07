@@ -707,6 +707,148 @@ test('recalculate fails when route does not need recalculation', function () {
     $response->assertStatus(422);
 });
 
+// ── Optimize Tests ────────────────────────────────────────────────────
+
+test('optimize re-runs automatic optimization on planned route', function () {
+    mockGoogleApiSuccess([2, 0, 1]); // Google reorders: original[2], original[0], original[1]
+
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+
+    $customer1 = helperCreateCustomerWithAddress($this->store, -34.6033, -58.3815);
+    $customer2 = helperCreateCustomerWithAddress($this->store, -34.6044, -58.3994);
+    $customer3 = helperCreateCustomerWithAddress($this->store, -34.6055, -58.4100);
+
+    $order1 = helperCreateEligibleOrder($this->store, $customer1);
+    $order2 = helperCreateEligibleOrder($this->store, $customer2);
+    $order3 = helperCreateEligibleOrder($this->store, $customer3);
+
+    $date = now()->addDay()->format('Y-m-d');
+
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => $date,
+        'status' => 'planned',
+        'departure_time' => '08:00',
+        'unload_time_minutes_snapshot' => 20,
+        'encoded_polyline' => 'old_polyline',
+        'planned_at' => now(),
+        'requires_recalculation' => false,
+    ]);
+
+    RouteStop::insert([
+        ['id' => (string) \Illuminate\Support\Str::uuid(), 'route_id' => $route->id, 'order_id' => $order1->id, 'sequence' => 1, 'status' => 'pending', 'estimated_arrival_at' => now(), 'travel_duration_seconds' => 300, 'created_at' => now(), 'updated_at' => now()],
+        ['id' => (string) \Illuminate\Support\Str::uuid(), 'route_id' => $route->id, 'order_id' => $order2->id, 'sequence' => 2, 'status' => 'pending', 'estimated_arrival_at' => now(), 'travel_duration_seconds' => 300, 'created_at' => now(), 'updated_at' => now()],
+        ['id' => (string) \Illuminate\Support\Str::uuid(), 'route_id' => $route->id, 'order_id' => $order3->id, 'sequence' => 3, 'status' => 'pending', 'estimated_arrival_at' => now(), 'travel_duration_seconds' => 300, 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/optimize");
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.status', 'planned')
+        ->assertJsonPath('data.encoded_polyline', 'global_polyline_abc123')
+        ->assertJsonPath('data.requires_recalculation', false)
+        ->assertJsonPath('data.departure_time', '08:00');
+
+    $route->refresh();
+
+    // Status must remain planned
+    expect($route->status)->toBe('planned');
+
+    // Polyline updated
+    expect($route->encoded_polyline)->toBe('global_polyline_abc123');
+
+    // requires_recalculation cleared
+    expect($route->requires_recalculation)->toBeFalse();
+
+    // departure_time and unload_time_minutes_snapshot preserved
+    expect($route->departure_time)->toBe('08:00');
+    expect($route->unload_time_minutes_snapshot)->toBe(20);
+
+    // Stops were reordered by Google [2,0,1] → sequence should be 1,2,3 for stop indices 2,0,1
+    $stops = $route->stops()->orderBy('sequence')->get();
+    expect($stops)->toHaveCount(3);
+    // Original index 2 → sequence 1, index 0 → sequence 2, index 1 → sequence 3
+    expect($stops[0]->order_id)->toBe($order3->id);
+    expect($stops[1]->order_id)->toBe($order1->id);
+    expect($stops[2]->order_id)->toBe($order2->id);
+
+    // ETAs recalculated
+    foreach ($stops as $stop) {
+        expect($stop->estimated_arrival_at)->not->toBeNull();
+        expect($stop->travel_duration_seconds)->toBeGreaterThan(0);
+    }
+
+    // Event created
+    $event = DeliveryRouteEvent::where('event_type', 'route_optimized')->first();
+    expect($event)->not->toBeNull();
+    expect($event->from_status)->toBe('planned');
+    expect($event->to_status)->toBe('planned');
+    expect($event->metadata['optimized'])->toBeTrue();
+    expect($event->metadata['departure_time'])->toBe('08:00');
+    expect($event->metadata['previous_order'])->toBeArray();
+    expect($event->metadata['new_order'])->toBeArray();
+});
+
+test('optimize rejects route not in planned status', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'draft',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/optimize");
+
+    $response->assertStatus(422);
+});
+
+test('optimize rejects planned route with no active stops', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'planned',
+        'departure_time' => '08:00',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/optimize");
+
+    $response->assertStatus(422);
+});
+
+test('optimize rejects planned route without departure_time', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'planned',
+        'departure_time' => null,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/optimize");
+
+    $response->assertStatus(422);
+});
+
 // ── Show Enriched Tests ──────────────────────────────────────────────
 
 test('show route includes optimization data', function () {

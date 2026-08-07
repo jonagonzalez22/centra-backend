@@ -574,6 +574,128 @@ class RouteManagementService
         });
     }
 
+    /**
+     * Re-optimize a planned route using Google Routes API.
+     * Unlike plan(), this keeps the route in planned state and preserves
+     * departure_time, planned_at, and unload_time_minutes_snapshot.
+     */
+    public function optimize(DeliveryRoute $route, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $user) {
+            if ($route->status !== 'planned') {
+                throw $this->validationError('La ruta debe estar en estado planificado para reoptimizar.');
+            }
+
+            if (! $route->departure_time) {
+                throw $this->validationError('La ruta no tiene una hora de salida definida.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            $activeStops = RouteStop::where('route_id', $route->id)
+                ->where('status', '!=', 'cancelled')
+                ->orderBy('sequence')
+                ->get();
+
+            if ($activeStops->count() < 1) {
+                throw $this->validationError('La ruta debe tener al menos un stop para ser reoptimizada.');
+            }
+
+            // Validate store has coordinates
+            $store = Store::find($route->store_id);
+            if (! $store || ! $store->latitude || ! $store->longitude) {
+                throw $this->validationError('La tienda no tiene coordenadas configuradas.');
+            }
+
+            // Validate all stops have geolocated delivery addresses
+            $this->validateStopCoordinates($activeStops);
+
+            $departureTime = $route->departure_time;
+            $unloadTime = $route->unload_time_minutes_snapshot ?? 15;
+
+            // Build waypoints from active stops in current sequence order
+            $origin = [(float) $store->latitude, (float) $store->longitude];
+            $destination = [(float) $store->latitude, (float) $store->longitude];
+            $intermediates = [];
+            $stopIdMap = [];
+            $previousOrder = [];
+
+            foreach ($activeStops as $stop) {
+                $address = $this->getStopMainAddress($stop);
+                $intermediates[] = [(float) $address->latitude, (float) $address->longitude];
+                $stopIdMap[] = $stop->id;
+                $previousOrder[$stop->id] = $stop->sequence;
+            }
+
+            // Call Google Routes API WITH optimization
+            $optimizer = new RouteOptimizationService();
+            $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, true);
+
+            $optimizedOrder = $result['optimizedOrder'];
+            $durations = $result['durations'];
+            $polyline = $result['polyline'];
+
+            // Reorder stops based on optimized order
+            $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
+
+            // Calculate ETAs
+            $etas = $optimizer->calculateETAs(
+                $departureTime,
+                $durations,
+                $unloadTime,
+                $optimizedOrder,
+                $route->operational_date->format('Y-m-d')
+            );
+
+            // Persist ETAs, durations
+            for ($i = 0; $i < count($optimizedOrder); $i++) {
+                $stopIndex = $optimizedOrder[$i];
+                if (! isset($stopIdMap[$stopIndex])) {
+                    continue;
+                }
+                $stopId = $stopIdMap[$stopIndex];
+
+                RouteStop::where('id', $stopId)
+                    ->where('route_id', $route->id)
+                    ->update([
+                        'estimated_arrival_at' => $etas[$stopIndex] ?? null,
+                        'travel_duration_seconds' => $durations[$i] ?? 0,
+                    ]);
+            }
+
+            // Build new order map for event metadata
+            $newOrderStops = RouteStop::where('route_id', $route->id)
+                ->where('status', '!=', 'cancelled')
+                ->orderBy('sequence')
+                ->pluck('id', 'sequence')
+                ->toArray();
+
+            $route->update([
+                'encoded_polyline' => $polyline,
+                'requires_recalculation' => false,
+            ]);
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'route_optimized',
+                'planned',
+                'planned',
+                null,
+                [
+                    'departure_time' => $departureTime,
+                    'optimized' => true,
+                    'unload_snapshot' => $unloadTime,
+                    'previous_order' => $previousOrder,
+                    'new_order' => $newOrderStops,
+                ]
+            );
+
+            return $route;
+        });
+    }
+
     // ── Execution Methods ────────────────────────────────────────────
 
     /**

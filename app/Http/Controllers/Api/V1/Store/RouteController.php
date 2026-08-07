@@ -849,6 +849,62 @@ class RouteController extends Controller
         ]);
     }
 
+    /**
+     * Re-optimize a planned route using Google Routes API.
+     * Keeps the route in planned state while re-running automatic stop ordering.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/optimize",
+     *   summary="Reoptimizar una ruta planificada",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Ruta reoptimizada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Ruta reoptimizada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function optimize(Request $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->optimize($route, $request->user());
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Ruta reoptimizada exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
     // ── Execution Endpoints ──────────────────────────────────────────
 
     /**
