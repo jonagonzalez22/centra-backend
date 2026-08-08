@@ -384,7 +384,7 @@ class RouteManagementService
             }
 
             // Auto-generate route_stop_items from order items
-            $this->generateStopItems($activeStops);
+            $this->generateStopItems($activeStops, $route->id);
 
             $route->update([
                 'status' => 'planned',
@@ -749,12 +749,17 @@ class RouteManagementService
                     ->whereNot('route_stop_id', $stop->id) // exclude current stop (for updates)
                     ->sum('quantity_planned');
 
+                // Calculate real remaining after deducting previous deliveries
+                $previouslyDelivered = $this->getPreviouslyDelivered($productId, $stop->order_id);
+                $remaining = max(0, (int) $orderItem->quantity - $previouslyDelivered);
+
                 $totalAfter = $alreadyAssigned + $quantityPlanned;
 
-                if ($totalAfter > $orderItem->quantity) {
+                if ($totalAfter > $remaining) {
                     throw $this->validationError(
                         "La cantidad planificada ({$quantityPlanned}) más la ya asignada ({$alreadyAssigned}) "
-                        ."supera la cantidad del pedido ({$orderItem->quantity}) para el producto."
+                        ."supera el saldo pendiente del pedido ({$remaining}) para el producto. "
+                        ."(Cantidad original: {$orderItem->quantity}, ya entregado: {$previouslyDelivered})"
                     );
                 }
 
@@ -1993,11 +1998,54 @@ class RouteManagementService
     }
 
     /**
-     * Auto-generate route_stop_items for each active stop from its order items.
-     * Uses updateOrCreate to safely regenerate on re-plan without duplicating.
+     * Cantidad ya entregada de un producto en un pedido a través de rutas completadas.
      */
-    private function generateStopItems(\Illuminate\Database\Eloquent\Collection $stops): void
+    private function getPreviouslyDelivered(string $productId, string $orderId): int
     {
+        return (int) RouteStopItem::where('product_id', $productId)
+            ->where('quantity_delivered', '>', 0)
+            ->whereHas('routeStop', function (Builder $q) use ($orderId) {
+                $q->where('order_id', $orderId);
+            })
+            ->whereHas('routeStop.route', function (Builder $q) {
+                $q->where('status', 'completed');
+            })
+            ->sum('quantity_delivered');
+    }
+
+    /**
+     * Cantidad ya planificada en otras rutas que están en estado activo
+     * (draft, planned, loaded, dispatched, awaiting_reconciliation).
+     * Excluye paradas canceladas y la ruta actual.
+     */
+    private function getPlannedInOtherRoutes(string $productId, string $orderId, string $excludeRouteId): int
+    {
+        return (int) RouteStopItem::where('product_id', $productId)
+            ->whereHas('routeStop', function (Builder $q) use ($orderId, $excludeRouteId) {
+                $q->where('order_id', $orderId)
+                    ->where('route_id', '!=', $excludeRouteId)
+                    ->where('status', '!=', 'cancelled');
+            })
+            ->whereHas('routeStop.route', function (Builder $q) {
+                $q->whereIn('status', ['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']);
+            })
+            ->sum('quantity_planned');
+    }
+
+    /**
+     * Auto-generate route_stop_items for each active stop from its order items.
+     * Calculates the real remaining quantity (original - previously delivered -
+     * already planned in other active routes).
+     *
+     * If remaining > 0: creates or updates the item with the new quantity.
+     * If remaining <= 0: removes any existing item to avoid showing "0 unid.".
+     */
+    private function generateStopItems(\Illuminate\Database\Eloquent\Collection $stops, string $routeId): void
+    {
+        if ($stops->isEmpty()) {
+            return;
+        }
+
         foreach ($stops as $stop) {
             $order = CommercialOperation::with('items')->find($stop->order_id);
 
@@ -2006,17 +2054,41 @@ class RouteManagementService
             }
 
             foreach ($order->items as $orderItem) {
-                RouteStopItem::updateOrCreate(
-                    [
-                        'route_stop_id' => $stop->id,
-                        'product_id' => $orderItem->product_id,
-                    ],
-                    [
-                        'quantity_planned' => $orderItem->quantity,
-                        'quantity_loaded' => 0,
-                        'quantity_delivered' => 0,
-                    ]
+                $previouslyDelivered = $this->getPreviouslyDelivered(
+                    $orderItem->product_id,
+                    $stop->order_id
                 );
+
+                $plannedElsewhere = $this->getPlannedInOtherRoutes(
+                    $orderItem->product_id,
+                    $stop->order_id,
+                    $routeId
+                );
+
+                $remaining = max(0,
+                    (int) $orderItem->quantity
+                    - $previouslyDelivered
+                    - $plannedElsewhere
+                );
+
+                if ($remaining > 0) {
+                    RouteStopItem::updateOrCreate(
+                        [
+                            'route_stop_id' => $stop->id,
+                            'product_id' => $orderItem->product_id,
+                        ],
+                        [
+                            'quantity_planned' => $remaining,
+                            'quantity_loaded' => 0,
+                            'quantity_delivered' => 0,
+                        ]
+                    );
+                } else {
+                    // Saldo agotado: eliminar registro si existía de una planificación anterior
+                    RouteStopItem::where('route_stop_id', $stop->id)
+                        ->where('product_id', $orderItem->product_id)
+                        ->delete();
+                }
             }
         }
     }
