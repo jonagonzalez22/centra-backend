@@ -1657,6 +1657,118 @@ class RouteManagementService
     }
 
     /**
+     * Redistribute loaded quantities for a specific product across stops.
+     * The total sum of quantity_loaded for this product in this route
+     * must remain unchanged — this is a redistribution, not creation/deletion.
+     * Only works on routes in 'loaded' state.
+     */
+    public function adjustItems(DeliveryRoute $route, string $productId, array $items, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $productId, $items, $user) {
+            if ($route->status !== 'loaded') {
+                throw $this->validationError('Solo se pueden ajustar items en rutas cargadas.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            // Calculate current total for this product in this route
+            $currentTotal = RouteStopItem::where('product_id', $productId)
+                ->whereHas('routeStop', function (Builder $q) use ($route) {
+                    $q->where('route_id', $route->id)
+                        ->where('status', '!=', 'cancelled');
+                })
+                ->sum('quantity_loaded');
+
+            $newTotal = 0;
+            $validatedItems = [];
+
+            foreach ($items as $entry) {
+                $routeStopItemId = $entry['route_stop_item_id'];
+                $quantityLoaded = (int) $entry['quantity_loaded'];
+                $newTotal += $quantityLoaded;
+
+                $stopItem = RouteStopItem::where('id', $routeStopItemId)
+                    ->where('product_id', $productId)
+                    ->whereHas('routeStop', function (Builder $q) use ($route) {
+                        $q->where('route_id', $route->id)
+                            ->where('status', '!=', 'cancelled');
+                    })
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $stopItem) {
+                    throw $this->validationError(
+                        "El item {$routeStopItemId} no pertenece a esta ruta o no corresponde al producto indicado."
+                    );
+                }
+
+                if ($quantityLoaded > $stopItem->quantity_planned) {
+                    throw $this->validationError(
+                        "La cantidad cargada ({$quantityLoaded}) no puede superar la planificada ({$stopItem->quantity_planned}) ".
+                        "para el item {$routeStopItemId}."
+                    );
+                }
+
+                $validatedItems[] = [
+                    'item' => $stopItem,
+                    'quantity_loaded' => $quantityLoaded,
+                    'reason' => $entry['reason'] ?? null,
+                    'notes' => $entry['notes'] ?? null,
+                ];
+            }
+
+            // Conservation rule: total must not change
+            if ($newTotal !== (int) $currentTotal) {
+                throw $this->validationError(
+                    "La suma de las cantidades cargadas ({$newTotal}) debe ser igual ".
+                    "al total actual cargado ({$currentTotal}) para este producto. ".
+                    "Solo se permite redistribuir, no crear ni eliminar mercadería."
+                );
+            }
+
+            // Apply updates
+            foreach ($validatedItems as $entry) {
+                /** @var RouteStopItem $stopItem */
+                $stopItem = $entry['item'];
+                $oldQuantity = $stopItem->quantity_loaded;
+                $newQuantity = $entry['quantity_loaded'];
+
+                if ($oldQuantity !== $newQuantity) {
+                    // Create adjustment record
+                    RouteLoadAdjustment::create([
+                        'route_stop_item_id' => $stopItem->id,
+                        'user_id' => $user->id,
+                        'old_quantity' => $oldQuantity,
+                        'new_quantity' => $newQuantity,
+                        'reason' => $entry['reason'] ?? 'redistribution',
+                        'notes' => $entry['notes'] ?? null,
+                    ]);
+                }
+
+                $stopItem->update(['quantity_loaded' => $newQuantity]);
+            }
+
+            $this->createEvent(
+                $route,
+                $route->store_id,
+                $user->id,
+                'items_adjusted',
+                null,
+                null,
+                null,
+                [
+                    'product_id' => $productId,
+                    'previous_total' => (int) $currentTotal,
+                    'new_total' => $newTotal,
+                    'item_count' => count($validatedItems),
+                ]
+            );
+
+            return $route;
+        });
+    }
+
+    /**
      * For a given product in the route, create RouteLoadAdjustment records
      * for every stop item where quantity_loaded is less than quantity_planned.
      */
