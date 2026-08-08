@@ -21,6 +21,8 @@ class BulkLoadRequest extends FormRequest
             'products' => ['required', 'array', 'min:1'],
             'products.*.product_id' => ['required', 'uuid', 'exists:products,id'],
             'products.*.quantity_loaded' => ['required', 'integer', 'min:0'],
+            'products.*.reason' => ['nullable', 'string', 'max:255'],
+            'products.*.notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 
@@ -33,6 +35,8 @@ class BulkLoadRequest extends FormRequest
             'products.*.quantity_loaded.required' => 'La cantidad cargada es obligatoria.',
             'products.*.quantity_loaded.integer' => 'La cantidad cargada debe ser un número entero.',
             'products.*.quantity_loaded.min' => 'La cantidad cargada no puede ser negativa.',
+            'products.*.reason.max' => 'El motivo no puede superar los 255 caracteres.',
+            'products.*.notes.max' => 'Las notas no pueden superar los 1000 caracteres.',
         ];
     }
 
