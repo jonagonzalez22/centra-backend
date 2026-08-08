@@ -14858,6 +14858,227 @@
                 ]
             }
         },
+        "/store/routes/{route}/bulk-load": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Carga consolidada con distribución automática por producto",
+                "description": "Consolidated load: receive product-level quantities and distribute across stops.",
+                "operationId": "7c9c89eb3428b6e85516dcc0f7910f12",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "products"
+                                ],
+                                "properties": {
+                                    "products": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "product_id",
+                                                "quantity_loaded"
+                                            ],
+                                            "properties": {
+                                                "product_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "quantity_loaded": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "reason": {
+                                                    "type": "string",
+                                                    "example": "Falta de stock en depósito",
+                                                    "nullable": true
+                                                },
+                                                "notes": {
+                                                    "type": "string",
+                                                    "example": "Solo 10 de 15 disponibles",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Carga consolidada confirmada exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Carga consolidada confirmada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/routes/{route}/adjust-items": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Redistribuir cantidades cargadas de un producto entre paradas",
+                "description": "Redistribute loaded quantities for a specific product across stops.",
+                "operationId": "773fc859244c8a56ec8e7df35c96fea7",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "product_id",
+                                    "items"
+                                ],
+                                "properties": {
+                                    "product_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "route_stop_item_id",
+                                                "quantity_loaded"
+                                            ],
+                                            "properties": {
+                                                "route_stop_item_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                                                },
+                                                "quantity_loaded": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "reason": {
+                                                    "type": "string",
+                                                    "example": "Redistribución manual",
+                                                    "nullable": true
+                                                },
+                                                "notes": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Items ajustados exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Items ajustados exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeliveryRoute"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/routes/{route}/dispatch": {
             "post": {
                 "tags": [

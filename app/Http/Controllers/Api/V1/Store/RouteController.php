@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\AddStopRequest;
+use App\Http\Requests\Api\V1\Store\AdjustItemsRequest;
 use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
 use App\Http\Requests\Api\V1\Store\BulkLoadRequest;
 use App\Http\Requests\Api\V1\Store\ConfirmLoadRequest;
@@ -1183,6 +1184,85 @@ class RouteController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Carga consolidada confirmada exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Redistribute loaded quantities for a specific product across stops.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/adjust-items",
+     *   summary="Redistribuir cantidades cargadas de un producto entre paradas",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *     @OA\JsonContent(
+     *       required={"product_id", "items"},
+     *       @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *       @OA\Property(
+     *         property="items",
+     *         type="array",
+     *         @OA\Items(
+     *           required={"route_stop_item_id", "quantity_loaded"},
+     *           @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001"),
+     *           @OA\Property(property="quantity_loaded", type="integer", example=5),
+     *           @OA\Property(property="reason", type="string", nullable=true, example="Redistribución manual"),
+     *           @OA\Property(property="notes", type="string", nullable=true)
+     *         )
+     *       )
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Items ajustados exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Items ajustados exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function adjustItems(AdjustItemsRequest $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->adjustItems(
+            $route,
+            $request->input('product_id'),
+            $request->input('items'),
+            $request->user()
+        );
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.items.product', 'vehicle', 'driver', 'events']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Items ajustados exitosamente.',
             'data' => DeliveryRouteResource::make($route),
             'errors' => null,
         ]);
