@@ -325,6 +325,10 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:logistics.routes.load')
                     ->name('store.routes.confirm-load');
 
+                Route::post('routes/{route}/bulk-load', [RouteController::class, 'bulkLoad'])
+                    ->middleware('permission:logistics.routes.load')
+                    ->name('store.routes.bulk-load');
+
                 Route::post('routes/{route}/dispatch', [RouteController::class, 'dispatch'])
                     ->middleware('permission:logistics.routes.dispatch')
                     ->name('store.routes.dispatch');

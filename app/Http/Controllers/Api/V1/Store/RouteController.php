@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Store;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\AddStopRequest;
 use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
+use App\Http\Requests\Api\V1\Store\BulkLoadRequest;
 use App\Http\Requests\Api\V1\Store\ConfirmLoadRequest;
 use App\Http\Requests\Api\V1\Store\DispatchRouteRequest;
 use App\Http\Requests\Api\V1\Store\FinalizeReconciliationRequest;
@@ -1109,6 +1110,77 @@ class RouteController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Carga confirmada exitosamente.',
+            'data' => DeliveryRouteResource::make($route),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Consolidated load: receive product-level quantities and distribute across stops.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/bulk-load",
+     *   summary="Carga consolidada con distribución automática por producto",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID de la ruta"),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *     @OA\JsonContent(
+     *       required={"products"},
+     *       @OA\Property(
+     *         property="products",
+     *         type="array",
+     *         @OA\Items(
+     *           required={"product_id", "quantity_loaded"},
+     *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *           @OA\Property(property="quantity_loaded", type="integer", example=10)
+     *         )
+     *       )
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Carga consolidada confirmada exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Carga consolidada confirmada exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/DeliveryRoute"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=422, description="Error de validación"),
+     *   @OA\Response(response=404, description="Ruta no encontrada")
+     * )
+     */
+    public function bulkLoad(BulkLoadRequest $request, string $routeId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $route = $this->routeService->bulkLoad($route, $request->input('products'), $request->user());
+
+        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'vehicle', 'driver']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Carga consolidada confirmada exitosamente.',
             'data' => DeliveryRouteResource::make($route),
             'errors' => null,
         ]);

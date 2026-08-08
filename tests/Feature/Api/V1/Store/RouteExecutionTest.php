@@ -166,7 +166,7 @@ test('assigns items to a stop in draft route', function () {
     expect(DeliveryRouteEvent::where('event_type', 'items_assigned')->count())->toBe(1);
 });
 
-test('rejects item assignment if route is not draft', function () {
+test('rejects item assignment if route is loaded', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);
     $customer = createCustomerWithAddress($this->store);
@@ -186,7 +186,7 @@ test('rejects item assignment if route is not draft', function () {
         'vehicle_id' => $vehicle->id,
         'driver_id' => $driver->id,
         'operational_date' => $date,
-        'status' => 'planned', // not draft
+        'status' => 'loaded', // not draft or planned
     ]);
 
     $stop = RouteStop::create([

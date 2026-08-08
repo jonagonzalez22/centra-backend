@@ -383,6 +383,9 @@ class RouteManagementService
                     ]);
             }
 
+            // Auto-generate route_stop_items from order items
+            $this->generateStopItems($activeStops);
+
             $route->update([
                 'status' => 'planned',
                 'planned_at' => now(),
@@ -699,15 +702,15 @@ class RouteManagementService
     // ── Execution Methods ────────────────────────────────────────────
 
     /**
-     * Assign items (products) to a stop in a draft route.
+     * Assign items (products) to a stop in a draft or planned route.
      * Validates that the total planned quantity across all active routes
      * does not exceed the order item quantity.
      */
     public function assignItems(DeliveryRoute $route, RouteStop $stop, array $items, User $user): void
     {
         DB::transaction(function () use ($route, $stop, $items, $user) {
-            if ($route->status !== 'draft') {
-                throw $this->validationError('Solo se pueden asignar items en rutas draft.');
+            if (! in_array($route->status, ['draft', 'planned'])) {
+                throw $this->validationError('Solo se pueden asignar items en rutas draft o planned.');
             }
 
             if ($stop->route_id !== $route->id) {
@@ -1571,6 +1574,82 @@ class RouteManagementService
     }
 
     /**
+     * Consolidated load: receive product-level quantities and distribute across stops
+     * following strict sequence order (prorrateo).
+     */
+    public function bulkLoad(DeliveryRoute $route, array $products, User $user): DeliveryRoute
+    {
+        return DB::transaction(function () use ($route, $products, $user) {
+            if ($route->status !== 'planned') {
+                throw $this->validationError('Solo se puede confirmar carga de rutas planificadas.');
+            }
+
+            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
+
+            $stops = $route->stops()
+                ->with(['items.product', 'order'])
+                ->where('status', '!=', 'cancelled')
+                ->orderBy('sequence')
+                ->get();
+
+            $hasLoaded = false;
+
+            foreach ($products as $productEntry) {
+                $productId = $productEntry['product_id'];
+                $remainingToLoad = (int) $productEntry['quantity_loaded'];
+
+                // Skip if quantity is <= 0 — these will be handled as zero-load below
+                if ($remainingToLoad > 0) {
+                    foreach ($stops as $stop) {
+                        if ($remainingToLoad <= 0) {
+                            break;
+                        }
+
+                        $stopItem = $stop->items->firstWhere('product_id', $productId);
+                        if (! $stopItem) {
+                            continue;
+                        }
+
+                        $assignQty = min($remainingToLoad, (int) $stopItem->quantity_planned);
+
+                        if ($assignQty <= 0) {
+                            continue;
+                        }
+
+                        $stopItem->update([
+                            'quantity_loaded' => $assignQty,
+                        ]);
+
+                        $remainingToLoad -= $assignQty;
+                        $hasLoaded = true;
+                    }
+                } else {
+                    // Zero-load: set quantity_loaded to 0 on all matching stop items
+                    foreach ($stops as $stop) {
+                        $stopItem = $stop->items->firstWhere('product_id', $productId);
+                        if (! $stopItem) {
+                            continue;
+                        }
+                        $stopItem->update([
+                            'quantity_loaded' => 0,
+                        ]);
+                    }
+                }
+            }
+
+            $route->update([
+                'status' => 'loaded',
+                'loaded_at' => now(),
+                'loaded_by' => $user->id,
+            ]);
+
+            $this->createEvent($route, $route->store_id, $user->id, 'route_loaded', 'planned', 'loaded');
+
+            return $route;
+        });
+    }
+
+    /**
      * Create an immutable event record.
      */
     private function createEvent(
@@ -1744,6 +1823,35 @@ class RouteManagementService
                 }
 
                 $discrepancy->update(['processed_at' => now()]);
+            }
+        }
+    }
+
+    /**
+     * Auto-generate route_stop_items for each active stop from its order items.
+     * Uses updateOrCreate to safely regenerate on re-plan without duplicating.
+     */
+    private function generateStopItems(\Illuminate\Database\Eloquent\Collection $stops): void
+    {
+        foreach ($stops as $stop) {
+            $order = CommercialOperation::with('items')->find($stop->order_id);
+
+            if (! $order || $order->items->isEmpty()) {
+                continue;
+            }
+
+            foreach ($order->items as $orderItem) {
+                RouteStopItem::updateOrCreate(
+                    [
+                        'route_stop_id' => $stop->id,
+                        'product_id' => $orderItem->product_id,
+                    ],
+                    [
+                        'quantity_planned' => $orderItem->quantity,
+                        'quantity_loaded' => 0,
+                        'quantity_delivered' => 0,
+                    ]
+                );
             }
         }
     }
