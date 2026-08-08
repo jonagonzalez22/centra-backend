@@ -1136,7 +1136,9 @@ class RouteController extends Controller
      *         @OA\Items(
      *           required={"product_id", "quantity_loaded"},
      *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
-     *           @OA\Property(property="quantity_loaded", type="integer", example=10)
+     *           @OA\Property(property="quantity_loaded", type="integer", example=10),
+     *           @OA\Property(property="reason", type="string", nullable=true, example="Falta de stock en depósito"),
+     *           @OA\Property(property="notes", type="string", nullable=true, example="Solo 10 de 15 disponibles")
      *         )
      *       )
      *     )

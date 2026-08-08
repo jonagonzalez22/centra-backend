@@ -1576,6 +1576,10 @@ class RouteManagementService
     /**
      * Consolidated load: receive product-level quantities and distribute across stops
      * following strict sequence order (prorrateo).
+     *
+     * For each product, distributes quantity_loaded greedily across stops
+     * ordered by sequence. Stops that receive less than their quantity_planned
+     * get a RouteLoadAdjustment record with the reason/notes from the payload.
      */
     public function bulkLoad(DeliveryRoute $route, array $products, User $user): DeliveryRoute
     {
@@ -1597,9 +1601,11 @@ class RouteManagementService
             foreach ($products as $productEntry) {
                 $productId = $productEntry['product_id'];
                 $remainingToLoad = (int) $productEntry['quantity_loaded'];
+                $reason = $productEntry['reason'] ?? null;
+                $notes = $productEntry['notes'] ?? null;
 
-                // Skip if quantity is <= 0 — these will be handled as zero-load below
                 if ($remainingToLoad > 0) {
+                    // Prorrateo: distribuir greedy por secuencia
                     foreach ($stops as $stop) {
                         if ($remainingToLoad <= 0) {
                             break;
@@ -1610,19 +1616,20 @@ class RouteManagementService
                             continue;
                         }
 
-                        $assignQty = min($remainingToLoad, (int) $stopItem->quantity_planned);
+                        $planned = (int) $stopItem->quantity_planned;
+                        $assignQty = min($remainingToLoad, $planned);
 
                         if ($assignQty <= 0) {
                             continue;
                         }
 
-                        $stopItem->update([
-                            'quantity_loaded' => $assignQty,
-                        ]);
-
+                        $stopItem->update(['quantity_loaded' => $assignQty]);
                         $remainingToLoad -= $assignQty;
                         $hasLoaded = true;
                     }
+
+                    // Registrar ajustes para paradas que recibieron menos de lo planificado
+                    $this->recordBulkAdjustments($stops, $productId, $reason, $notes, $user);
                 } else {
                     // Zero-load: set quantity_loaded to 0 on all matching stop items
                     foreach ($stops as $stop) {
@@ -1630,10 +1637,10 @@ class RouteManagementService
                         if (! $stopItem) {
                             continue;
                         }
-                        $stopItem->update([
-                            'quantity_loaded' => 0,
-                        ]);
+                        $stopItem->update(['quantity_loaded' => 0]);
                     }
+
+                    $this->recordBulkAdjustments($stops, $productId, $reason, $notes, $user);
                 }
             }
 
@@ -1647,6 +1654,52 @@ class RouteManagementService
 
             return $route;
         });
+    }
+
+    /**
+     * For a given product in the route, create RouteLoadAdjustment records
+     * for every stop item where quantity_loaded is less than quantity_planned.
+     */
+    private function recordBulkAdjustments(
+        $stops,
+        string $productId,
+        ?string $reason,
+        ?string $notes,
+        User $user
+    ): void {
+        $needsReason = false;
+
+        foreach ($stops as $stop) {
+            $stopItem = $stop->items->firstWhere('product_id', $productId);
+            if (! $stopItem) {
+                continue;
+            }
+
+            // Refresh from DB to get the updated quantity_loaded
+            $stopItem->refresh();
+
+            $planned = (int) $stopItem->quantity_planned;
+            $loaded = (int) $stopItem->quantity_loaded;
+
+            if ($loaded < $planned) {
+                $needsReason = true;
+
+                RouteLoadAdjustment::create([
+                    'route_stop_item_id' => $stopItem->id,
+                    'user_id' => $user->id,
+                    'old_quantity' => $planned,
+                    'new_quantity' => $loaded,
+                    'reason' => $reason ?? 'other',
+                    'notes' => $notes,
+                ]);
+            }
+        }
+
+        if ($needsReason && empty($reason)) {
+            throw $this->validationError(
+                'Se requiere un motivo cuando la cantidad cargada es menor a la planificada.'
+            );
+        }
     }
 
     /**
