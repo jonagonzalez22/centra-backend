@@ -13799,6 +13799,68 @@
                 ]
             }
         },
+        "/store/route-stops/{stop}/notified": {
+            "patch": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Marcar un stop como notificado",
+                "description": "Mark a route stop as notified (customer contacted about delivery).",
+                "operationId": "7e490db61481b8796f6a8cec50a96d78",
+                "parameters": [
+                    {
+                        "name": "stop",
+                        "in": "path",
+                        "description": "ID del stop",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Stop marcado como notificado exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Stop marcado como notificado exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/RouteStop"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Stop no encontrado"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/routes/{route}": {
             "get": {
                 "tags": [

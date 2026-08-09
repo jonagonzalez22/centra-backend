@@ -184,6 +184,61 @@ class RouteController extends Controller
     }
 
     /**
+     * Mark a route stop as notified (customer contacted about delivery).
+     *
+     * @OA\Patch(
+     *   path="/store/route-stops/{stop}/notified",
+     *   summary="Marcar un stop como notificado",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="stop", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID del stop"),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Stop marcado como notificado exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Stop marcado como notificado exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/RouteStop"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Stop no encontrado"),
+     *   @OA\Response(response=422, description="Error de validación")
+     * )
+     */
+    public function markStopNotified(Request $request, string $stopId): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $stop = RouteStop::whereHas('route', function ($q) use ($storeId) {
+            $q->where('store_id', $storeId);
+        })->find($stopId);
+
+        if (! $stop) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Stop no encontrado.',
+                'data' => null,
+                'errors' => ['id' => ['El stop no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $stop = $this->routeService->markStopAsNotified($stop, $request->user());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Stop marcado como notificado exitosamente.',
+            'data' => RouteStopResource::make($stop),
+            'errors' => null,
+        ]);
+    }
+
+    /**
      * Show a single route with stops and events.
      *
      * @OA\Get(
