@@ -329,6 +329,10 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:logistics.routes.load')
                     ->name('store.routes.adjust-items');
 
+                Route::patch('route-stops/{stop}/notified', [RouteController::class, 'markStopNotified'])
+                    ->middleware('permission:logistics.routes.manage')
+                    ->name('store.route-stops.notified');
+
                 Route::post('routes/{route}/bulk-load', [RouteController::class, 'bulkLoad'])
                     ->middleware('permission:logistics.routes.load')
                     ->name('store.routes.bulk-load');

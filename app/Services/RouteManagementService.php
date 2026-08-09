@@ -133,6 +133,31 @@ class RouteManagementService
     }
 
     /**
+     * Mark a route stop as notified (customer contacted about delivery).
+     */
+    public function markStopAsNotified(RouteStop $stop, User $user): RouteStop
+    {
+        if ($stop->notified_at) {
+            throw $this->validationError('Este stop ya fue marcado como notificado.');
+        }
+
+        $stop->update(['notified_at' => now()]);
+
+        $this->createEvent(
+            DeliveryRoute::find($stop->route_id),
+            $stop->route->store_id ?? $user->store_id,
+            $user->id,
+            'stop_notified',
+            null,
+            null,
+            null,
+            ['stop_id' => $stop->id]
+        );
+
+        return $stop;
+    }
+
+    /**
      * Add a stop (order) to a route.
      */
     public function addStop(DeliveryRoute $route, CommercialOperation $order, array $data, User $user): RouteStop

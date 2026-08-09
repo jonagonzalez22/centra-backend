@@ -31,6 +31,7 @@ class RouteStop extends Model
         'gps_lon',
         'signature_uri',
         'evidence_uris',
+        'notified_at',
     ];
 
     protected function casts(): array
@@ -39,6 +40,7 @@ class RouteStop extends Model
             'estimated_arrival_at' => 'datetime',
             'travel_duration_seconds' => 'integer',
             'completed_at' => 'datetime',
+            'notified_at' => 'datetime',
             'gps_lat' => 'decimal:7',
             'gps_lon' => 'decimal:7',
             'evidence_uris' => 'array',

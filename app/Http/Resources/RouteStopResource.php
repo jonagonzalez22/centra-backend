@@ -68,6 +68,7 @@ class RouteStopResource extends JsonResource
             'gps_lon' => $this->gps_lon,
             'signature_uri' => $this->signature_uri,
             'evidence_uris' => $this->evidence_uris,
+            'notified_at' => $this->notified_at?->format('Y-m-d H:i:s'),
         ];
     }
 }
