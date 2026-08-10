@@ -137,6 +137,14 @@ class RouteManagementService
      */
     public function markStopAsNotified(RouteStop $stop, User $user): RouteStop
     {
+        // Validate customer has a phone number
+        $order = $stop->order()->with('customer.contacts')->first();
+        $phone = $order?->customer?->contacts?->first()?->phone;
+
+        if (! $phone) {
+            throw $this->validationError('El cliente no tiene un teléfono registrado.');
+        }
+
         $stop->update(['notified_at' => now()]);
 
         $this->createEvent(
