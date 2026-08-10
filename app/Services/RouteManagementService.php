@@ -137,10 +137,6 @@ class RouteManagementService
      */
     public function markStopAsNotified(RouteStop $stop, User $user): RouteStop
     {
-        if ($stop->notified_at) {
-            throw $this->validationError('Este stop ya fue marcado como notificado.');
-        }
-
         $stop->update(['notified_at' => now()]);
 
         $this->createEvent(

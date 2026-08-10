@@ -273,6 +273,7 @@ class RouteController extends Controller
             ->with([
                 'stops' => fn ($q) => $q->orderBy('sequence'),
                 'stops.order.customer.addresses.locality',
+                'stops.order.customer.contacts',
                 'events' => fn ($q) => $q->orderBy('created_at'),
                 'events.user',
                 'vehicle',

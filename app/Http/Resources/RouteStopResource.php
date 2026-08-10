@@ -27,6 +27,9 @@ class RouteStopResource extends JsonResource
                     'customer' => $this->order->relationLoaded('customer') && $this->order->customer ? [
                         'name' => $this->order->customer->display_name ?? $this->order->customer->name,
                         'document' => $this->order->customer->document_number,
+                        'phone' => $this->order->customer->relationLoaded('contacts')
+                            ? $this->order->customer->contacts->first()?->phone
+                            : null,
                     ] : null,
                     'address' => $this->when(
                         $this->order->relationLoaded('customer') &&
