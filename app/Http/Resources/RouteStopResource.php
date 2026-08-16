@@ -6,11 +6,14 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Services\RouteStopService;
 
 class RouteStopResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $notificationWindow = (new RouteStopService())->calculateNotificationWindow($this->resource);
+
         return [
             'id' => $this->id,
             'route_id' => $this->route_id,
@@ -72,6 +75,12 @@ class RouteStopResource extends JsonResource
             'signature_uri' => $this->signature_uri,
             'evidence_uris' => $this->evidence_uris,
             'notified_at' => $this->notified_at?->format('Y-m-d H:i:s'),
+            'notification_window_start' => $notificationWindow['start_rounded'],
+            'notification_window_end' => $notificationWindow['end_rounded'],
+            'notification_window_start_raw_iso' => $notificationWindow['start_raw'],
+            'notification_window_end_raw_iso' => $notificationWindow['end_raw'],
+            'notification_window_day' => $notificationWindow['day_label'],
+            'notification_window_raw_eta' => $notificationWindow['eta'],
         ];
     }
 }

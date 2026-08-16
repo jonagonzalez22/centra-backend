@@ -145,6 +145,10 @@ class RouteManagementService
             throw $this->validationError('El cliente no tiene un teléfono registrado.');
         }
 
+        if ($stop->notified_at) {
+            return $stop;
+        }
+
         $stop->update(['notified_at' => now()]);
 
         $this->createEvent(

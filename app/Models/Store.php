@@ -35,6 +35,7 @@ class Store extends Model
         'inactive_at',
         'latitude',
         'longitude',
+        'timezone',
     ];
 
     protected $casts = [
