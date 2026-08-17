@@ -28,6 +28,9 @@ beforeEach(function () {
 
     $this->store = Store::factory()->create(['timezone' => 'America/Argentina/Buenos_Aires']);
 
+    // Ensure app timezone matches store timezone for consistent Carbon::parse() behavior in CI
+    config(['app.timezone' => $this->store->timezone]);
+
     $plan = Plan::factory()->create();
     $dFeature = Feature::create(['code' => 'deliveries', 'name' => 'Entregas']);
     $plan->features()->attach($dFeature->id);

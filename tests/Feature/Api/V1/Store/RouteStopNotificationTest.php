@@ -30,7 +30,10 @@ beforeEach(function () {
     Permission::create(['name' => 'logistics.routes.manage', 'guard_name' => 'web']);
     Permission::create(['name' => 'logistics.routes.view', 'guard_name' => 'web']);
 
-    $this->store = Store::factory()->create();
+    $this->store = Store::factory()->create(['timezone' => 'America/Argentina/Buenos_Aires']);
+
+    // Ensure app timezone matches store timezone for consistent Carbon::parse() behavior in CI
+    config(['app.timezone' => $this->store->timezone]);
 
     $plan = Plan::factory()->create();
     $deliveriesFeature = Feature::create(['code' => 'deliveries', 'name' => 'Entregas']);
