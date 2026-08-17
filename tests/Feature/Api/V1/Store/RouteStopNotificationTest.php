@@ -32,7 +32,9 @@ beforeEach(function () {
 
     $this->store = Store::factory()->create(['timezone' => 'America/Argentina/Buenos_Aires']);
 
-    // Ensure app timezone matches store timezone for consistent Carbon::parse() behavior in CI
+    // Ensure Carbon::parse() interprets naive datetime strings in the store's timezone
+    // rather than the system/PHP default timezone (UTC in CI).
+    date_default_timezone_set($this->store->timezone);
     config(['app.timezone' => $this->store->timezone]);
 
     $plan = Plan::factory()->create();
