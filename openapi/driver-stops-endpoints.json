@@ -1,0 +1,165 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "CENTRA API - Driver Stops Endpoints",
+    "description": "Driver-only read endpoints for route stops. All endpoints are lectura-only: no stock changes, no InventoryMovements created. is_extra exposed as false by Resource.",
+    "contact": {
+      "email": "soporte@centra.com"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/api/v1",
+      "description": "Servidor Local"
+    },
+    {
+      "url": "http://138.197.100.197/api/v1",
+      "description": "Servidor de desarrollo"
+    }
+  ],
+  "paths": {
+    "/driver/routes/{route_id}/stops": {
+      "get": {
+        "tags": ["Driver"],
+        "summary": "Listar paradas de la ruta del conductor",
+        "description": "List all stops for a route (summary view).\nReturns a lightweight list of stops for the authenticated driver.\nActor-scope: the driver must be assigned to the route.",
+        "operationId": "b903267ee4940999fb9fa311e8339d7d",
+        "parameters": [
+          {
+            "name": "route_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de paradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {"type": "string", "example": "success"},
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "properties": {
+                          "id": {"type": "string", "format": "uuid"},
+                          "sequence": {"type": "integer"},
+                          "status": {"type": "string"},
+                          "address": {"type": "string", "nullable": true},
+                          "contact_name": {"type": "string", "nullable": true},
+                          "contact_phone": {"type": "string", "nullable": true},
+                          "notification_window_start": {"type": "string"},
+                          "notification_window_end": {"type": "string"},
+                          "items_count": {"type": "integer"},
+                          "total_planned_items": {"type": "integer"}
+                        },
+                        "type": "object"
+                      }
+                    },
+                    "errors": {"type": "null"}
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {"description": "Driver not assigned to this route"},
+          "404": {"description": "Route not found"}
+        },
+        "security": [{"sanctum": []}]
+      }
+    },
+    "/driver/stops/{stop_id}": {
+      "get": {
+        "tags": ["Driver"],
+        "summary": "Obtener detalle de una parada",
+        "description": "Get full detail of a single stop.\nReturns complete stop data including items and collections.\nActor-scope: the driver must be assigned to the stop's route.",
+        "operationId": "78d4b3bcb2f8834edfe5ae073f670010",
+        "parameters": [
+          {
+            "name": "stop_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalle de la parada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {"type": "string", "example": "success"},
+                    "data": {
+                      "properties": {
+                        "id": {"type": "string", "format": "uuid"},
+                        "route_id": {"type": "string", "format": "uuid"},
+                        "sequence": {"type": "integer"},
+                        "status": {"type": "string"},
+                        "address": {"type": "string", "nullable": true},
+                        "contact_name": {"type": "string", "nullable": true},
+                        "contact_phone": {"type": "string", "nullable": true},
+                        "timezone": {"type": "string"},
+                        "eta": {"type": "string", "format": "date-time", "nullable": true},
+                        "notification_window_start": {"type": "string"},
+                        "notification_window_end": {"type": "string"},
+                        "notes": {"type": "string", "nullable": true},
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "properties": {
+                              "id": {"type": "string", "format": "uuid"},
+                              "product_id": {"type": "string", "format": "uuid"},
+                              "product_name": {"type": "string"},
+                              "sku": {"type": "string", "nullable": true},
+                              "quantity_planned": {"type": "integer"},
+                              "quantity_loaded": {"type": "integer"},
+                              "quantity_delivered": {"type": "integer"},
+                              "original_route_stop_id": {"type": "string", "format": "uuid", "nullable": true},
+                              "is_extra": {"type": "boolean"},
+                              "notes": {"type": "string", "nullable": true}
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "collections": {
+                          "type": "array",
+                          "items": {
+                            "properties": {
+                              "id": {"type": "string", "format": "uuid"},
+                              "status": {"type": "string"},
+                              "amount": {"type": "number"},
+                              "method": {"type": "string", "nullable": true},
+                              "declared_at": {"type": "string", "format": "date-time", "nullable": true}
+                            },
+                            "type": "object"
+                          }
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "errors": {"type": "null"}
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {"description": "Stop not assigned to this driver"},
+          "404": {"description": "Stop not found"}
+        },
+        "security": [{"sanctum": []}]
+      }
+    }
+  }
+}
