@@ -46,7 +46,12 @@ class DriverRouteController extends Controller
      *                 @OA\Property(property="notification_window_start", type="string"),
      *                 @OA\Property(property="notification_window_end", type="string"),
      *                 @OA\Property(property="items_count", type="integer"),
-     *                 @OA\Property(property="total_planned_items", type="integer")
+     *                 @OA\Property(property="total_planned_items", type="integer"),
+     *                 @OA\Property(property="order", type="object",
+     *                     @OA\Property(property="total", type="number", format="float", example=1800.00),
+     *                     @OA\Property(property="paid_amount", type="number", format="float", example=300.00),
+     *                     @OA\Property(property="pending_amount", type="number", format="float", example=1500.00)
+     *                 )
      *             )),
      *             @OA\Property(property="errors", type="null")
      *         )
@@ -79,6 +84,7 @@ class DriverRouteController extends Controller
             ->with([
                 'order.customer.addresses',
                 'order.customer.contacts',
+                'order.payments',
                 'items',
             ])
             ->get();

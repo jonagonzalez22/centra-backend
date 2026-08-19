@@ -52,6 +52,23 @@ class DriverStopResource extends JsonResource
             'notes' => $this->logistics_notes,
             'items' => DriverStopItemResource::collection($this->whenLoaded('items')),
             'collections' => DriverStopCollectionResource::collection($this->whenLoaded('collections')),
+            'order' => $this->when(
+                $this->relationLoaded('order'),
+                function () {
+                    $order = $this->order;
+                    $total = (float) $order->total;
+                    $paidAmount = $order->relationLoaded('payments')
+                        ? (float) $order->payments->sum('amount')
+                        : 0.0;
+                    $pendingAmount = max(0, $total - $paidAmount);
+
+                    return [
+                        'total' => $total,
+                        'paid_amount' => $paidAmount,
+                        'pending_amount' => $pendingAmount,
+                    ];
+                }
+            ),
         ];
     }
 }

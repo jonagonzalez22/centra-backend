@@ -1,10 +1,12 @@
 <?php
 
+use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\CustomerContact;
 use App\Models\DeliveryRoute;
 use App\Models\Feature;
+use App\Models\OperationPayment;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\RouteStop;
@@ -376,4 +378,241 @@ test('driver stops show does not modify any records', function () {
         'id' => $stop->id,
         'status' => $originalStatus,
     ]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TESTS: order economic info (total, paid_amount, pending_amount)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test('driver stops show includes correct order economic info with no payments', function () {
+    $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
+
+    $order = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer)
+        ->order()
+        ->create(['total' => 1800.00]);
+
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}");
+
+    $response->assertStatus(200);
+    expect($response->json('data.order.total'))->toEqual(1800.00);
+    expect($response->json('data.order.paid_amount'))->toEqual(0.0);
+    expect($response->json('data.order.pending_amount'))->toEqual(1800.00);
+});
+
+test('driver stops show includes correct order economic info with partial payment', function () {
+    $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
+
+    $order = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer)
+        ->order()
+        ->create(['total' => 1800.00]);
+
+    OperationPayment::factory()->forOperation($order)->create(['amount' => 300.00]);
+
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}");
+
+    $response->assertStatus(200);
+    expect($response->json('data.order.total'))->toEqual(1800.00);
+    expect($response->json('data.order.paid_amount'))->toEqual(300.00);
+    expect($response->json('data.order.pending_amount'))->toEqual(1500.00);
+});
+
+test('driver stops show includes correct order economic info with full payment', function () {
+    $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
+
+    $order = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer)
+        ->order()
+        ->create(['total' => 1800.00]);
+
+    OperationPayment::factory()->forOperation($order)->create(['amount' => 1800.00]);
+
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}");
+
+    $response->assertStatus(200);
+    expect($response->json('data.order.total'))->toEqual(1800.00);
+    expect($response->json('data.order.paid_amount'))->toEqual(1800.00);
+    expect($response->json('data.order.pending_amount'))->toEqual(0.00);
+});
+
+test('driver stops show pending_amount is never negative even when paid exceeds total', function () {
+    $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
+
+    $order = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer)
+        ->order()
+        ->create(['total' => 1800.00]);
+
+    // Paid more than total (overpayment scenario)
+    OperationPayment::factory()->forOperation($order)->create(['amount' => 2000.00]);
+
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}");
+
+    $response->assertStatus(200);
+    expect($response->json('data.order.total'))->toEqual(1800.00);
+    expect($response->json('data.order.paid_amount'))->toEqual(2000.00);
+    expect($response->json('data.order.pending_amount'))->toEqual(0.00); // Should be 0, not negative
+});
+
+test('driver stops show declared collection does not affect pending_amount', function () {
+    $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
+
+    $order = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer)
+        ->order()
+        ->create(['total' => 1800.00]);
+
+    // No OperationPayment yet - only a declared RouteStopCollection
+    $paymentMethod = StorePaymentMethod::factory()->for($this->store)->create();
+
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    // Driver declared a collection but it hasn't been verified by backoffice
+    RouteStopCollection::factory()->create([
+        'route_stop_id' => $stop->id,
+        'store_id' => $this->store->id,
+        'commercial_operation_id' => $order->id,
+        'store_payment_method_id' => $paymentMethod->id,
+        'amount' => 1500.00,
+        'status' => 'declared',
+        'declared_by' => $this->driver->id,
+        'declared_at' => now(),
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}");
+
+    $response->assertStatus(200);
+    expect($response->json('data.order.total'))->toEqual(1800.00);
+    expect($response->json('data.order.paid_amount'))->toEqual(0.00); // No OperationPayment yet
+    expect($response->json('data.order.pending_amount'))->toEqual(1800.00); // Still full amount
+});
+
+test('driver routes stops includes order economic info in each stop', function () {
+    $customer1 = Customer::factory()->for($this->store)->create(['display_name' => 'Customer 1']);
+    $customer2 = Customer::factory()->for($this->store)->create(['display_name' => 'Customer 2']);
+
+    $order1 = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer1)
+        ->order()
+        ->create(['total' => 1000.00]);
+
+    $order2 = CommercialOperation::factory()
+        ->forStore($this->store)
+        ->forCustomer($customer2)
+        ->order()
+        ->create(['total' => 2000.00]);
+
+    OperationPayment::factory()->forOperation($order1)->create(['amount' => 400.00]);
+
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+
+    $stop1 = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order1->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    $stop2 = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order2->id,
+        'sequence' => 2,
+        'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/routes/{$route->id}/stops");
+
+    $response->assertStatus(200);
+    expect($response->json('data.0.order.total'))->toEqual(1000.00);
+    expect($response->json('data.0.order.paid_amount'))->toEqual(400.00);
+    expect($response->json('data.0.order.pending_amount'))->toEqual(600.00);
+    expect($response->json('data.1.order.total'))->toEqual(2000.00);
+    expect($response->json('data.1.order.paid_amount'))->toEqual(0.00);
+    expect($response->json('data.1.order.pending_amount'))->toEqual(2000.00);
 });

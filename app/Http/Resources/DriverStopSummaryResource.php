@@ -54,6 +54,23 @@ class DriverStopSummaryResource extends JsonResource
                 $this->relationLoaded('items'),
                 fn () => $this->items->sum('quantity_planned')
             ),
+            'order' => $this->when(
+                $this->relationLoaded('order'),
+                function () {
+                    $order = $this->order;
+                    $total = (float) $order->total;
+                    $paidAmount = $order->relationLoaded('payments')
+                        ? (float) $order->payments->sum('amount')
+                        : 0.0;
+                    $pendingAmount = max(0, $total - $paidAmount);
+
+                    return [
+                        'total' => $total,
+                        'paid_amount' => $paidAmount,
+                        'pending_amount' => $pendingAmount,
+                    ];
+                }
+            ),
         ];
     }
 }

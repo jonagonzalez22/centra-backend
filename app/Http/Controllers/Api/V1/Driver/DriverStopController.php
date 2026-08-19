@@ -66,7 +66,12 @@ class DriverStopController extends Controller
      *                     @OA\Property(property="amount", type="number"),
      *                     @OA\Property(property="method", type="string", nullable=true),
      *                     @OA\Property(property="declared_at", type="string", format="date-time", nullable=true)
-     *                 ))
+     *                 )),
+     *                 @OA\Property(property="order", type="object",
+     *                     @OA\Property(property="total", type="number", format="float", example=1800.00),
+     *                     @OA\Property(property="paid_amount", type="number", format="float", example=300.00),
+     *                     @OA\Property(property="pending_amount", type="number", format="float", example=1500.00)
+     *                 )
      *             ),
      *             @OA\Property(property="errors", type="null")
      *         )
@@ -82,6 +87,7 @@ class DriverStopController extends Controller
         $stop = RouteStop::with([
             'order.customer.addresses',
             'order.customer.contacts',
+            'order.payments',
             'items.product',
             'collections.storePaymentMethod.paymentMethod',
             'route',
