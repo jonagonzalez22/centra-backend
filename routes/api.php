@@ -57,6 +57,8 @@ Route::prefix('v1')->group(function () {
     Route::post('stops/{stop}/complete', [DriverExecutionController::class, 'complete']);
     Route::get('routes/{route}/stops', [DriverRouteController::class, 'stops']);
     Route::get('stops/{stop}', [DriverStopController::class, 'show']);
+    Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
+      ->name('store.payment-methods.index');
   });
 
   Route::prefix('admin')

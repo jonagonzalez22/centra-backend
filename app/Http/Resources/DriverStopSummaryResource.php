@@ -18,21 +18,27 @@ class DriverStopSummaryResource extends JsonResource
         $notificationWindow = (new RouteStopService())->calculateNotificationWindow($this->resource);
         $timezone = $this->resource->route?->store?->timezone ?? config('app.timezone', 'UTC');
 
-        // Build contact info from loaded relations
-        $contactName = null;
-        $contactPhone = null;
-        $address = null;
+        // Build customer info from loaded relations
+        $customerName = null;
+        $customerPhone = null;
+        $addressStreet = null;
+        $addressLocality = null;
+        $addressLatitude = null;
+        $addressLongitude = null;
 
         if ($this->relationLoaded('order') && $this->order?->relationLoaded('customer')) {
             $customer = $this->order->customer;
-            $contactName = $customer->display_name ?? $customer->name;
+            $customerName = $customer->display_name ?? $customer->name;
             if ($customer->relationLoaded('contacts')) {
-                $contactPhone = $customer->contacts->first()?->phone;
+                $customerPhone = $customer->contacts->first()?->phone;
             }
             if ($customer->relationLoaded('addresses')) {
                 $mainAddress = $customer->addresses->firstWhere('is_main', true);
                 if ($mainAddress) {
-                    $address = trim("{$mainAddress->street} {$mainAddress->number}");
+                    $addressStreet = trim("{$mainAddress->street} {$mainAddress->number}");
+                    $addressLocality = $mainAddress->locality;
+                    $addressLatitude = $mainAddress->latitude;
+                    $addressLongitude = $mainAddress->longitude;
                 }
             }
         }
@@ -41,19 +47,19 @@ class DriverStopSummaryResource extends JsonResource
             'id' => $this->id,
             'sequence' => $this->sequence,
             'status' => $this->status,
-            'address' => $address,
-            'contact_name' => $contactName,
-            'contact_phone' => $contactPhone,
+            'customer' => [
+                'name' => $customerName,
+                'phone' => $customerPhone,
+            ],
+            'address' => [
+                'street' => $addressStreet,
+                'locality' => $addressLocality,
+                'latitude' => $addressLatitude,
+                'longitude' => $addressLongitude,
+                'notes' => $this->logistics_notes, // notas de logística de la parada
+            ],
             'notification_window_start' => $notificationWindow['start_rounded'],
             'notification_window_end' => $notificationWindow['end_rounded'],
-            'items_count' => $this->when(
-                $this->relationLoaded('items'),
-                fn () => $this->items->count()
-            ),
-            'total_planned_items' => $this->when(
-                $this->relationLoaded('items'),
-                fn () => $this->items->sum('quantity_planned')
-            ),
             'order' => $this->when(
                 $this->relationLoaded('order'),
                 function () {

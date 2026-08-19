@@ -16,6 +16,7 @@ class DriverStopItemResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'route_stop_item_id' => $this->id, // mismo valor, alias para el POST /complete
             'product_id' => $this->product_id,
             'product_name' => $this->product?->name ?? $this->product_name,
             'sku' => $this->product?->sku ?? null,
