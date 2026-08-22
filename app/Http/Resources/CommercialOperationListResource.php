@@ -32,7 +32,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *     @OA\Property(property="street", type="string", nullable=true),
  *     @OA\Property(property="full_address", type="string", nullable=true)
  *   ),
- *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true)
+ *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true),
+ *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido")
  * )
  */
 class CommercialOperationListResource extends JsonResource
@@ -58,6 +59,12 @@ class CommercialOperationListResource extends JsonResource
             ]),
             'delivery_address' => $this->getDeliveryAddress(),
             'branch_id' => $this->branch_id,
+            'route_ids' => $this->whenLoaded('routeStops', fn () => $this->routeStops
+                ->where('status', '!=', 'cancelled')
+                ->pluck('route_id')
+                ->unique()
+                ->values()
+                ->toArray(), []),
         ];
     }
 

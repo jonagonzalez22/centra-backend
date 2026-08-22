@@ -59,6 +59,8 @@ Route::prefix('v1')->group(function () {
     Route::get('stops/{stop}', [DriverStopController::class, 'show']);
     Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
       ->name('store.payment-methods.index');
+    Route::get('rejection-reasons', [RejectionReasonController::class, 'index'])
+      ->name('store.logistics.rejection-reasons.index');
   });
 
   Route::prefix('admin')

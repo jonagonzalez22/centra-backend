@@ -88,6 +88,7 @@ class DriverStopController extends Controller
             'order.customer.addresses',
             'order.customer.contacts',
             'order.payments',
+            'order.items',
             'items.product',
             'collections.storePaymentMethod.paymentMethod',
             'route',
