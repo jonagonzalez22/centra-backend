@@ -158,9 +158,9 @@ test('driver routes stops returns 200 with correct structure for assigned driver
         ->assertJsonPath('data.0.id', $data['stops'][0]->id)
         ->assertJsonPath('data.0.sequence', 1)
         ->assertJsonPath('data.0.status', 'pending')
-        ->assertJsonPath('data.0.address', 'Av. Corrientes 1234')
-        ->assertJsonPath('data.0.contact_name', 'Juan Pérez')
-        ->assertJsonPath('data.0.contact_phone', '+5491155551234')
+        ->assertJsonPath('data.0.address.street', 'Av. Corrientes 1234')
+        ->assertJsonPath('data.0.customer.name', 'Juan Pérez')
+        ->assertJsonPath('data.0.customer.phone', '+5491155551234')
         ->assertJsonStructure([
             'status',
             'data' => [
@@ -168,13 +168,11 @@ test('driver routes stops returns 200 with correct structure for assigned driver
                     'id',
                     'sequence',
                     'status',
-                    'address',
-                    'contact_name',
-                    'contact_phone',
+                    'customer' => ['name', 'phone'],
+                    'address' => ['street', 'locality', 'latitude', 'longitude', 'notes'],
                     'notification_window_start',
                     'notification_window_end',
-                    'items_count',
-                    'total_planned_items',
+                    'order' => ['total', 'paid_amount', 'pending_amount'],
                 ],
             ],
             'errors',
