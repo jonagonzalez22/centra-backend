@@ -7838,6 +7838,214 @@
                 ]
             }
         },
+        "/driver/routes/{route}/available-surplus": {
+            "get": {
+                "tags": [
+                    "Driver"
+                ],
+                "summary": "Obtener excedentes disponibles en la ruta",
+                "description": "Get available surplus products on the route from completed/failed stops.",
+                "operationId": "b170a4c3ed062f16985c71833027967d",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "description": "ID de la ruta",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Excedentes disponibles obtenidos correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Excedentes disponibles obtenidos correctamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "route_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "surplus": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/AvailableSurplus"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ruta no encontrada o no está en estado despachado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/driver/stops/{stop}/extra-sales": {
+            "post": {
+                "tags": [
+                    "Driver"
+                ],
+                "summary": "Agregar venta extra a una parada",
+                "description": "Add extra sale items to a pending/arrived stop.",
+                "operationId": "e06736c567db6591538cd3f5b891d04d",
+                "parameters": [
+                    {
+                        "name": "stop",
+                        "in": "path",
+                        "description": "ID del RouteStop",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "product_id",
+                                                "quantity"
+                                            ],
+                                            "properties": {
+                                                "product_id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                                                },
+                                                "quantity": {
+                                                    "type": "integer",
+                                                    "minimum": 1,
+                                                    "example": 3
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Venta extra agregada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Venta extra agregada correctamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "stop": {
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "string",
+                                                            "format": "uuid"
+                                                        },
+                                                        "route_id": {
+                                                            "type": "string",
+                                                            "format": "uuid"
+                                                        },
+                                                        "sequence": {
+                                                            "type": "integer"
+                                                        },
+                                                        "status": {
+                                                            "type": "string"
+                                                        },
+                                                        "order": {
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "string",
+                                                                    "format": "uuid"
+                                                                },
+                                                                "operation_number": {
+                                                                    "type": "string"
+                                                                },
+                                                                "total": {
+                                                                    "type": "number"
+                                                                },
+                                                                "pending_balance": {
+                                                                    "type": "number"
+                                                                }
+                                                            },
+                                                            "type": "object",
+                                                            "nullable": true
+                                                        },
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/components/schemas/ExtraSaleItem"
+                                                            }
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Parada o ruta no encontrada"
+                    },
+                    "422": {
+                        "description": "Error de validación - cantidad excede disponible o stop no está en estado válido"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/driver/routes/{route_id}/stops": {
             "get": {
                 "tags": [
@@ -17484,6 +17692,14 @@
                         "type": "string",
                         "format": "uuid",
                         "nullable": true
+                    },
+                    "route_ids": {
+                        "description": "IDs de rutas activas (no canceladas) donde está asignado este pedido",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
                     }
                 },
                 "type": "object"
@@ -17643,6 +17859,14 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/CommercialOperationEventResource"
+                        }
+                    },
+                    "route_ids": {
+                        "description": "IDs de rutas activas (no canceladas) donde está asignado este pedido",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "format": "uuid"
                         }
                     }
                 },
@@ -18181,6 +18405,35 @@
                 },
                 "type": "object"
             },
+            "AvailableSurplus": {
+                "title": "AvailableSurplus",
+                "description": "Producto con excedente disponible en la ruta",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "example": "Leche entera 1L"
+                    },
+                    "sku": {
+                        "type": "string",
+                        "example": "LECHE001"
+                    },
+                    "unit_price": {
+                        "type": "number",
+                        "format": "double",
+                        "example": 150
+                    },
+                    "available_quantity": {
+                        "type": "integer",
+                        "example": 5
+                    }
+                },
+                "type": "object"
+            },
             "DriverActiveRoute": {
                 "title": "DriverActiveRoute",
                 "description": "Ruta activa del conductor con vehiculo, conductor y paradas",
@@ -18296,6 +18549,43 @@
                             }
                         ],
                         "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "ExtraSaleItem": {
+                "title": "ExtraSaleItem",
+                "description": "Item de venta extra agregado a una parada",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440001"
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "example": "Leche entera 1L"
+                    },
+                    "quantity_planned": {
+                        "type": "integer",
+                        "example": 3
+                    },
+                    "quantity_loaded": {
+                        "type": "integer",
+                        "example": 3
+                    },
+                    "quantity_delivered": {
+                        "type": "integer",
+                        "example": 3
+                    },
+                    "is_extra": {
+                        "type": "boolean",
+                        "example": true
                     }
                 },
                 "type": "object"

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\Admin\UserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogsController;
 use App\Http\Controllers\Api\V1\Driver\DriverExecutionController;
+use App\Http\Controllers\Api\V1\Driver\DriverExtraSaleController;
 use App\Http\Controllers\Api\V1\Driver\DriverRouteController;
 use App\Http\Controllers\Api\V1\Driver\DriverStopController;
 use App\Http\Controllers\Api\V1\GeocodingController;
@@ -57,6 +58,8 @@ Route::prefix('v1')->group(function () {
     Route::post('stops/{stop}/complete', [DriverExecutionController::class, 'complete']);
     Route::get('routes/{route}/stops', [DriverRouteController::class, 'stops']);
     Route::get('stops/{stop}', [DriverStopController::class, 'show']);
+    Route::get('routes/{route}/available-surplus', [DriverExtraSaleController::class, 'availableSurplus']);
+    Route::post('stops/{stop}/extra-sales', [DriverExtraSaleController::class, 'addExtraSale']);
     Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
       ->name('store.payment-methods.index');
     Route::get('rejection-reasons', [RejectionReasonController::class, 'index'])

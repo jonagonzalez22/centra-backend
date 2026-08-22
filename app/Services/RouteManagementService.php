@@ -1163,6 +1163,12 @@ class RouteManagementService
             'events' => fn ($q) => $q->orderBy('created_at'),
         ]);
 
+        // Load extra sale allocations for this route to adjust pending returns
+        $allocations = \App\Models\ExtraSaleAllocation::where('route_id', $route->id)->get();
+        $allocatedBySourceItem = $allocations->groupBy('source_stop_item_id')
+            ->map(fn ($group) => $group->sum('quantity'))
+            ->toArray();
+
         $declaredAmount = 0;
         $verifiedAmount = 0;
         $rejectedAmount = 0;
@@ -1177,7 +1183,10 @@ class RouteManagementService
             $stopHasUnresolved = false;
 
             foreach ($stop->items as $item) {
-                $diff = $item->quantity_loaded - $item->quantity_delivered;
+                $rawDiff = $item->quantity_loaded - $item->quantity_delivered;
+                // Subtract quantities already reallocated via extra_sale_allocations
+                $allocatedQty = $allocatedBySourceItem[$item->id] ?? 0;
+                $diff = $rawDiff - $allocatedQty;
                 $discrepancy = $item->discrepancy ?? null;
 
                 $stopItems[] = [
@@ -1187,6 +1196,7 @@ class RouteManagementService
                     'quantity_loaded' => $item->quantity_loaded,
                     'quantity_delivered' => $item->quantity_delivered,
                     'difference' => $diff,
+                    'extra_sale_allocated' => $allocatedQty,
                     'discrepancy' => $discrepancy ? [
                         'id' => $discrepancy->id,
                         'resolution_type' => $discrepancy->resolution_type,

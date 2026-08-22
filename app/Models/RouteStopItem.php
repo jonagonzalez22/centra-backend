@@ -22,6 +22,7 @@ class RouteStopItem extends Model
         'quantity_planned',
         'quantity_loaded',
         'quantity_delivered',
+        'is_extra',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class RouteStopItem extends Model
             'quantity_planned' => 'integer',
             'quantity_loaded' => 'integer',
             'quantity_delivered' => 'integer',
+            'is_extra' => 'boolean',
         ];
     }
 
