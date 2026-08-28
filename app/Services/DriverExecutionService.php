@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CommercialOperation;
+use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\ExtraSaleAllocation;
@@ -207,7 +208,12 @@ class DriverExecutionService
                     $toAllocate = min($remainingToAllocate, $availableOnThisItem);
 
                     // Get product for price
-                    $product = Product::find($productId);
+                    $product = Product::forStore($route->store_id)->find($productId);
+
+                    if (! $product) {
+                        throw $this->validationError("El producto {$productId} no pertenece a la tienda de la ruta.");
+                    }
+
                     $unitPrice = (float) ($product?->price ?? 0);
 
                     // Create the destination RouteStopItem (extra sale)
@@ -230,6 +236,62 @@ class DriverExecutionService
                         'source_stop_item_id' => $sourceItem->id,
                         'quantity' => $toAllocate,
                     ]);
+
+                    // Create or update DeliveryDiscrepancy for the source item
+                    // If allocation fully covers the difference, mark as 'extra_sale' resolved.
+                    // If partial, create/keep as pending (resolution_type = null).
+                    $existingDiscrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $sourceItem->id)->first();
+
+                    // Extra-sale allocations consume the source surplus without changing
+                    // the quantity delivered on the original stop.
+                    $totalAllocated = ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)
+                        ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
+                        ->sum('quantity');
+                    $newDiff = $sourceItem->quantity_loaded
+                        - $sourceItem->quantity_delivered
+                        - $totalAllocated;
+
+                    $notes = "Venta extra a parada {$stop->id}";
+
+                    if ($existingDiscrepancy) {
+                        // Update existing discrepancy
+                        if ($newDiff == 0) {
+                            // Full coverage - mark as resolved via extra_sale
+                            $existingDiscrepancy->update([
+                                'quantity_delivered' => $sourceItem->quantity_delivered,
+                                'difference_quantity' => 0,
+                                'resolution_type' => 'extra_sale',
+                                'notes' => $existingDiscrepancy->notes
+                                    ? $existingDiscrepancy->notes."; {$notes}"
+                                    : $notes,
+                                'resolved_at' => now(),
+                            ]);
+                        } else {
+                            // Partial coverage - mark as pending
+                            $existingDiscrepancy->update([
+                                'quantity_delivered' => $sourceItem->quantity_delivered,
+                                'difference_quantity' => $newDiff,
+                                'resolution_type' => null,
+                                'notes' => $existingDiscrepancy->notes
+                                    ? $existingDiscrepancy->notes."; {$notes}"
+                                    : $notes,
+                                'resolved_at' => null,
+                            ]);
+                        }
+                    } else {
+                        // Create new discrepancy record
+                        DeliveryDiscrepancy::create([
+                            'route_stop_item_id' => $sourceItem->id,
+                            'product_id' => $sourceItem->product_id,
+                            'quantity_loaded' => $sourceItem->quantity_loaded,
+                            'quantity_delivered' => $sourceItem->quantity_delivered,
+                            'difference_quantity' => $newDiff,
+                            'resolution_type' => $newDiff == 0 ? 'extra_sale' : null,
+                            'notes' => $notes,
+                            'resolved_by' => null,
+                            'resolved_at' => $newDiff == 0 ? now() : null,
+                        ]);
+                    }
 
                     // Add OperationItem to the CommercialOperation (order)
                     $order = $stop->order;
@@ -309,6 +371,7 @@ class DriverExecutionService
         return $sourceItems->filter(function ($item) {
             $surplus = $item->quantity_loaded - $item->quantity_delivered;
             $allocated = ExtraSaleAllocation::where('source_stop_item_id', $item->id)->sum('quantity');
+
             return ($surplus - $allocated) > 0;
         })->values();
     }

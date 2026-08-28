@@ -7,6 +7,7 @@ use App\Models\CustomerAddress;
 use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
+use App\Models\ExtraSaleAllocation;
 use App\Models\InventoryMovement;
 use App\Models\OperationPayment;
 use App\Models\Product;
@@ -1164,7 +1165,9 @@ class RouteManagementService
         ]);
 
         // Load extra sale allocations for this route to adjust pending returns
-        $allocations = \App\Models\ExtraSaleAllocation::where('route_id', $route->id)->get();
+        $allocations = ExtraSaleAllocation::where('route_id', $route->id)
+            ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
+            ->get();
         $allocatedBySourceItem = $allocations->groupBy('source_stop_item_id')
             ->map(fn ($group) => $group->sum('quantity'))
             ->toArray();
@@ -1205,7 +1208,7 @@ class RouteManagementService
                     ] : null,
                 ];
 
-                if ($diff > 0 && ! $discrepancy) {
+                if ($diff > 0 && ! $discrepancy?->resolution_type) {
                     $stopHasUnresolved = true;
                     $allDiscrepanciesResolved = false;
                 }
@@ -1364,7 +1367,8 @@ class RouteManagementService
     public function resolveDiscrepancy(RouteStopItem $item, array $data, User $user): DeliveryDiscrepancy
     {
         return DB::transaction(function () use ($item, $data, $user) {
-            $diff = $item->quantity_loaded - $item->quantity_delivered;
+            $item = RouteStopItem::where('id', $item->id)->lockForUpdate()->firstOrFail();
+            $diff = $this->getReconciliationDifference($item);
 
             if ($diff <= 0) {
                 throw $this->validationError('No hay diferencia que resolver.');
@@ -1372,8 +1376,12 @@ class RouteManagementService
 
             $quantityToResolve = (int) $data['quantity_to_resolve'];
 
-            if ($quantityToResolve > $diff) {
-                throw $this->validationError('La cantidad a resolver supera la diferencia real.');
+            if ($quantityToResolve !== $diff) {
+                throw $this->validationError('La cantidad a resolver debe coincidir con la diferencia pendiente.');
+            }
+
+            if ($data['resolution_type'] === 'extra_sale') {
+                throw $this->validationError('La venta extra debe estar respaldada por una asignación de mercadería en ruta.');
             }
 
             $discrepancy = DeliveryDiscrepancy::updateOrCreate(
@@ -1438,7 +1446,7 @@ class RouteManagementService
             // Check all discrepancies are resolved
             foreach ($stops as $stop) {
                 foreach ($stop->items as $item) {
-                    $diff = $item->quantity_loaded - $item->quantity_delivered;
+                    $diff = $this->getReconciliationDifference($item);
 
                     if ($diff < 0) {
                         throw $this->validationError('Hay items con cantidad entregada mayor a la cargada.');
@@ -1480,6 +1488,46 @@ class RouteManagementService
                     $order->update(['status' => 'delivered']);
                 } elseif ($deliveredQty > 0) {
                     $order->update(['status' => 'partially_delivered']);
+                }
+            }
+
+            // Cancel orders for failed stops
+            foreach ($stops as $stop) {
+                if ($stop->status === 'failed' && $stop->order_id) {
+                    $order = CommercialOperation::find($stop->order_id);
+                    if ($order) {
+                        $order->update(['status' => 'cancelled']);
+                    }
+                }
+            }
+
+            // Process inventory for delivered items on completed stops
+            foreach ($stops as $stop) {
+                if ($stop->status !== 'completed') {
+                    continue;
+                }
+                foreach ($stop->items as $item) {
+                    if ($item->quantity_delivered <= 0) {
+                        continue;
+                    }
+                    $product = Product::forStore($route->store_id)
+                        ->where('id', $item->product_id)
+                        ->lockForUpdate()
+                        ->first();
+                    if (! $product) {
+                        continue;
+                    }
+
+                    // Decrement stock for sold/delivered items
+                    $product->update([
+                        'stock' => max(0, $product->stock - $item->quantity_delivered),
+                    ]);
+
+                    // Every delivered unit consumes one reserved unit, including extra sales
+                    // allocated from surplus on another stop.
+                    $product->update([
+                        'stock_reserved' => max(0, $product->stock_reserved - $item->quantity_delivered),
+                    ]);
                 }
             }
 
@@ -1984,7 +2032,8 @@ class RouteManagementService
                     continue;
                 }
 
-                $product = Product::where('id', $discrepancy->product_id)
+                $product = Product::forStore($route->store_id)
+                    ->where('id', $discrepancy->product_id)
                     ->lockForUpdate()
                     ->first();
 
@@ -1992,20 +2041,17 @@ class RouteManagementService
                     continue;
                 }
 
-                $diff = $discrepancy->difference_quantity;
+                $diff = $this->getReconciliationDifference($item);
                 $orderId = $stop->order_id;
 
                 switch ($discrepancy->resolution_type) {
                     case 'returned':
                     case 'rejected_by_customer':
-                        // Release stock_reserved, no stock change
+                        // Loaded route units were never removed from consolidated stock.
+                        // Returning them only releases their reservation.
                         $product->update([
                             'stock_reserved' => max(0, $product->stock_reserved - $diff),
                         ]);
-                        $inventoryService->recordMovement(
-                            $product, $user, 'input', $diff,
-                            "Reingreso logístico — Ruta {$route->id} — Pedido {$orderId}"
-                        );
                         break;
 
                     case 'missing':
@@ -2038,6 +2084,18 @@ class RouteManagementService
                 $discrepancy->update(['processed_at' => now()]);
             }
         }
+    }
+
+    /**
+     * Quantity still requiring reconciliation after valid extra-sale allocations.
+     */
+    private function getReconciliationDifference(RouteStopItem $item): int
+    {
+        $allocated = ExtraSaleAllocation::where('source_stop_item_id', $item->id)
+            ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
+            ->sum('quantity');
+
+        return (int) $item->quantity_loaded - (int) $item->quantity_delivered - (int) $allocated;
     }
 
     /**

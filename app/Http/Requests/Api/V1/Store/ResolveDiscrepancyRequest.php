@@ -17,7 +17,7 @@ class ResolveDiscrepancyRequest extends FormRequest
     {
         return [
             'route_stop_item_id' => ['required', 'uuid', 'exists:route_stop_items,id'],
-            'resolution_type' => ['required', 'string', 'in:returned,pending_redelivery,missing,damaged,rejected_by_customer,other'],
+            'resolution_type' => ['required', 'string', 'in:returned,pending_redelivery,missing,damaged,rejected_by_customer,extra_sale,other'],
             'quantity_to_resolve' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string'],
         ];
