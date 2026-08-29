@@ -186,7 +186,9 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
         $response->assertOk()
             ->assertJsonPath('status', 'success')
             ->assertJsonPath('data.status', 'cancelled')
-            ->assertJsonPath('data.id', $order->id);
+            ->assertJsonPath('data.id', $order->id)
+            ->assertJsonPath('data.history.1.type', 'order_cancelled')
+            ->assertJsonPath('data.history.1.title', 'Pedido cancelado');
 
         // Verify stock_reserved released (5 - 2 = 3)
         $product->refresh();

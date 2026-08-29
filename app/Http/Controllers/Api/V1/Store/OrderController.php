@@ -7,6 +7,7 @@ use App\Http\Requests\Api\V1\Store\ListOrdersRequest;
 use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
+use App\Services\OrderHistoryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -152,7 +153,7 @@ class OrderController extends Controller
      *   @OA\Response(response=404, description="Pedido no encontrado")
      * )
      */
-    public function show(Request $request, string $id): JsonResponse
+    public function show(Request $request, string $id, OrderHistoryBuilder $historyBuilder): JsonResponse
     {
         $storeId = $request->user()->store_id;
 
@@ -162,9 +163,7 @@ class OrderController extends Controller
                 'customer.addresses.locality',
                 'items.product',
                 'payments.storePaymentMethod.paymentMethod',
-                'events.user',
                 'user',
-                'routeStops',
             ])
             ->withSum('payments', 'amount')
             ->find($id);
@@ -186,6 +185,8 @@ class OrderController extends Controller
                 'errors' => ['id' => ['El recurso solicitado no es un pedido.']],
             ], 404);
         }
+
+        $historyBuilder->attach($operation, $storeId);
 
         return response()->json([
             'status' => 'success',

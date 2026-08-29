@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Models\Customer;
 use App\Models\CustomerAddress;
+use App\Models\DeliveryDiscrepancy;
+use App\Models\DeliveryRoute;
+use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
 use App\Models\Locality;
 use App\Models\OperationItem;
@@ -12,9 +15,12 @@ use App\Models\PaymentMethod;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Province;
+use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
+use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -106,6 +112,77 @@ function makePaymentMethodForStoreDetail(Store $store): StorePaymentMethod
         'store_id' => $store->id,
         'payment_method_id' => $paymentMethod->id,
     ]);
+}
+
+function createDetailRouteStop(
+    Store $store,
+    \App\Models\CommercialOperation $order,
+    Product $product,
+    User $driver,
+    string $routeStatus = 'planned',
+    string $stopStatus = 'pending',
+    int $planned = 10,
+    int $loaded = 0,
+    int $delivered = 0,
+    ?string $processedAt = null
+): array {
+    $vehicle = Vehicle::factory()->forStore($store)->create();
+    $route = DeliveryRoute::create([
+        'store_id' => $store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->format('Y-m-d'),
+        'status' => $routeStatus,
+        'created_by' => $driver->id,
+        'processed_at' => $processedAt,
+        'processed_by' => $processedAt ? $driver->id : null,
+    ]);
+    $stop = RouteStop::create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => $stopStatus,
+        'completed_by' => $stopStatus === 'completed' ? $driver->id : null,
+        'completed_at' => $stopStatus === 'completed' ? now() : null,
+    ]);
+    $item = RouteStopItem::create([
+        'route_stop_id' => $stop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => $planned,
+        'quantity_loaded' => $loaded,
+        'quantity_delivered' => $delivered,
+    ]);
+
+    DeliveryRouteEvent::create([
+        'store_id' => $store->id,
+        'route_id' => $route->id,
+        'user_id' => $driver->id,
+        'event_type' => 'stop_added',
+        'metadata' => ['stop_id' => $stop->id, 'order_id' => $order->id],
+    ]);
+
+    if ($stopStatus === 'completed') {
+        DeliveryRouteEvent::create([
+            'store_id' => $store->id,
+            'route_id' => $route->id,
+            'user_id' => $driver->id,
+            'event_type' => 'stop_completed',
+            'metadata' => ['stop_id' => $stop->id],
+        ]);
+    }
+
+    if ($routeStatus === 'completed') {
+        DeliveryRouteEvent::create([
+            'store_id' => $store->id,
+            'route_id' => $route->id,
+            'user_id' => $driver->id,
+            'event_type' => 'route_reconciliation_completed',
+            'from_status' => 'awaiting_reconciliation',
+            'to_status' => 'completed',
+        ]);
+    }
+
+    return [$route, $stop, $item];
 }
 
 describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
@@ -272,6 +349,163 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
         expect($events[0]['new_values']['date'])->toBe('2026-07-25');
         expect($events[0]['user'])->not->toBeNull();
         expect($events[0]['user']['id'])->toBe($eventUser->id);
+        $historyEvent = collect($response->json('data.history'))->firstWhere('type', 'reschedule');
+        expect($historyEvent)->not->toBeNull()
+            ->and($historyEvent['title'])->toBe('Fecha de entrega reprogramada')
+            ->and($historyEvent['details']['reason_code'])->toBe('customer_requested_reschedule');
+    });
+
+    test('history always includes the derived order creation', function () {
+        $order = createDetailOrder($this->store);
+
+        $response = getOrderDetail($order->id)->assertOk();
+
+        $response->assertJsonPath('data.events', []);
+        expect($response->json('data.history'))->toHaveCount(1)
+            ->and($response->json('data.history.0.type'))->toBe('order_created')
+            ->and($response->json('data.history.0.title'))->toBe('Pedido creado')
+            ->and($response->json('data.history.0.status'))->toBe('confirmed');
+    });
+
+    test('history shows a route assignment once using the route stop as source', function () {
+        $order = createDetailOrder($this->store);
+        OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'quantity' => 10,
+        ]);
+        [$route] = createDetailRouteStop($this->store, $order, $this->product, $this->user);
+
+        $history = collect(getOrderDetail($order->id)->assertOk()->json('data.history'));
+        $assignments = $history->where('type', 'route_assigned');
+
+        expect($assignments)->toHaveCount(1)
+            ->and($assignments->first()['route']['id'])->toBe($route->id);
+    });
+
+    test('history shows a driver delivery as provisional before reconciliation', function () {
+        $order = createDetailOrder($this->store, ['status' => 'open']);
+        OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'quantity' => 100,
+        ]);
+        createDetailRouteStop(
+            $this->store,
+            $order,
+            $this->product,
+            $this->user,
+            'awaiting_reconciliation',
+            'completed',
+            70,
+            70,
+            70
+        );
+
+        $response = getOrderDetail($order->id)->assertOk();
+        $delivery = collect($response->json('data.history'))->firstWhere('type', 'delivery_reported');
+
+        expect($order->fresh()->status)->toBe('open')
+            ->and($delivery['status'])->toBe('provisional')
+            ->and($delivery['description'])->toBe('Pendiente de conciliación')
+            ->and($delivery['details']['items'][0]['quantity_delivered'])->toBe(70);
+    });
+
+    test('history keeps partial and final reconciliations from multiple routes in order', function () {
+        $order = createDetailOrder($this->store, ['status' => 'delivered']);
+        OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'quantity' => 100,
+        ]);
+        [$routeOne] = createDetailRouteStop(
+            $this->store,
+            $order,
+            $this->product,
+            $this->user,
+            'completed',
+            'completed',
+            70,
+            70,
+            70,
+            '2026-08-20 10:00:00'
+        );
+        [$routeTwo] = createDetailRouteStop(
+            $this->store,
+            $order,
+            $this->product,
+            $this->user,
+            'completed',
+            'completed',
+            30,
+            30,
+            30,
+            '2026-08-21 10:00:00'
+        );
+
+        $deliveries = collect(getOrderDetail($order->id)->assertOk()->json('data.history'))
+            ->filter(fn (array $entry) => str_starts_with($entry['type'], 'delivery_reconciled'))
+            ->values();
+
+        expect($deliveries)->toHaveCount(2)
+            ->and($deliveries[0]['type'])->toBe('delivery_reconciled_partial')
+            ->and($deliveries[0]['route']['id'])->toBe($routeOne->id)
+            ->and($deliveries[0]['description'])->toBe('Queda mercadería pendiente')
+            ->and($deliveries[1]['type'])->toBe('delivery_reconciled_final')
+            ->and($deliveries[1]['route']['id'])->toBe($routeTwo->id)
+            ->and($deliveries[1]['description'])->toBe('Pedido entregado');
+    });
+
+    test('history exposes resolved discrepancies inside delivery details', function () {
+        $order = createDetailOrder($this->store, ['status' => 'partially_delivered']);
+        OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'quantity' => 10,
+        ]);
+        [, , $item] = createDetailRouteStop(
+            $this->store,
+            $order,
+            $this->product,
+            $this->user,
+            'completed',
+            'completed',
+            10,
+            10,
+            8,
+            '2026-08-20 10:00:00'
+        );
+        $discrepancy = DeliveryDiscrepancy::create([
+            'route_stop_item_id' => $item->id,
+            'product_id' => $this->product->id,
+            'quantity_loaded' => 10,
+            'quantity_delivered' => 8,
+            'difference_quantity' => 2,
+            'resolution_type' => 'pending_redelivery',
+            'notes' => 'Reprogramar entrega',
+            'resolved_by' => $this->user->id,
+            'resolved_at' => now(),
+        ]);
+
+        $history = collect(getOrderDetail($order->id)->assertOk()->json('data.history'));
+        $delivery = $history->firstWhere('type', 'delivery_reconciled_partial');
+        $serialized = $delivery['details']['items'][0]['discrepancies'][0];
+
+        expect($serialized['id'])->toBe($discrepancy->id)
+            ->and($serialized['quantity'])->toBe(2)
+            ->and($serialized['resolution_type'])->toBe('pending_redelivery')
+            ->and($serialized['resolved_by']['id'])->toBe($this->user->id);
+    });
+
+    test('history excludes route data whose route belongs to another store', function () {
+        $order = createDetailOrder($this->store);
+        $otherStore = Store::factory()->create();
+        $otherDriver = User::factory()->create(['store_id' => $otherStore->id]);
+        createDetailRouteStop($otherStore, $order, $this->product, $otherDriver);
+
+        $history = collect(getOrderDetail($order->id)->assertOk()->json('data.history'));
+
+        expect($history->pluck('type')->all())->toBe(['order_created']);
     });
 
     test('includes delivery_address from customer main address', function () {

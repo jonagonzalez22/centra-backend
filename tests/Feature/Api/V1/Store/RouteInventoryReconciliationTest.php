@@ -353,6 +353,14 @@ test('delivery accumulated across two routes marks a single-product order delive
     expect($order->fresh()->status)->toBe('partially_delivered')
         ->and($product->fresh()->stock_reserved)->toBe(30);
 
+    $partialHistory = collect($this->flushHeaders()
+        ->withHeader('Authorization', "Bearer {$this->adminToken}")
+        ->getJson("/api/v1/store/orders/{$order->id}")
+        ->assertOk()
+        ->json('data.history'));
+    expect($partialHistory->firstWhere('type', 'delivery_reconciled_partial')['route']['id'])
+        ->toBe($routeOne->id);
+
     $routeTwo = routeInventoryCreateRoute($this);
     routeInventoryAddStop($routeTwo, $order, $product, 30, 30, 'completed');
     routeInventoryFinalize($this, $routeTwo);
@@ -360,6 +368,19 @@ test('delivery accumulated across two routes marks a single-product order delive
     expect($order->fresh()->status)->toBe('delivered')
         ->and($product->fresh()->stock)->toBe(100)
         ->and($product->fresh()->stock_reserved)->toBe(0);
+
+    $finalHistory = collect($this->flushHeaders()
+        ->withHeader('Authorization', "Bearer {$this->adminToken}")
+        ->getJson("/api/v1/store/orders/{$order->id}")
+        ->assertOk()
+        ->json('data.history'));
+    $reconciledDeliveries = $finalHistory
+        ->filter(fn (array $entry) => str_starts_with($entry['type'], 'delivery_reconciled'))
+        ->values();
+    expect($reconciledDeliveries)->toHaveCount(2)
+        ->and($reconciledDeliveries[0]['route']['id'])->toBe($routeOne->id)
+        ->and($reconciledDeliveries[1]['route']['id'])->toBe($routeTwo->id)
+        ->and($reconciledDeliveries[1]['type'])->toBe('delivery_reconciled_final');
 });
 
 test('delivery status is calculated per product across routes', function () {

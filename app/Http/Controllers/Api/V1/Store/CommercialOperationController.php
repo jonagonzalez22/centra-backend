@@ -10,6 +10,7 @@ use App\Http\Requests\Api\V1\Store\StoreCommercialOperationRequest;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
 use App\Services\CommercialOperationService;
+use App\Services\OrderHistoryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -265,6 +266,7 @@ class CommercialOperationController extends Controller
     public function reschedule(
         RescheduleDeliveryDateRequest $request,
         CommercialOperationService $service,
+        OrderHistoryBuilder $historyBuilder,
         string $id
     ): JsonResponse {
         $storeId = $request->user()->store_id;
@@ -296,6 +298,7 @@ class CommercialOperationController extends Controller
                 'payments.storePaymentMethod.paymentMethod',
                 'events.user',
             ]);
+            $historyBuilder->attach($operation, $storeId);
 
             return response()->json([
                 'status' => 'success',
@@ -351,6 +354,7 @@ class CommercialOperationController extends Controller
     public function cancel(
         CancelOrderRequest $request,
         CommercialOperationService $service,
+        OrderHistoryBuilder $historyBuilder,
         string $id
     ): JsonResponse {
         $storeId = $request->user()->store_id;
@@ -381,6 +385,7 @@ class CommercialOperationController extends Controller
                 'payments.storePaymentMethod.paymentMethod',
                 'events.user',
             ]);
+            $historyBuilder->attach($operation, $storeId);
 
             return response()->json([
                 'status' => 'success',

@@ -50,6 +50,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="items", type="array", @OA\Items(ref="#/components/schemas/OperationItemResource")),
  *   @OA\Property(property="payments", type="array", @OA\Items(ref="#/components/schemas/OperationPaymentResource")),
  *   @OA\Property(property="events", type="array", @OA\Items(ref="#/components/schemas/CommercialOperationEventResource")),
+ *   @OA\Property(property="history", type="array", description="Historial funcional normalizado del pedido"),
  *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido")
  * )
  */
@@ -89,6 +90,7 @@ class CommercialOperationResource extends JsonResource
             'items' => OperationItemResource::collection($this->whenLoaded('items')),
             'payments' => OperationPaymentResource::collection($this->whenLoaded('payments')),
             'events' => CommercialOperationEventResource::collection($this->whenLoaded('events')),
+            'history' => $this->history ?? [],
             'route_ids' => $this->whenLoaded('routeStops', fn () => $this->routeStops
                 ->where('status', '!=', 'cancelled')
                 ->pluck('route_id')

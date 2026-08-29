@@ -97,7 +97,9 @@ describe('PUT /api/v1/store/operations/{operation}/reschedule', function () {
 
         $response->assertOk()
             ->assertJsonPath('status', 'success')
-            ->assertJsonPath('data.id', $order->id);
+            ->assertJsonPath('data.id', $order->id)
+            ->assertJsonPath('data.history.1.type', 'delivery_date_changed')
+            ->assertJsonPath('data.history.1.title', 'Fecha de entrega reprogramada');
 
         $this->assertDatabaseHas('commercial_operation_events', [
             'operation_id' => $order->id,
