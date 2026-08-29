@@ -8,7 +8,6 @@ use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\ExtraSaleAllocation;
-use App\Models\InventoryMovement;
 use App\Models\OperationPayment;
 use App\Models\Product;
 use App\Models\RouteLoadAdjustment;
@@ -18,8 +17,6 @@ use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
-use App\Services\InventoryMovementService;
-use App\Services\RouteOptimizationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
@@ -388,7 +385,7 @@ class RouteManagementService
             }
 
             // Call Google Routes API with optimization
-            $optimizer = new RouteOptimizationService();
+            $optimizer = new RouteOptimizationService;
             $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, true);
 
             $optimizedOrder = $result['optimizedOrder'];
@@ -570,7 +567,7 @@ class RouteManagementService
             }
 
             // Call Google Routes API WITHOUT optimization (respect manual order)
-            $optimizer = new RouteOptimizationService();
+            $optimizer = new RouteOptimizationService;
             $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, false);
 
             $durations = $result['durations'];
@@ -665,7 +662,7 @@ class RouteManagementService
             }
 
             // Call Google Routes API WITH optimization
-            $optimizer = new RouteOptimizationService();
+            $optimizer = new RouteOptimizationService;
             $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, true);
 
             $optimizedOrder = $result['optimizedOrder'];
@@ -769,23 +766,23 @@ class RouteManagementService
                 }
 
                 // Validate product exists in the order
-                $orderItem = $order->items->firstWhere('product_id', $productId);
-                if (! $orderItem) {
+                $orderItems = $order->items->where('product_id', $productId);
+                if ($orderItems->isEmpty()) {
                     throw $this->validationError("El producto {$productId} no pertenece a este pedido.");
                 }
 
-                // Calculate already-assigned quantity for this product across ALL active routes
-                $alreadyAssigned = RouteStopItem::where('product_id', $productId)
-                    ->whereHas('routeStop', function (Builder $q) use ($stop) {
-                        $q->where('order_id', $stop->order_id)
-                            ->where('status', '!=', 'cancelled');
-                    })
-                    ->whereNot('route_stop_id', $stop->id) // exclude current stop (for updates)
-                    ->sum('quantity_planned');
+                $orderedQuantity = (int) $orderItems->sum('quantity');
+
+                // Completed routes are delivery history, not active planning.
+                $alreadyAssigned = $this->getPlannedInActiveRoutes(
+                    $productId,
+                    $stop->order_id,
+                    $route->id
+                );
 
                 // Calculate real remaining after deducting previous deliveries
                 $previouslyDelivered = $this->getPreviouslyDelivered($productId, $stop->order_id);
-                $remaining = max(0, (int) $orderItem->quantity - $previouslyDelivered);
+                $remaining = max(0, $orderedQuantity - $previouslyDelivered);
 
                 $totalAfter = $alreadyAssigned + $quantityPlanned;
 
@@ -793,7 +790,7 @@ class RouteManagementService
                     throw $this->validationError(
                         "La cantidad planificada ({$quantityPlanned}) más la ya asignada ({$alreadyAssigned}) "
                         ."supera el saldo pendiente del pedido ({$remaining}) para el producto. "
-                        ."(Cantidad original: {$orderItem->quantity}, ya entregado: {$previouslyDelivered})"
+                        ."(Cantidad original: {$orderedQuantity}, ya entregado: {$previouslyDelivered})"
                     );
                 }
 
@@ -1070,9 +1067,7 @@ class RouteManagementService
             }
 
             // 3. Process each completed stop
-            $inventoryService = new InventoryMovementService();
-            $orderDelivered = [];
-
+            $inventoryService = new InventoryMovementService;
             $completedStops = $route->stops()
                 ->where('status', 'completed')
                 ->with('items.product')
@@ -1098,27 +1093,18 @@ class RouteManagementService
                     $newReserved = max(0, $product->stock_reserved - $item->quantity_delivered);
                     $product->update(['stock_reserved' => $newReserved]);
 
-                    // c. Track delivered quantity per order
-                    $orderDelivered[$stop->order_id] = ($orderDelivered[$stop->order_id] ?? 0) + $item->quantity_delivered;
                 }
             }
 
-            // 4. Update order statuses
-            foreach ($orderDelivered as $orderId => $deliveredQty) {
-                $order = CommercialOperation::find($orderId);
+            // 4. Update order statuses using deliveries accumulated across routes.
+            $orderIds = $route->stops()
+                ->where('status', '!=', 'cancelled')
+                ->whereNotNull('order_id')
+                ->pluck('order_id')
+                ->unique();
 
-                if (! $order) {
-                    continue;
-                }
-
-                $totalOrdered = $order->items()->sum('quantity');
-
-                if ($deliveredQty >= $totalOrdered) {
-                    $order->update(['status' => 'delivered']);
-                } elseif ($deliveredQty > 0) {
-                    $order->update(['status' => 'partially_delivered']);
-                }
-                // deliveredQty == 0 (failed stop): order status unchanged
+            foreach ($orderIds as $orderId) {
+                $this->updateCommercialOperationDeliveryStatus($orderId, $route->id);
             }
 
             // 5. Complete route
@@ -1464,43 +1450,6 @@ class RouteManagementService
                 }
             }
 
-            // Update order statuses based on delivered quantities
-            $orderDelivered = [];
-            foreach ($stops as $stop) {
-                if ($stop->status !== 'completed') {
-                    continue;
-                }
-                foreach ($stop->items as $item) {
-                    if ($item->quantity_delivered <= 0) {
-                        continue;
-                    }
-                    $orderDelivered[$stop->order_id] = ($orderDelivered[$stop->order_id] ?? 0) + $item->quantity_delivered;
-                }
-            }
-
-            foreach ($orderDelivered as $orderId => $deliveredQty) {
-                $order = CommercialOperation::find($orderId);
-                if (! $order) {
-                    continue;
-                }
-                $totalOrdered = $order->items()->sum('quantity');
-                if ($deliveredQty >= $totalOrdered) {
-                    $order->update(['status' => 'delivered']);
-                } elseif ($deliveredQty > 0) {
-                    $order->update(['status' => 'partially_delivered']);
-                }
-            }
-
-            // Cancel orders for failed stops
-            foreach ($stops as $stop) {
-                if ($stop->status === 'failed' && $stop->order_id) {
-                    $order = CommercialOperation::find($stop->order_id);
-                    if ($order) {
-                        $order->update(['status' => 'cancelled']);
-                    }
-                }
-            }
-
             // Process inventory for delivered items on completed stops
             foreach ($stops as $stop) {
                 if ($stop->status !== 'completed') {
@@ -1533,6 +1482,12 @@ class RouteManagementService
 
             // Process discrepancy inventory impacts
             $this->processDiscrepancyInventory($route, $stops, $user);
+
+            // Update commercial statuses after discrepancy resolutions have adjusted
+            // any quantities that are no longer owed to the customer.
+            foreach ($stops->pluck('order_id')->filter()->unique() as $orderId) {
+                $this->updateCommercialOperationDeliveryStatus($orderId, $route->id);
+            }
 
             // Update route
             $route->update([
@@ -1818,7 +1773,7 @@ class RouteManagementService
                 throw $this->validationError(
                     "La suma de las cantidades cargadas ({$newTotal}) debe ser igual ".
                     "al total actual cargado ({$currentTotal}) para este producto. ".
-                    "Solo se permite redistribuir, no crear ni eliminar mercadería."
+                    'Solo se permite redistribuir, no crear ni eliminar mercadería.'
                 );
             }
 
@@ -2019,7 +1974,7 @@ class RouteManagementService
      */
     private function processDiscrepancyInventory(DeliveryRoute $route, $stops, User $user): void
     {
-        $inventoryService = new InventoryMovementService();
+        $inventoryService = new InventoryMovementService;
 
         foreach ($stops as $stop) {
             foreach ($stop->items as $item) {
@@ -2048,17 +2003,21 @@ class RouteManagementService
                     case 'returned':
                     case 'rejected_by_customer':
                         // Loaded route units were never removed from consolidated stock.
-                        // Returning them only releases their reservation.
+                        // They are no longer owed: release their reservation and reduce
+                        // the commercial obligation without changing route history.
                         $product->update([
                             'stock_reserved' => max(0, $product->stock_reserved - $diff),
                         ]);
+                        $this->reduceCommercialObligation(
+                            $stop->order_id,
+                            $item->product_id,
+                            $diff
+                        );
                         break;
 
                     case 'missing':
-                        // Release reserve + decrease stock
-                        $product->update([
-                            'stock_reserved' => max(0, $product->stock_reserved - $diff),
-                        ]);
+                        // The physical units are lost, but the customer is still owed
+                        // replacements, so the reservation remains in place.
                         $inventoryService->recordMovement(
                             $product, $user, 'output', $diff,
                             "Ajuste por faltante — Ruta {$route->id} — Pedido {$orderId}"
@@ -2066,10 +2025,8 @@ class RouteManagementService
                         break;
 
                     case 'damaged':
-                        // Release reserve + decrease stock
-                        $product->update([
-                            'stock_reserved' => max(0, $product->stock_reserved - $diff),
-                        ]);
+                        // The physical units are unusable, but the customer is still owed
+                        // replacements, so the reservation remains in place.
                         $inventoryService->recordMovement(
                             $product, $user, 'output', $diff,
                             "Salida por daño logístico — Ruta {$route->id} — Pedido {$orderId}"
@@ -2099,6 +2056,118 @@ class RouteManagementService
     }
 
     /**
+     * Recalculate an order status from quantities delivered across every completed
+     * route, plus the route currently being finalized.
+     */
+    private function updateCommercialOperationDeliveryStatus(string $orderId, string $currentRouteId): void
+    {
+        $order = CommercialOperation::where('id', $orderId)->lockForUpdate()->first();
+
+        if (! $order || in_array($order->status, ['cancelled', 'closed'])) {
+            return;
+        }
+
+        $orderedByProduct = $order->items()
+            ->select('product_id', DB::raw('SUM(quantity) as total_quantity'))
+            ->groupBy('product_id')
+            ->pluck('total_quantity', 'product_id')
+            ->map(fn ($quantity) => (int) $quantity);
+
+        if ($orderedByProduct->sum() === 0) {
+            $order->update(['status' => 'closed']);
+
+            return;
+        }
+
+        $deliveredByProduct = RouteStopItem::query()
+            ->select('product_id', DB::raw('SUM(quantity_delivered) as total_quantity'))
+            ->where('quantity_delivered', '>', 0)
+            ->whereHas('routeStop', function (Builder $query) use ($orderId) {
+                $query->where('order_id', $orderId)
+                    ->where('status', 'completed');
+            })
+            ->whereHas('routeStop.route', function (Builder $query) use ($currentRouteId) {
+                $query->where('status', 'completed')
+                    ->orWhere('id', $currentRouteId);
+            })
+            ->groupBy('product_id')
+            ->pluck('total_quantity', 'product_id')
+            ->map(fn ($quantity) => (int) $quantity);
+
+        $hasDeliveries = $deliveredByProduct->sum() > 0;
+        $fullyDelivered = $orderedByProduct->every(
+            fn (int $ordered, string $productId) => ($deliveredByProduct[$productId] ?? 0) >= $ordered
+        );
+
+        if ($fullyDelivered) {
+            $order->update(['status' => 'delivered']);
+        } elseif ($hasDeliveries) {
+            $order->update(['status' => 'partially_delivered']);
+        }
+    }
+
+    /**
+     * Reduce quantities that are no longer commercially owed while preserving all
+     * route-stop and discrepancy history.
+     */
+    private function reduceCommercialObligation(string $orderId, string $productId, int $quantity): void
+    {
+        if ($quantity <= 0) {
+            return;
+        }
+
+        $order = CommercialOperation::where('id', $orderId)->lockForUpdate()->first();
+
+        if (! $order) {
+            throw $this->validationError('El pedido asociado a la discrepancia no existe.');
+        }
+
+        $items = $order->items()
+            ->where('product_id', $productId)
+            ->orderByDesc('created_at')
+            ->lockForUpdate()
+            ->get();
+
+        $remaining = $quantity;
+
+        foreach ($items as $operationItem) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $oldQuantity = (int) $operationItem->quantity;
+            $decrement = min($remaining, $oldQuantity);
+            $newQuantity = $oldQuantity - $decrement;
+            $taxPerUnit = $oldQuantity > 0 ? (float) $operationItem->tax_amount / $oldQuantity : 0;
+            $discountPerUnit = $oldQuantity > 0 ? (float) $operationItem->discount_amount / $oldQuantity : 0;
+
+            $operationItem->update([
+                'quantity' => $newQuantity,
+                'subtotal' => round($newQuantity * (float) $operationItem->price, 2),
+                'tax_amount' => round($newQuantity * $taxPerUnit, 2),
+                'discount_amount' => round($newQuantity * $discountPerUnit, 2),
+            ]);
+
+            $remaining -= $decrement;
+        }
+
+        if ($remaining > 0) {
+            throw $this->validationError('La discrepancia supera la obligación comercial pendiente del producto.');
+        }
+
+        $subtotal = (float) $order->items()->sum('subtotal');
+        $tax = (float) $order->items()->sum('tax_amount');
+        $discount = (float) $order->items()->sum('discount_amount');
+
+        $order->update([
+            'subtotal' => $subtotal,
+            'tax' => $tax,
+            'discount' => $discount,
+            'total' => $subtotal + $tax - $discount,
+        ]);
+    }
+
+    /**
      * Cantidad ya entregada de un producto en un pedido a través de rutas completadas.
      */
     private function getPreviouslyDelivered(string $productId, string $orderId): int
@@ -2115,11 +2184,9 @@ class RouteManagementService
     }
 
     /**
-     * Cantidad ya planificada en otras rutas que están en estado activo
-     * (draft, planned, loaded, dispatched, awaiting_reconciliation).
-     * Excluye paradas canceladas y la ruta actual.
+     * Quantities assigned to active routes other than the excluded route.
      */
-    private function getPlannedInOtherRoutes(string $productId, string $orderId, string $excludeRouteId): int
+    private function getPlannedInActiveRoutes(string $productId, string $orderId, string $excludeRouteId): int
     {
         return (int) RouteStopItem::where('product_id', $productId)
             ->whereHas('routeStop', function (Builder $q) use ($orderId, $excludeRouteId) {
@@ -2131,6 +2198,16 @@ class RouteManagementService
                 $q->whereIn('status', ['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']);
             })
             ->sum('quantity_planned');
+    }
+
+    /**
+     * Cantidad ya planificada en otras rutas que están en estado activo
+     * (draft, planned, loaded, dispatched, awaiting_reconciliation).
+     * Excluye paradas canceladas y la ruta actual.
+     */
+    private function getPlannedInOtherRoutes(string $productId, string $orderId, string $excludeRouteId): int
+    {
+        return $this->getPlannedInActiveRoutes($productId, $orderId, $excludeRouteId);
     }
 
     /**
@@ -2154,20 +2231,21 @@ class RouteManagementService
                 continue;
             }
 
-            foreach ($order->items as $orderItem) {
+            foreach ($order->items->groupBy('product_id') as $productId => $orderItems) {
+                $orderedQuantity = (int) $orderItems->sum('quantity');
                 $previouslyDelivered = $this->getPreviouslyDelivered(
-                    $orderItem->product_id,
+                    $productId,
                     $stop->order_id
                 );
 
                 $plannedElsewhere = $this->getPlannedInOtherRoutes(
-                    $orderItem->product_id,
+                    $productId,
                     $stop->order_id,
                     $routeId
                 );
 
                 $remaining = max(0,
-                    (int) $orderItem->quantity
+                    $orderedQuantity
                     - $previouslyDelivered
                     - $plannedElsewhere
                 );
@@ -2176,7 +2254,7 @@ class RouteManagementService
                     RouteStopItem::updateOrCreate(
                         [
                             'route_stop_id' => $stop->id,
-                            'product_id' => $orderItem->product_id,
+                            'product_id' => $productId,
                         ],
                         [
                             'quantity_planned' => $remaining,
@@ -2187,7 +2265,7 @@ class RouteManagementService
                 } else {
                     // Saldo agotado: eliminar registro si existía de una planificación anterior
                     RouteStopItem::where('route_stop_id', $stop->id)
-                        ->where('product_id', $orderItem->product_id)
+                        ->where('product_id', $productId)
                         ->delete();
                 }
             }

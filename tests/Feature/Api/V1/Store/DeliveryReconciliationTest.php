@@ -63,6 +63,7 @@ function recCreateDriver(Store $store): User
 {
     $driver = User::factory()->create(['store_id' => $store->id]);
     $driver->assignRole('STORE_DRIVER');
+
     return $driver;
 }
 
@@ -198,6 +199,47 @@ test('partial delivery: some items partially delivered', function () {
     $product->refresh();
     expect($product->stock)->toBe(97);   // 100 - 3
     expect($product->stock_reserved)->toBe(47); // 50 - 3
+});
+
+test('process deliveries accumulates quantities delivered by previous routes', function () {
+    [$route, $stop, $product, $routeStopItem, $order] = recCreateRouteReadyForReconciliation($this->store);
+    $order->items()->first()->update(['quantity' => 100]);
+    $routeStopItem->update([
+        'quantity_planned' => 30,
+        'quantity_loaded' => 30,
+        'quantity_delivered' => 30,
+    ]);
+    $product->update(['stock' => 130, 'stock_reserved' => 30]);
+
+    $previousRoute = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => recCreateVehicle($this->store)->id,
+        'driver_id' => recCreateDriver($this->store)->id,
+        'operational_date' => now()->format('Y-m-d'),
+        'status' => 'completed',
+    ]);
+    $previousStop = RouteStop::create([
+        'route_id' => $previousRoute->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'completed',
+    ]);
+    RouteStopItem::create([
+        'route_stop_id' => $previousStop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => 70,
+        'quantity_loaded' => 70,
+        'quantity_delivered' => 70,
+    ]);
+    $order->update(['status' => 'partially_delivered']);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/process-deliveries")
+        ->assertOk();
+
+    expect($order->fresh()->status)->toBe('delivered')
+        ->and($product->fresh()->stock)->toBe(100)
+        ->and($product->fresh()->stock_reserved)->toBe(0);
 });
 
 test('failed stop: no stock changes and order status unchanged', function () {
