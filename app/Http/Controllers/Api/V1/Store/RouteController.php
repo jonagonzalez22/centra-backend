@@ -41,6 +41,26 @@ class RouteController extends Controller
         private readonly RouteManagementService $routeService,
     ) {}
 
+    /**
+     * Relations required by the route detail view after state transitions.
+     *
+     * @return array<int|string, mixed>
+     */
+    private function routeDetailRelations(): array
+    {
+        return [
+            'stops' => fn ($query) => $query->orderBy('sequence'),
+            'stops.items.product',
+            'stops.order.customer.addresses.locality',
+            'stops.order.customer.contacts',
+            'events' => fn ($query) => $query->orderBy('created_at'),
+            'events.user',
+            'vehicle',
+            'driver',
+            'store',
+        ];
+    }
+
     // ── Query Endpoints ──────────────────────────────────────────────
 
     /**
@@ -270,16 +290,7 @@ class RouteController extends Controller
         $storeId = $request->user()->store_id;
 
         $route = DeliveryRoute::forStore($storeId)
-            ->with([
-                'stops' => fn ($q) => $q->orderBy('sequence'),
-                'stops.order.customer.addresses.locality',
-                'stops.order.customer.contacts',
-                'events' => fn ($q) => $q->orderBy('created_at'),
-                'events.user',
-                'vehicle',
-                'driver',
-                'store',
-            ])
+            ->with($this->routeDetailRelations())
             ->find($id);
 
         if (! $route) {
@@ -777,7 +788,7 @@ class RouteController extends Controller
             $request->user()
         );
 
-        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events', 'store']);
+        $route->load($this->routeDetailRelations());
 
         return response()->json([
             'status' => 'success',
@@ -897,7 +908,7 @@ class RouteController extends Controller
 
         $route = $this->routeService->recalculate($route, $request->user());
 
-        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events']);
+        $route->load($this->routeDetailRelations());
 
         return response()->json([
             'status' => 'success',
@@ -953,7 +964,7 @@ class RouteController extends Controller
 
         $route = $this->routeService->optimize($route, $request->user());
 
-        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.order.customer.addresses.locality', 'vehicle', 'driver', 'events']);
+        $route->load($this->routeDetailRelations());
 
         return response()->json([
             'status' => 'success',
@@ -1369,7 +1380,7 @@ class RouteController extends Controller
 
         $route = $this->routeService->dispatch($route, $request->user());
 
-        $route->load(['stops' => fn ($q) => $q->orderBy('sequence'), 'stops.items.product', 'vehicle', 'driver', 'events']);
+        $route->load($this->routeDetailRelations());
 
         return response()->json([
             'status' => 'success',

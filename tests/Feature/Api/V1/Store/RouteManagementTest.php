@@ -6,9 +6,12 @@ use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
 use App\Models\Locality;
+use App\Models\OperationItem;
 use App\Models\Plan;
+use App\Models\Product;
 use App\Models\Province;
 use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -26,7 +29,7 @@ beforeEach(function () {
     Role::create(['name' => 'STORE_DRIVER', 'guard_name' => 'web']);
 
     // Create all logistics permissions
-    foreach (['logistics.routes.view', 'logistics.routes.manage', 'logistics.routes.plan', 'logistics.routes.revert', 'logistics.routes.cancel'] as $perm) {
+    foreach (['logistics.routes.view', 'logistics.routes.manage', 'logistics.routes.plan', 'logistics.routes.revert', 'logistics.routes.cancel', 'logistics.routes.dispatch'] as $perm) {
         Permission::create(['name' => $perm, 'guard_name' => 'web']);
     }
 
@@ -45,6 +48,7 @@ beforeEach(function () {
         'logistics.routes.plan',
         'logistics.routes.revert',
         'logistics.routes.cancel',
+        'logistics.routes.dispatch',
     ]);
     $this->token = $this->user->createToken('test-token')->plainTextToken;
 });
@@ -249,6 +253,67 @@ test('shows a single route with stops and events', function () {
     $response->assertStatus(200)
         ->assertJsonPath('data.id', $route->id)
         ->assertJsonPath('data.status', 'draft');
+});
+
+test('dispatch response preserves order customer and address in route stops', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $customer = createCustomerWithAddress($this->store);
+    $address = $customer->addresses()->with('locality')->where('is_main', true)->firstOrFail();
+    $order = createEligibleOrder($this->store, $customer);
+    $product = Product::factory()->create(['store_id' => $this->store->id]);
+
+    OperationItem::factory()->create([
+        'operation_id' => $order->id,
+        'product_id' => $product->id,
+        'quantity' => 1,
+    ]);
+
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'loaded',
+        'loaded_at' => now(),
+        'loaded_by' => $this->user->id,
+    ]);
+    $stop = RouteStop::create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+    RouteStopItem::create([
+        'route_stop_id' => $stop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => 1,
+        'quantity_loaded' => 1,
+        'quantity_delivered' => 0,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/dispatch");
+
+    $response->assertOk()
+        ->assertJsonPath('data.status', 'dispatched')
+        ->assertJsonPath('data.stops.0.order.id', $order->id)
+        ->assertJsonPath('data.stops.0.order.operation_number', $order->operation_number)
+        ->assertJsonPath('data.stops.0.order.customer.name', $customer->display_name)
+        ->assertJsonPath('data.stops.0.order.address.street', $address->street)
+        ->assertJsonPath('data.stops.0.order.address.number', $address->number)
+        ->assertJsonPath('data.stops.0.order.address.locality', $address->locality->name);
+
+    expect($stop->fresh()->order_id)->toBe($order->id)
+        ->and($stop->fresh()->order->customer_id)->toBe($customer->id);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'dispatched')
+        ->assertJsonPath('data.stops.0.order.operation_number', $order->operation_number)
+        ->assertJsonPath('data.stops.0.order.customer.name', $customer->display_name)
+        ->assertJsonPath('data.stops.0.order.address.street', $address->street);
 });
 
 test('returns 404 for route from another store', function () {
