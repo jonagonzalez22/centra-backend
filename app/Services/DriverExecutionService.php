@@ -19,6 +19,10 @@ use Illuminate\Support\Facades\DB;
 
 class DriverExecutionService
 {
+    public function __construct(
+        private CommercialOperationService $commercialOperationService
+    ) {}
+
     /**
      * Find the active (dispatched) route for a driver.
      * Returns null when no dispatched route exists for this driver.
@@ -47,10 +51,11 @@ class DriverExecutionService
      * Get available surplus products on the truck from completed/failed stops.
      * available_surplus = SUM(quantity_loaded - quantity_delivered) - SUM(extra_sale_allocations.quantity)
      */
-    public function getAvailableSurplus(string $routeId, string $storeId): array
+    public function getAvailableSurplus(string $routeId, User $driver): array
     {
         $route = DeliveryRoute::where('id', $routeId)
-            ->where('store_id', $storeId)
+            ->where('store_id', $driver->store_id)
+            ->where('driver_id', $driver->id)
             ->where('status', 'dispatched')
             ->first();
 
@@ -141,64 +146,70 @@ class DriverExecutionService
     public function addExtraSale(string $stopId, array $items, User $driver): RouteStop
     {
         return DB::transaction(function () use ($stopId, $items, $driver) {
-            $stop = RouteStop::with('route')->find($stopId);
+            // The route is the mutex for every extra-sale write. It must be the
+            // first shared row locked so availability is always recalculated serially.
+            $route = DeliveryRoute::where('store_id', $driver->store_id)
+                ->where('driver_id', $driver->id)
+                ->where('status', 'dispatched')
+                ->whereHas('stops', fn ($query) => $query->where('id', $stopId))
+                ->lockForUpdate()
+                ->first();
 
-            if (! $stop) {
-                throw $this->notFoundError('Parada no encontrada.');
+            if (! $route) {
+                throw $this->notFoundError('Esta parada no pertenece a una ruta despachada asignada a este conductor.');
             }
 
-            $route = $stop->route;
+            $stop = RouteStop::where('id', $stopId)
+                ->where('route_id', $route->id)
+                ->lockForUpdate()
+                ->first();
 
-            if ($route->driver_id !== $driver->id) {
-                throw $this->notFoundError('Esta parada no pertenece a una ruta asignada a este conductor.');
-            }
-
-            if ($route->store_id !== $driver->store_id) {
-                throw $this->notFoundError('La parada no pertenece a la tienda del conductor.');
-            }
-
-            if ($route->status !== 'dispatched') {
-                throw $this->validationError('La ruta no está en estado despachado.');
-            }
-
-            if (! in_array($stop->status, ['pending', 'arrived'])) {
+            if (! $stop || ! in_array($stop->status, ['pending', 'arrived'], true)) {
                 throw $this->validationError('Solo se pueden agregar ventas extra a paradas pendientes o arrivals.');
             }
 
-            // Lock route for update to prevent race conditions
-            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
-            $stop = RouteStop::where('id', $stopId)->lockForUpdate()->first();
+            $items = collect($items)->sortBy('product_id')->values();
+            $productIds = $items->pluck('product_id')->all();
+            $products = Product::forStore($route->store_id)
+                ->whereIn('id', $productIds)
+                ->orderBy('id')
+                ->get()
+                ->keyBy('id');
 
-            // Validate and process each item
+            if ($products->count() !== count($productIds)) {
+                throw $this->validationError('Uno o más productos no pertenecen a la tienda de la ruta.');
+            }
+
+            $sourceItems = RouteStopItem::whereIn('product_id', $productIds)
+                ->whereHas('routeStop', function ($query) use ($route) {
+                    $query->where('route_id', $route->id)
+                        ->whereIn('status', ['completed', 'failed']);
+                })
+                ->with('routeStop')
+                ->orderBy('product_id')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $allocatedBySource = ExtraSaleAllocation::where('route_id', $route->id)
+                ->whereIn('source_stop_item_id', $sourceItems->pluck('id'))
+                ->select('source_stop_item_id', DB::raw('SUM(quantity) as total_quantity'))
+                ->groupBy('source_stop_item_id')
+                ->pluck('total_quantity', 'source_stop_item_id');
+
+            $allocationPlan = [];
             foreach ($items as $itemData) {
                 $productId = $itemData['product_id'];
                 $quantity = (int) $itemData['quantity'];
-
-                if ($quantity <= 0) {
-                    throw $this->validationError("La cantidad debe ser mayor a 0 para el producto {$productId}.");
-                }
-
-                // Get available surplus for this product
-                $availableSurplus = $this->getAvailableSurplusForProduct($route->id, $productId);
-
-                if ($quantity > $availableSurplus) {
-                    throw $this->validationError(
-                        "Cantidad solicitada ({$quantity}) excede el excedente disponible ({$availableSurplus}) para el producto {$productId}."
-                    );
-                }
-
-                // Find source items with available surplus and distribute allocation
                 $remainingToAllocate = $quantity;
-                $sourceItems = $this->getSourceItemsWithSurplus($route->id, $productId);
 
-                foreach ($sourceItems as $sourceItem) {
+                foreach ($sourceItems->where('product_id', $productId) as $sourceItem) {
                     if ($remainingToAllocate <= 0) {
                         break;
                     }
 
                     $itemSurplus = $sourceItem->quantity_loaded - $sourceItem->quantity_delivered;
-                    $alreadyAllocated = ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)
-                        ->sum('quantity');
+                    $alreadyAllocated = (int) ($allocatedBySource[$sourceItem->id] ?? 0);
                     $availableOnThisItem = $itemSurplus - $alreadyAllocated;
 
                     if ($availableOnThisItem <= 0) {
@@ -206,121 +217,98 @@ class DriverExecutionService
                     }
 
                     $toAllocate = min($remainingToAllocate, $availableOnThisItem);
-
-                    // Get product for price
-                    $product = Product::forStore($route->store_id)->find($productId);
-
-                    if (! $product) {
-                        throw $this->validationError("El producto {$productId} no pertenece a la tienda de la ruta.");
-                    }
-
-                    $unitPrice = (float) ($product?->price ?? 0);
-
-                    // Create the destination RouteStopItem (extra sale)
-                    $destStopItem = RouteStopItem::create([
-                        'route_stop_id' => $stop->id,
-                        'product_id' => $productId,
-                        'product_name' => $product?->name,
-                        'quantity_planned' => $toAllocate,
-                        'quantity_loaded' => $toAllocate,
-                        'quantity_delivered' => $toAllocate,
-                        'is_extra' => true,
-                    ]);
-
-                    // Create the allocation record
-                    ExtraSaleAllocation::create([
-                        'store_id' => $route->store_id,
-                        'route_id' => $route->id,
-                        'destination_stop_id' => $stop->id,
-                        'destination_stop_item_id' => $destStopItem->id,
-                        'source_stop_item_id' => $sourceItem->id,
-                        'quantity' => $toAllocate,
-                    ]);
-
-                    // Create or update DeliveryDiscrepancy for the source item
-                    // If allocation fully covers the difference, mark as 'extra_sale' resolved.
-                    // If partial, create/keep as pending (resolution_type = null).
-                    $existingDiscrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $sourceItem->id)->first();
-
-                    // Extra-sale allocations consume the source surplus without changing
-                    // the quantity delivered on the original stop.
-                    $totalAllocated = ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)
-                        ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
-                        ->sum('quantity');
-                    $newDiff = $sourceItem->quantity_loaded
-                        - $sourceItem->quantity_delivered
-                        - $totalAllocated;
-
-                    $notes = "Venta extra a parada {$stop->id}";
-
-                    if ($existingDiscrepancy) {
-                        // Update existing discrepancy
-                        if ($newDiff == 0) {
-                            // Full coverage - mark as resolved via extra_sale
-                            $existingDiscrepancy->update([
-                                'quantity_delivered' => $sourceItem->quantity_delivered,
-                                'difference_quantity' => 0,
-                                'resolution_type' => 'extra_sale',
-                                'notes' => $existingDiscrepancy->notes
-                                    ? $existingDiscrepancy->notes."; {$notes}"
-                                    : $notes,
-                                'resolved_at' => now(),
-                            ]);
-                        } else {
-                            // Partial coverage - mark as pending
-                            $existingDiscrepancy->update([
-                                'quantity_delivered' => $sourceItem->quantity_delivered,
-                                'difference_quantity' => $newDiff,
-                                'resolution_type' => null,
-                                'notes' => $existingDiscrepancy->notes
-                                    ? $existingDiscrepancy->notes."; {$notes}"
-                                    : $notes,
-                                'resolved_at' => null,
-                            ]);
-                        }
-                    } else {
-                        // Create new discrepancy record
-                        DeliveryDiscrepancy::create([
-                            'route_stop_item_id' => $sourceItem->id,
-                            'product_id' => $sourceItem->product_id,
-                            'quantity_loaded' => $sourceItem->quantity_loaded,
-                            'quantity_delivered' => $sourceItem->quantity_delivered,
-                            'difference_quantity' => $newDiff,
-                            'resolution_type' => $newDiff == 0 ? 'extra_sale' : null,
-                            'notes' => $notes,
-                            'resolved_by' => null,
-                            'resolved_at' => $newDiff == 0 ? now() : null,
-                        ]);
-                    }
-
-                    // Add OperationItem to the CommercialOperation (order)
-                    $order = $stop->order;
-                    if ($order) {
-                        OperationItem::create([
-                            'operation_id' => $order->id,
-                            'product_id' => $productId,
-                            'product_name' => $product?->name,
-                            'quantity' => $toAllocate,
-                            'price' => $unitPrice,
-                            'subtotal' => $toAllocate * $unitPrice,
-                        ]);
-                    }
-
+                    $allocationPlan[] = [$sourceItem, $toAllocate];
+                    $allocatedBySource[$sourceItem->id] = $alreadyAllocated + $toAllocate;
                     $remainingToAllocate -= $toAllocate;
                 }
 
                 if ($remainingToAllocate > 0) {
                     throw $this->validationError(
-                        "No se pudo allocating toda la cantidad solicitada para el producto {$productId}."
+                        "No se pudo asignar toda la cantidad solicitada para el producto {$productId}."
                     );
                 }
             }
 
-            // Recalculate CommercialOperation totals
-            $order = $stop->order;
-            if ($order) {
-                $this->recalculateOperationTotals($order);
+            $sourceOrderIds = collect($allocationPlan)
+                ->map(fn (array $allocation) => $allocation[0]->routeStop->order_id)
+                ->filter();
+            $orderIds = $sourceOrderIds->push($stop->order_id)->unique()->sort()->values();
+            $lockedOrders = CommercialOperation::forStore($route->store_id)
+                ->whereIn('id', $orderIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($lockedOrders->count() !== $orderIds->count()) {
+                throw $this->validationError('Uno o más pedidos asociados no pertenecen a la tienda de la ruta.');
             }
+
+            $destinationOrder = CommercialOperation::forStore($route->store_id)
+                ->where('id', $stop->order_id)
+                ->first();
+
+            if (! $destinationOrder) {
+                throw $this->validationError('El pedido destino no existe o no pertenece a la tienda de la ruta.');
+            }
+
+            foreach ($items as $itemData) {
+                $productId = $itemData['product_id'];
+                $quantity = (int) $itemData['quantity'];
+                $product = $products[$productId];
+                $destinationItem = RouteStopItem::where('route_stop_id', $stop->id)
+                    ->where('product_id', $productId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($destinationItem) {
+                    $destinationItem->increment('quantity_planned', $quantity);
+                    $destinationItem->increment('quantity_loaded', $quantity);
+                    $destinationItem->refresh();
+                } else {
+                    $destinationItem = RouteStopItem::create([
+                        'route_stop_id' => $stop->id,
+                        'product_id' => $productId,
+                        'product_name' => $product->name,
+                        'quantity_planned' => $quantity,
+                        'quantity_loaded' => $quantity,
+                        'quantity_delivered' => 0,
+                        'is_extra' => true,
+                    ]);
+                }
+
+                foreach (collect($allocationPlan)->filter(
+                    fn (array $allocation) => $allocation[0]->product_id === $productId
+                ) as [$sourceItem, $allocatedQuantity]) {
+                    ExtraSaleAllocation::create([
+                        'store_id' => $route->store_id,
+                        'route_id' => $route->id,
+                        'destination_stop_id' => $stop->id,
+                        'destination_stop_item_id' => $destinationItem->id,
+                        'source_stop_item_id' => $sourceItem->id,
+                        'quantity' => $allocatedQuantity,
+                    ]);
+
+                    $this->updateSourceDiscrepancy($sourceItem, $stop);
+                    $this->commercialOperationService->reduceCommercialObligation(
+                        $sourceItem->routeStop->order_id,
+                        $productId,
+                        $allocatedQuantity
+                    );
+                }
+
+                OperationItem::create([
+                    'operation_id' => $destinationOrder->id,
+                    'product_id' => $productId,
+                    'product_name' => $product->name,
+                    'quantity' => $quantity,
+                    'price' => (float) $product->price,
+                    'subtotal' => round($quantity * (float) $product->price, 2),
+                    'tax_amount' => 0,
+                    'discount_amount' => 0,
+                ]);
+            }
+
+            $this->commercialOperationService->recalculateTotals($destinationOrder);
 
             return $stop->fresh([
                 'items.product',
@@ -331,69 +319,34 @@ class DriverExecutionService
         });
     }
 
-    /**
-     * Get available surplus quantity for a specific product on a route.
-     */
-    private function getAvailableSurplusForProduct(string $routeId, string $productId): int
+    private function updateSourceDiscrepancy(RouteStopItem $sourceItem, RouteStop $destinationStop): void
     {
-        $sourceItems = RouteStopItem::whereHas('routeStop', function ($query) use ($routeId) {
-            $query->where('route_id', $routeId)
-                ->whereIn('status', ['completed', 'failed']);
-        })
-            ->where('product_id', $productId)
-            ->get();
-
-        $totalSurplus = 0;
-        foreach ($sourceItems as $item) {
-            $totalSurplus += $item->quantity_loaded - $item->quantity_delivered;
-        }
-
-        $allocated = ExtraSaleAllocation::where('route_id', $routeId)
-            ->whereIn('source_stop_item_id', $sourceItems->pluck('id'))
+        $discrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $sourceItem->id)
+            ->lockForUpdate()
+            ->first();
+        $totalAllocated = (int) ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)
+            ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
             ->sum('quantity');
+        $difference = $sourceItem->quantity_loaded - $sourceItem->quantity_delivered - $totalAllocated;
+        $notes = "Venta extra a parada {$destinationStop->id}";
+        $attributes = [
+            'quantity_delivered' => $sourceItem->quantity_delivered,
+            'difference_quantity' => $difference,
+            'resolution_type' => $difference === 0 ? 'extra_sale' : null,
+            'notes' => $discrepancy?->notes ? $discrepancy->notes."; {$notes}" : $notes,
+            'resolved_at' => $difference === 0 ? now() : null,
+        ];
 
-        return max(0, $totalSurplus - $allocated);
-    }
-
-    /**
-     * Get source route stop items that have surplus for a product.
-     */
-    private function getSourceItemsWithSurplus(string $routeId, string $productId): \Illuminate\Database\Eloquent\Collection
-    {
-        $sourceItems = RouteStopItem::whereHas('routeStop', function ($query) use ($routeId) {
-            $query->where('route_id', $routeId)
-                ->whereIn('status', ['completed', 'failed']);
-        })
-            ->where('product_id', $productId)
-            ->get();
-
-        // Filter to only items with available surplus
-        return $sourceItems->filter(function ($item) {
-            $surplus = $item->quantity_loaded - $item->quantity_delivered;
-            $allocated = ExtraSaleAllocation::where('source_stop_item_id', $item->id)->sum('quantity');
-
-            return ($surplus - $allocated) > 0;
-        })->values();
-    }
-
-    /**
-     * Recalculate and update CommercialOperation totals based on its items.
-     */
-    private function recalculateOperationTotals(CommercialOperation $order): void
-    {
-        $order = CommercialOperation::where('id', $order->id)->lockForUpdate()->first();
-
-        $subtotal = (float) $order->items()->sum(DB::raw('quantity * price'));
-        $tax = (float) $order->items()->sum('tax_amount');
-        $discount = (float) $order->items()->sum('discount_amount');
-        $total = $subtotal + $tax - $discount;
-
-        $order->update([
-            'subtotal' => $subtotal,
-            'tax' => $tax,
-            'discount' => $discount,
-            'total' => $total,
-        ]);
+        if ($discrepancy) {
+            $discrepancy->update($attributes);
+        } else {
+            DeliveryDiscrepancy::create($attributes + [
+                'route_stop_item_id' => $sourceItem->id,
+                'product_id' => $sourceItem->product_id,
+                'quantity_loaded' => $sourceItem->quantity_loaded,
+                'resolved_by' => null,
+            ]);
+        }
     }
 
     /**

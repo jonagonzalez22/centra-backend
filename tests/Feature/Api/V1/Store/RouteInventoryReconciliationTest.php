@@ -4,6 +4,7 @@ use App\Models\Customer;
 use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRejectionReason;
 use App\Models\DeliveryRoute;
+use App\Models\ExtraSaleAllocation;
 use App\Models\Feature;
 use App\Models\InventoryMovement;
 use App\Models\OperationItem;
@@ -678,4 +679,321 @@ test('A B C D route with failed source and extra sale reconciles exact inventory
         ->and([$productB->fresh()->stock, $productB->fresh()->stock_reserved])->toBe([14, 0])
         ->and([$productC->fresh()->stock, $productC->fresh()->stock_reserved])->toBe([100, 0])
         ->and([$productD->fresh()->stock, $productD->fresh()->stock_reserved])->toBe([19, 0]);
+});
+
+test('extra sale definitively transfers the commercial obligation without changing stock or reservation', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'price' => 100,
+        'stock' => 10,
+        'stock_reserved' => 0,
+    ]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 3]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $payment = OperationPayment::create([
+        'operation_id' => $sourceOrder->id,
+        'store_payment_method_id' => routeInventoryPaymentMethod($this)->id,
+        'amount' => 300,
+    ]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $product, 3, 2, 'completed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+    $stockBefore = $product->fresh()->stock;
+    $reservedBefore = $product->fresh()->stock_reserved;
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $destinationItem = RouteStopItem::where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $product->id)
+        ->sole();
+
+    expect($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(2)
+        ->and((float) $sourceOrder->fresh()->total)->toBe(200.0)
+        ->and((float) $sourceOrder->fresh()->pending_balance)->toBe(-100.0)
+        ->and(OperationPayment::find($payment->id))->not->toBeNull()
+        ->and((float) OperationPayment::find($payment->id)->amount)->toBe(300.0)
+        ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(1)
+        ->and((float) $destinationOrder->fresh()->items()->where('product_id', $product->id)->sole()->price)->toBe(100.0)
+        ->and($destinationItem->quantity_planned)->toBe(1)
+        ->and($destinationItem->quantity_loaded)->toBe(1)
+        ->and($destinationItem->quantity_delivered)->toBe(0)
+        ->and($sourceItem->fresh()->quantity_delivered)->toBe(2)
+        ->and($product->fresh()->stock)->toBe($stockBefore)
+        ->and($product->fresh()->stock_reserved)->toBe($reservedBefore);
+});
+
+test('extra sale combines multiple sources into one destination stop item', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 50, 'stock' => 20, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrderA = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 1]]);
+    $sourceOrderB = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 2]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceA] = routeInventoryAddStop($route, $sourceOrderA, $product, 1, 0, 'failed');
+    [, $sourceB] = routeInventoryAddStop($route, $sourceOrderB, $product, 2, 0, 'failed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 3]],
+        ])
+        ->assertOk();
+
+    $destinationItem = RouteStopItem::where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $product->id)
+        ->sole();
+
+    expect($destinationItem->quantity_planned)->toBe(3)
+        ->and($destinationItem->quantity_loaded)->toBe(3)
+        ->and($destinationItem->quantity_delivered)->toBe(0)
+        ->and(ExtraSaleAllocation::where('destination_stop_item_id', $destinationItem->id)->count())->toBe(2)
+        ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceA->id)->sum('quantity'))->toBe(1)
+        ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceB->id)->sum('quantity'))->toBe(2)
+        ->and($sourceOrderA->fresh()->items()->sum('quantity'))->toBe(0)
+        ->and($sourceOrderB->fresh()->items()->sum('quantity'))->toBe(0)
+        ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(3);
+});
+
+test('successive extra sales reuse an original destination item and preserve sale prices', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 100, 'stock' => 20, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 2]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 2, 0, 'failed');
+    [$destinationStop, $destinationItem] = routeInventoryAddStop($route, $destinationOrder, $product, 1, 0, 'pending');
+
+    $postExtraSale = fn () => $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ]);
+
+    $postExtraSale()->assertOk();
+    $product->update(['price' => 120]);
+    $postExtraSale()->assertOk();
+    $postExtraSale()->assertStatus(422);
+
+    $extraLines = $destinationOrder->fresh()->items()
+        ->where('product_id', $product->id)
+        ->orderBy('created_at')
+        ->get();
+
+    expect(RouteStopItem::where('route_stop_id', $destinationStop->id)->where('product_id', $product->id)->count())->toBe(1)
+        ->and($destinationItem->fresh()->quantity_planned)->toBe(3)
+        ->and($destinationItem->fresh()->quantity_loaded)->toBe(3)
+        ->and($destinationItem->fresh()->quantity_delivered)->toBe(0)
+        ->and($destinationItem->fresh()->is_extra)->toBeFalse()
+        ->and($extraLines)->toHaveCount(3)
+        ->and((float) $extraLines->where('price', '100.00')->sum('quantity'))->toBe(2.0)
+        ->and((float) $extraLines->where('price', '120.00')->sum('quantity'))->toBe(1.0)
+        ->and(ExtraSaleAllocation::where('route_id', $route->id)->sum('quantity'))->toBe(2);
+});
+
+test('extra sale over availability rolls back every commercial and logistic change', function () {
+    $product = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 1, 0, 'failed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 2]],
+        ])
+        ->assertStatus(422);
+
+    expect(ExtraSaleAllocation::where('route_id', $route->id)->count())->toBe(0)
+        ->and(RouteStopItem::where('route_stop_id', $destinationStop->id)->where('product_id', $product->id)->exists())->toBeFalse()
+        ->and($sourceOrder->fresh()->items()->sum('quantity'))->toBe(1)
+        ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->exists())->toBeFalse()
+        ->and($product->fresh()->stock_reserved)->toBe(1);
+});
+
+test('a driver cannot inspect or consume surplus from another driver route', function () {
+    $product = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 1, 0, 'failed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+    $otherDriver = User::factory()->create(['store_id' => $this->store->id]);
+    $otherDriver->assignRole('STORE_DRIVER');
+    $otherToken = $otherDriver->createToken('other-driver')->plainTextToken;
+
+    $this->withHeader('Authorization', "Bearer {$otherToken}")
+        ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
+        ->assertStatus(404);
+    $this->withHeader('Authorization', "Bearer {$otherToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertStatus(404);
+
+    expect(ExtraSaleAllocation::where('route_id', $route->id)->exists())->toBeFalse();
+});
+
+test('extra sale request rejects duplicate products before making changes', function () {
+    $product = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 2]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 2, 0, 'failed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [
+                ['product_id' => $product->id, 'quantity' => 1],
+                ['product_id' => $product->id, 'quantity' => 1],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('items.0.product_id');
+
+    expect(ExtraSaleAllocation::where('route_id', $route->id)->exists())->toBeFalse();
+});
+
+test('extra sale destination discrepancy keeps the transferred obligation with destination', function (
+    string $resolution,
+    int $expectedStock,
+    int $expectedReserved,
+    int $expectedDestinationQuantity
+) {
+    $product = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $product, 1, 0, 'failed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $destinationItem = RouteStopItem::where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $product->id)
+        ->sole();
+    $otherDestinationItem = RouteStopItem::where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $otherProduct->id)
+        ->sole();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/complete", [
+            'status' => 'failed',
+            'rejection_reason_id' => $this->rejectionReason->id,
+            'items' => [
+                ['route_stop_item_id' => $destinationItem->id, 'quantity_delivered' => 0],
+                ['route_stop_item_id' => $otherDestinationItem->id, 'quantity_delivered' => 0],
+            ],
+        ])
+        ->assertOk();
+
+    routeInventoryResolve($this, $route, $destinationItem, $resolution, 1);
+    routeInventoryResolve($this, $route, $otherDestinationItem, 'pending_redelivery', 1);
+    routeInventoryFinalize($this, $route);
+
+    expect($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(0)
+        ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe($expectedDestinationQuantity)
+        ->and($sourceItem->fresh()->quantity_loaded)->toBe(1)
+        ->and($sourceItem->fresh()->quantity_delivered)->toBe(0)
+        ->and($product->fresh()->stock)->toBe($expectedStock)
+        ->and($product->fresh()->stock_reserved)->toBe($expectedReserved)
+        ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(in_array($resolution, ['missing', 'damaged'], true) ? 1 : 0);
+})->with([
+    'pending redelivery' => ['pending_redelivery', 10, 1, 1],
+    'returned' => ['returned', 10, 0, 0],
+    'rejected by customer' => ['rejected_by_customer', 10, 0, 0],
+    'missing' => ['missing', 9, 1, 1],
+    'damaged' => ['damaged', 9, 1, 1],
+]);
+
+test('extra sale reduces newest source operation items first', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 100, 'stock' => 20, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [
+        ['product' => $product, 'quantity' => 2],
+        ['product' => $product, 'quantity' => 2],
+    ]);
+    $sourceItems = $sourceOrder->items()->where('product_id', $product->id)->orderBy('id')->get();
+    $sourceItems[0]->update(['created_at' => now()->subMinute()]);
+    $sourceItems[1]->update(['created_at' => now()]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 3, 1, 'completed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 2]],
+        ])
+        ->assertOk();
+
+    expect($sourceItems[0]->fresh()->quantity)->toBe(2)
+        ->and($sourceItems[1]->fresh()->quantity)->toBe(0)
+        ->and($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(2)
+        ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(2);
+});
+
+test('extra sale from a multi route order does not leave a future commercial obligation', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 100, 'stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 4]]);
+
+    $firstRoute = routeInventoryCreateRoute($this);
+    routeInventoryAddStop($firstRoute, $sourceOrder, $product, 2, 2, 'completed');
+    routeInventoryFinalize($this, $firstRoute);
+    expect($sourceOrder->fresh()->status)->toBe('partially_delivered');
+
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $secondRoute = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($secondRoute, $sourceOrder, $product, 2, 1, 'completed');
+    [$destinationStop, $otherDestinationItem] = routeInventoryAddStop(
+        $secondRoute,
+        $destinationOrder,
+        $otherProduct,
+        1,
+        1,
+        'pending'
+    );
+
+    app('auth')->forgetGuards();
+    $this->flushHeaders();
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $destinationItem = RouteStopItem::where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $product->id)
+        ->sole();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/complete", [
+            'status' => 'completed',
+            'items' => [
+                ['route_stop_item_id' => $destinationItem->id, 'quantity_delivered' => 1],
+                ['route_stop_item_id' => $otherDestinationItem->id, 'quantity_delivered' => 1],
+            ],
+        ])
+        ->assertOk();
+    routeInventoryFinalize($this, $secondRoute);
+
+    expect($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(3)
+        ->and($sourceOrder->fresh()->status)->toBe('delivered')
+        ->and($sourceItem->fresh()->quantity_planned)->toBe(2)
+        ->and($sourceItem->fresh()->quantity_loaded)->toBe(2)
+        ->and($sourceItem->fresh()->quantity_delivered)->toBe(1)
+        ->and($product->fresh()->stock)->toBe(6)
+        ->and($product->fresh()->stock_reserved)->toBe(0);
 });

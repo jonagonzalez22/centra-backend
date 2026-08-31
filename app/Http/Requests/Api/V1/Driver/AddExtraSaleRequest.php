@@ -17,7 +17,7 @@ class AddExtraSaleRequest extends FormRequest
     {
         return [
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'uuid', 'exists:products,id'],
+            'items.*.product_id' => ['required', 'uuid', 'distinct', 'exists:products,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ];
     }

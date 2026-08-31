@@ -24,6 +24,10 @@ use Illuminate\Support\Facades\DB;
 
 class RouteManagementService
 {
+    public function __construct(
+        private CommercialOperationService $commercialOperationService
+    ) {}
+
     /**
      * Create a new delivery route.
      */
@@ -2008,7 +2012,7 @@ class RouteManagementService
                         $product->update([
                             'stock_reserved' => max(0, $product->stock_reserved - $diff),
                         ]);
-                        $this->reduceCommercialObligation(
+                        $this->commercialOperationService->reduceCommercialObligation(
                             $stop->order_id,
                             $item->product_id,
                             $diff
@@ -2104,67 +2108,6 @@ class RouteManagementService
         } elseif ($hasDeliveries) {
             $order->update(['status' => 'partially_delivered']);
         }
-    }
-
-    /**
-     * Reduce quantities that are no longer commercially owed while preserving all
-     * route-stop and discrepancy history.
-     */
-    private function reduceCommercialObligation(string $orderId, string $productId, int $quantity): void
-    {
-        if ($quantity <= 0) {
-            return;
-        }
-
-        $order = CommercialOperation::where('id', $orderId)->lockForUpdate()->first();
-
-        if (! $order) {
-            throw $this->validationError('El pedido asociado a la discrepancia no existe.');
-        }
-
-        $items = $order->items()
-            ->where('product_id', $productId)
-            ->orderByDesc('created_at')
-            ->lockForUpdate()
-            ->get();
-
-        $remaining = $quantity;
-
-        foreach ($items as $operationItem) {
-            if ($remaining <= 0) {
-                break;
-            }
-
-            $oldQuantity = (int) $operationItem->quantity;
-            $decrement = min($remaining, $oldQuantity);
-            $newQuantity = $oldQuantity - $decrement;
-            $taxPerUnit = $oldQuantity > 0 ? (float) $operationItem->tax_amount / $oldQuantity : 0;
-            $discountPerUnit = $oldQuantity > 0 ? (float) $operationItem->discount_amount / $oldQuantity : 0;
-
-            $operationItem->update([
-                'quantity' => $newQuantity,
-                'subtotal' => round($newQuantity * (float) $operationItem->price, 2),
-                'tax_amount' => round($newQuantity * $taxPerUnit, 2),
-                'discount_amount' => round($newQuantity * $discountPerUnit, 2),
-            ]);
-
-            $remaining -= $decrement;
-        }
-
-        if ($remaining > 0) {
-            throw $this->validationError('La discrepancia supera la obligación comercial pendiente del producto.');
-        }
-
-        $subtotal = (float) $order->items()->sum('subtotal');
-        $tax = (float) $order->items()->sum('tax_amount');
-        $discount = (float) $order->items()->sum('discount_amount');
-
-        $order->update([
-            'subtotal' => $subtotal,
-            'tax' => $tax,
-            'discount' => $discount,
-            'total' => $subtotal + $tax - $discount,
-        ]);
     }
 
     /**

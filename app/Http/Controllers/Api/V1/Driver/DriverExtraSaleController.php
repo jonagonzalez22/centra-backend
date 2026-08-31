@@ -31,6 +31,7 @@ class DriverExtraSaleController extends Controller
      *     description="Excedentes disponibles obtenidos correctamente",
      *
      *     @OA\JsonContent(
+     *
      *       @OA\Property(property="status", type="string", example="success"),
      *       @OA\Property(property="message", type="string", example="Excedentes disponibles obtenidos correctamente."),
      *       @OA\Property(
@@ -40,6 +41,7 @@ class DriverExtraSaleController extends Controller
      *         @OA\Property(
      *           property="surplus",
      *           type="array",
+     *
      *           @OA\Items(ref="#/components/schemas/AvailableSurplus")
      *         )
      *       )
@@ -53,7 +55,7 @@ class DriverExtraSaleController extends Controller
     {
         $driver = $request->user();
 
-        $surplus = $this->executionService->getAvailableSurplus($routeId, $driver->store_id);
+        $surplus = $this->executionService->getAvailableSurplus($routeId, $driver);
 
         return response()->json([
             'status' => 'success',
@@ -81,11 +83,14 @@ class DriverExtraSaleController extends Controller
      *
      *     @OA\JsonContent(
      *       required={"items"},
+     *
      *       @OA\Property(
      *         property="items",
      *         type="array",
+     *
      *         @OA\Items(
      *           required={"product_id", "quantity"},
+     *
      *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
      *           @OA\Property(property="quantity", type="integer", minimum=1, example=3)
      *         )
@@ -98,6 +103,7 @@ class DriverExtraSaleController extends Controller
      *     description="Venta extra agregada correctamente",
      *
      *     @OA\JsonContent(
+     *
      *       @OA\Property(property="status", type="string", example="success"),
      *       @OA\Property(property="message", type="string", example="Venta extra agregada correctamente."),
      *       @OA\Property(
@@ -122,6 +128,7 @@ class DriverExtraSaleController extends Controller
      *           @OA\Property(
      *             property="items",
      *             type="array",
+     *
      *             @OA\Items(ref="#/components/schemas/ExtraSaleItem")
      *           )
      *         )

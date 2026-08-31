@@ -14,6 +14,78 @@ use Illuminate\Validation\ValidationException;
 
 class CommercialOperationService
 {
+    /**
+     * Reduce quantities that are no longer commercially owed while preserving
+     * item price history and existing payments.
+     */
+    public function reduceCommercialObligation(string $orderId, string $productId, int $quantity): void
+    {
+        if ($quantity <= 0) {
+            return;
+        }
+
+        $order = CommercialOperation::where('id', $orderId)->lockForUpdate()->first();
+
+        if (! $order) {
+            throw ValidationException::withMessages([
+                'order' => 'El pedido asociado no existe.',
+            ]);
+        }
+
+        $items = $order->items()
+            ->where('product_id', $productId)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->get();
+
+        $remaining = $quantity;
+
+        foreach ($items as $operationItem) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $oldQuantity = (int) $operationItem->quantity;
+            $decrement = min($remaining, $oldQuantity);
+            $newQuantity = $oldQuantity - $decrement;
+            $taxPerUnit = $oldQuantity > 0 ? (float) $operationItem->tax_amount / $oldQuantity : 0;
+            $discountPerUnit = $oldQuantity > 0 ? (float) $operationItem->discount_amount / $oldQuantity : 0;
+
+            $operationItem->update([
+                'quantity' => $newQuantity,
+                'subtotal' => round($newQuantity * (float) $operationItem->price, 2),
+                'tax_amount' => round($newQuantity * $taxPerUnit, 2),
+                'discount_amount' => round($newQuantity * $discountPerUnit, 2),
+            ]);
+
+            $remaining -= $decrement;
+        }
+
+        if ($remaining > 0) {
+            throw ValidationException::withMessages([
+                'quantity' => 'La cantidad supera la obligación comercial pendiente del producto.',
+            ]);
+        }
+
+        $this->recalculateTotals($order);
+    }
+
+    public function recalculateTotals(CommercialOperation $operation): void
+    {
+        $operation = CommercialOperation::where('id', $operation->id)->lockForUpdate()->firstOrFail();
+        $subtotal = (float) $operation->items()->sum('subtotal');
+        $tax = (float) $operation->items()->sum('tax_amount');
+        $discount = (float) $operation->items()->sum('discount_amount');
+
+        $operation->update([
+            'subtotal' => $subtotal,
+            'tax' => $tax,
+            'discount' => $discount,
+            'total' => $subtotal + $tax - $discount,
+        ]);
+    }
+
     public function create(array $data, string $storeId, string $userId): CommercialOperation
     {
         return DB::transaction(function () use ($data, $storeId, $userId) {
