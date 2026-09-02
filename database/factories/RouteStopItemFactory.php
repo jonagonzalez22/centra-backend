@@ -22,6 +22,7 @@ class RouteStopItemFactory extends Factory
             'quantity_planned' => $this->faker->numberBetween(1, 20),
             'quantity_loaded' => 0,
             'quantity_delivered' => 0,
+            'quantity_released_for_extra_sale' => 0,
         ];
     }
 

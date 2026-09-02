@@ -49,7 +49,7 @@ class DriverExecutionService
 
     /**
      * Get available surplus products on the truck from completed/failed stops.
-     * available_surplus = SUM(quantity_loaded - quantity_delivered) - SUM(extra_sale_allocations.quantity)
+     * available_surplus = SUM(quantity_released_for_extra_sale - valid allocations)
      */
     public function getAvailableSurplus(string $routeId, User $driver): array
     {
@@ -71,14 +71,24 @@ class DriverExecutionService
             ->with('product')
             ->get();
 
-        // Group by product and calculate surplus per product
-        $surplusByProduct = [];
+        // Sum valid allocations by physical source item.
+        $allocations = ExtraSaleAllocation::where('route_id', $routeId)
+            ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
+            ->whereIn('source_stop_item_id', $sourceItems->pluck('id'))
+            ->select('source_stop_item_id', DB::raw('SUM(quantity) as total_quantity'))
+            ->groupBy('source_stop_item_id')
+            ->pluck('total_quantity', 'source_stop_item_id');
 
+        // Calculate availability per source before grouping by product.
+        $surplusByProduct = [];
         foreach ($sourceItems as $item) {
             $productId = $item->product_id;
-            $rawSurplus = $item->quantity_loaded - $item->quantity_delivered;
+            $availableOnItem = max(
+                0,
+                (int) $item->quantity_released_for_extra_sale - (int) ($allocations[$item->id] ?? 0)
+            );
 
-            if ($rawSurplus <= 0) {
+            if ($availableOnItem <= 0) {
                 continue;
             }
 
@@ -88,55 +98,14 @@ class DriverExecutionService
                     'product_name' => $item->product?->name,
                     'sku' => $item->product?->sku,
                     'unit_price' => (float) ($item->product?->price ?? 0),
-                    'total_surplus' => 0,
-                    'allocated' => 0,
+                    'available_quantity' => 0,
                 ];
             }
 
-            $surplusByProduct[$productId]['total_surplus'] += $rawSurplus;
+            $surplusByProduct[$productId]['available_quantity'] += $availableOnItem;
         }
 
-        // Subtract already allocated quantities from extra_sale_allocations
-        $allocations = ExtraSaleAllocation::where('route_id', $routeId)
-            ->select('source_stop_item_id', 'quantity')
-            ->get();
-
-        $sourceItemIds = $sourceItems->pluck('id')->toArray();
-        $allocatedBySourceItem = [];
-
-        foreach ($allocations as $allocation) {
-            if (in_array($allocation->source_stop_item_id, $sourceItemIds)) {
-                if (! isset($allocatedBySourceItem[$allocation->source_stop_item_id])) {
-                    $allocatedBySourceItem[$allocation->source_stop_item_id] = 0;
-                }
-                $allocatedBySourceItem[$allocation->source_stop_item_id] += $allocation->quantity;
-            }
-        }
-
-        // Map allocated quantities back to products
-        foreach ($sourceItems as $item) {
-            $productId = $item->product_id;
-            if (isset($allocatedBySourceItem[$item->id])) {
-                $surplusByProduct[$productId]['allocated'] += $allocatedBySourceItem[$item->id];
-            }
-        }
-
-        // Filter to only products with positive available quantity
-        $result = [];
-        foreach ($surplusByProduct as $productData) {
-            $available = $productData['total_surplus'] - $productData['allocated'];
-            if ($available > 0) {
-                $result[] = [
-                    'product_id' => $productData['product_id'],
-                    'product_name' => $productData['product_name'],
-                    'sku' => $productData['sku'],
-                    'unit_price' => $productData['unit_price'],
-                    'available_quantity' => $available,
-                ];
-            }
-        }
-
-        return $result;
+        return array_values($surplusByProduct);
     }
 
     /**
@@ -193,6 +162,7 @@ class DriverExecutionService
 
             $allocatedBySource = ExtraSaleAllocation::where('route_id', $route->id)
                 ->whereIn('source_stop_item_id', $sourceItems->pluck('id'))
+                ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
                 ->select('source_stop_item_id', DB::raw('SUM(quantity) as total_quantity'))
                 ->groupBy('source_stop_item_id')
                 ->pluck('total_quantity', 'source_stop_item_id');
@@ -208,7 +178,7 @@ class DriverExecutionService
                         break;
                     }
 
-                    $itemSurplus = $sourceItem->quantity_loaded - $sourceItem->quantity_delivered;
+                    $itemSurplus = $sourceItem->quantity_released_for_extra_sale;
                     $alreadyAllocated = (int) ($allocatedBySource[$sourceItem->id] ?? 0);
                     $availableOnThisItem = $itemSurplus - $alreadyAllocated;
 
@@ -383,6 +353,7 @@ class DriverExecutionService
 
             $items = $data['items'];
             $allZero = true;
+            $eventItems = [];
 
             foreach ($items as $itemData) {
                 $routeStopItem = RouteStopItem::where('id', $itemData['route_stop_item_id'])
@@ -395,10 +366,19 @@ class DriverExecutionService
                 }
 
                 $qtyDelivered = (int) $itemData['quantity_delivered'];
+                $qtyReleased = (int) ($itemData['quantity_released_for_extra_sale'] ?? 0);
 
                 if ($qtyDelivered > $routeStopItem->quantity_loaded) {
                     throw $this->validationError(
                         "La cantidad entregada ({$qtyDelivered}) no puede superar la cargada ({$routeStopItem->quantity_loaded})."
+                    );
+                }
+
+                $remaining = $routeStopItem->quantity_loaded - $qtyDelivered;
+
+                if ($qtyReleased > $remaining) {
+                    throw $this->validationError(
+                        "La cantidad liberada para Venta Extra ({$qtyReleased}) no puede superar el remanente no entregado ({$remaining})."
                     );
                 }
 
@@ -417,7 +397,15 @@ class DriverExecutionService
 
                 $routeStopItem->update([
                     'quantity_delivered' => $qtyDelivered,
+                    'quantity_released_for_extra_sale' => $qtyReleased,
                 ]);
+
+                $eventItems[] = [
+                    'route_stop_item_id' => $routeStopItem->id,
+                    'quantity_delivered' => $qtyDelivered,
+                    'quantity_released_for_extra_sale' => $qtyReleased,
+                    'rejection_reason_id' => $itemData['rejection_reason_id'] ?? null,
+                ];
             }
 
             if ($allZero) {
@@ -514,7 +502,7 @@ class DriverExecutionService
                 null,
                 [
                     'stop_id' => $stop->id,
-                    'items' => $items,
+                    'items' => $eventItems,
                     'rejection_reason_id' => $data['rejection_reason_id'] ?? null,
                 ]
             );

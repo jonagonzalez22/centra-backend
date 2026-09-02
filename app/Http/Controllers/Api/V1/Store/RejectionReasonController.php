@@ -34,6 +34,7 @@ class RejectionReasonController extends Controller
      *
      *         @OA\Items(ref="#/components/schemas/RejectionReason")
      *       ),
+     *
      *       @OA\Property(property="errors", type="null", example=null),
      *       @OA\Property(property="meta", type="null", example=null)
      *     )
@@ -103,6 +104,7 @@ class RejectionReasonController extends Controller
             'code' => $request->code,
             'label' => $request->label,
             'is_active' => $request->boolean('is_active', true),
+            'suggest_extra_sale' => $request->boolean('suggest_extra_sale', false),
         ]);
 
         return response()->json([

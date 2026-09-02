@@ -22,6 +22,7 @@ class RouteStopItem extends Model
         'quantity_planned',
         'quantity_loaded',
         'quantity_delivered',
+        'quantity_released_for_extra_sale',
         'is_extra',
     ];
 
@@ -31,6 +32,7 @@ class RouteStopItem extends Model
             'quantity_planned' => 'integer',
             'quantity_loaded' => 'integer',
             'quantity_delivered' => 'integer',
+            'quantity_released_for_extra_sale' => 'integer',
             'is_extra' => 'boolean',
         ];
     }

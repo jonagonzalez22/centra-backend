@@ -22,4 +22,7 @@ class RejectionReasonSchema
 
     #[OA\Property(example: true)]
     public bool $is_active;
+
+    #[OA\Property(example: false, description: 'Solo sugiere el valor inicial de disponibilidad en la UX')]
+    public bool $suggest_extra_sale;
 }

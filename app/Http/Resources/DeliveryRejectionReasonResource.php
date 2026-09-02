@@ -17,6 +17,7 @@ class DeliveryRejectionReasonResource extends JsonResource
             'label' => $this->label,
             'store_id' => $this->store_id,
             'is_active' => $this->is_active,
+            'suggest_extra_sale' => $this->suggest_extra_sale,
         ];
     }
 }

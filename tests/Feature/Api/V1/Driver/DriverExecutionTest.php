@@ -562,3 +562,173 @@ test('rejection_reason_id must reference an existing reason', function () {
 
     $response->assertStatus(422);
 });
+
+test('complete stop persists released quantities and records them in the event', function () {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    [$item1, $item2] = $data['items'];
+    $reason = DeliveryRejectionReason::where('code', 'rejected_by_customer')->firstOrFail();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'completed',
+            'items' => [
+                [
+                    'route_stop_item_id' => $item1->id,
+                    'quantity_delivered' => 7,
+                    'quantity_released_for_extra_sale' => 1,
+                    'rejection_reason_id' => $reason->id,
+                ],
+                [
+                    'route_stop_item_id' => $item2->id,
+                    'quantity_delivered' => 3,
+                    'quantity_released_for_extra_sale' => 2,
+                    'rejection_reason_id' => $reason->id,
+                ],
+            ],
+        ])
+        ->assertOk();
+
+    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe(1)
+        ->and($item2->fresh()->quantity_released_for_extra_sale)->toBe(2);
+
+    $event = DeliveryRouteEvent::where('route_id', $data['route']->id)
+        ->where('event_type', 'stop_completed')
+        ->sole();
+
+    expect($event->metadata['items'][0]['quantity_released_for_extra_sale'])->toBe(1)
+        ->and($event->metadata['items'][1]['quantity_released_for_extra_sale'])->toBe(2);
+});
+
+test('complete stop defaults omitted released quantity to zero', function () {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    [$item1, $item2] = $data['items'];
+    $reason = DeliveryRejectionReason::where('code', 'customer_absent')->firstOrFail();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'completed',
+            'items' => [
+                ['route_stop_item_id' => $item1->id, 'quantity_delivered' => 9, 'rejection_reason_id' => $reason->id],
+                ['route_stop_item_id' => $item2->id, 'quantity_delivered' => 5],
+            ],
+        ])
+        ->assertOk();
+
+    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe(0);
+});
+
+test('complete stop rejects released quantity above the locked item remainder', function () {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    $item = $data['items'][0];
+    $reason = DeliveryRejectionReason::where('code', 'customer_absent')->firstOrFail();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'completed',
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'quantity_delivered' => 8,
+                'quantity_released_for_extra_sale' => 3,
+                'rejection_reason_id' => $reason->id,
+            ]],
+        ])
+        ->assertStatus(422);
+
+    expect($item->fresh()->quantity_delivered)->toBe(0)
+        ->and($item->fresh()->quantity_released_for_extra_sale)->toBe(0);
+});
+
+test('complete stop rejects a positive released quantity for a full delivery', function () {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    $item = $data['items'][0];
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'completed',
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'quantity_delivered' => 10,
+                'quantity_released_for_extra_sale' => 1,
+            ]],
+        ])
+        ->assertStatus(422);
+});
+
+test('failed stop persists independent released quantities per product', function () {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    [$item1, $item2] = $data['items'];
+    $reason = DeliveryRejectionReason::where('code', 'customer_absent')->firstOrFail();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'failed',
+            'rejection_reason_id' => $reason->id,
+            'items' => [
+                ['route_stop_item_id' => $item1->id, 'quantity_delivered' => 0, 'quantity_released_for_extra_sale' => 6],
+                ['route_stop_item_id' => $item2->id, 'quantity_delivered' => 0, 'quantity_released_for_extra_sale' => 0],
+            ],
+        ])
+        ->assertOk();
+
+    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe(6)
+        ->and($item2->fresh()->quantity_released_for_extra_sale)->toBe(0);
+});
+
+test('complete stop rejects inactive and other-store rejection reasons', function (string $reasonKind) {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    $item = $data['items'][0];
+
+    $reason = match ($reasonKind) {
+        'inactive' => DeliveryRejectionReason::create([
+            'store_id' => $this->store->id,
+            'code' => 'inactive_reason',
+            'label' => 'Inactivo',
+            'is_active' => false,
+        ]),
+        'other-store' => DeliveryRejectionReason::create([
+            'store_id' => Store::factory()->create()->id,
+            'code' => 'other_store_reason',
+            'label' => 'Otra tienda',
+            'is_active' => true,
+        ]),
+    };
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'completed',
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'quantity_delivered' => 9,
+                'rejection_reason_id' => $reason->id,
+            ]],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('items.0.rejection_reason_id');
+})->with(['inactive', 'other-store']);
+
+test('driver rejection reasons expose suggestions and exclude inactive global reasons', function () {
+    DeliveryRejectionReason::where('code', 'wrong_address')->update(['is_active' => false]);
+    $custom = DeliveryRejectionReason::create([
+        'store_id' => $this->store->id,
+        'code' => 'custom_safe_default',
+        'label' => 'Personalizado',
+        'is_active' => true,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson('/api/v1/driver/rejection-reasons')
+        ->assertOk();
+
+    $reasons = collect($response->json('data'));
+
+    expect($reasons->firstWhere('code', 'customer_absent')['suggest_extra_sale'])->toBeTrue()
+        ->and($reasons->firstWhere('code', 'damaged_goods')['suggest_extra_sale'])->toBeFalse()
+        ->and($reasons->firstWhere('id', $custom->id)['suggest_extra_sale'])->toBeFalse()
+        ->and($reasons->contains('code', 'wrong_address'))->toBeFalse();
+});

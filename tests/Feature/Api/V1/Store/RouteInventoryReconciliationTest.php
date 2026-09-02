@@ -94,7 +94,8 @@ function routeInventoryAddStop(
     Product $product,
     int $loaded,
     int $delivered,
-    string $status
+    string $status,
+    ?int $released = null
 ): array {
     $stop = RouteStop::create([
         'route_id' => $route->id,
@@ -109,6 +110,9 @@ function routeInventoryAddStop(
         'quantity_planned' => $loaded,
         'quantity_loaded' => $loaded,
         'quantity_delivered' => $delivered,
+        'quantity_released_for_extra_sale' => $released ?? (
+            in_array($status, ['completed', 'failed'], true) ? $loaded - $delivered : 0
+        ),
     ]);
 
     return [$stop, $item];
@@ -643,8 +647,8 @@ test('A B C D route with failed source and extra sale reconciles exact inventory
             'status' => 'failed',
             'rejection_reason_id' => $this->rejectionReason->id,
             'items' => [
-                ['route_stop_item_id' => $itemC->id, 'quantity_delivered' => 0],
-                ['route_stop_item_id' => $itemDSource->id, 'quantity_delivered' => 0],
+                ['route_stop_item_id' => $itemC->id, 'quantity_delivered' => 0, 'quantity_released_for_extra_sale' => 0],
+                ['route_stop_item_id' => $itemDSource->id, 'quantity_delivered' => 0, 'quantity_released_for_extra_sale' => 3],
             ],
         ])
         ->assertOk();
@@ -996,4 +1000,95 @@ test('extra sale from a multi route order does not leave a future commercial obl
         ->and($sourceItem->fresh()->quantity_delivered)->toBe(1)
         ->and($product->fresh()->stock)->toBe(6)
         ->and($product->fresh()->stock_reserved)->toBe(0);
+});
+
+test('available surplus uses released quantity instead of the full undelivered remainder', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 100, 'stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 5]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 5, 2, 'completed', 1);
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
+        ->assertOk()
+        ->assertJsonPath('data.surplus.0.available_quantity', 1);
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 2]],
+        ])
+        ->assertStatus(422);
+});
+
+test('allocations subtract from released quantity without changing its historical value', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 100, 'stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 5]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $product, 5, 2, 'completed', 2);
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
+        ->assertOk()
+        ->assertJsonPath('data.surplus.0.available_quantity', 1);
+
+    expect($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe(2)
+        ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)->sum('quantity'))->toBe(1);
+
+    $sourceItem->update(['quantity_released_for_extra_sale' => 0]);
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
+        ->assertOk()
+        ->assertJsonPath('data.surplus', []);
+});
+
+test('historical source with zero released quantity contributes no surplus', function () {
+    $product = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 3]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    routeInventoryAddStop($route, $sourceOrder, $product, 3, 0, 'failed', 0);
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
+        ->assertOk()
+        ->assertJsonPath('data.surplus', []);
+});
+
+test('unreleased remainder remains conciliable after an extra sale allocation', function () {
+    $product = Product::factory()->forStore($this->store)->create(['price' => 100, 'stock' => 10, 'stock_reserved' => 0]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 5]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $product, 5, 2, 'completed', 1);
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $route->update(['status' => 'awaiting_reconciliation']);
+    $reconciliation = app(\App\Services\RouteManagementService::class)
+        ->getReconciliation($route->fresh());
+
+    $source = collect($reconciliation['stops'])
+        ->flatMap(fn (array $stop) => $stop['items'])
+        ->firstWhere('route_stop_item_id', $sourceItem->id);
+
+    expect($source['difference'])->toBe(2)
+        ->and($source['extra_sale_allocated'])->toBe(1)
+        ->and($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe(1);
 });

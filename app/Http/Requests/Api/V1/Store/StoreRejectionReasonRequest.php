@@ -30,6 +30,7 @@ class StoreRejectionReasonRequest extends FormRequest
             ],
             'label' => ['required', 'string', 'max:255'],
             'is_active' => ['nullable', 'boolean'],
+            'suggest_extra_sale' => ['nullable', 'boolean'],
         ];
     }
 

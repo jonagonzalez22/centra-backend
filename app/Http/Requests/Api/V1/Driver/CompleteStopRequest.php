@@ -5,6 +5,7 @@ namespace App\Http\Requests\Api\V1\Driver;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 
 class CompleteStopRequest extends FormRequest
 {
@@ -15,6 +16,16 @@ class CompleteStopRequest extends FormRequest
 
     public function rules(): array
     {
+        $storeId = $this->user()?->store_id;
+        $validRejectionReason = Rule::exists('delivery_rejection_reasons', 'id')
+            ->where(function ($query) use ($storeId) {
+                $query->where('is_active', true)
+                    ->where(function ($query) use ($storeId) {
+                        $query->whereNull('store_id')
+                            ->orWhere('store_id', $storeId);
+                    });
+            });
+
         return [
             'status' => ['required', 'string', 'in:completed,failed'],
             'gps_lat' => ['nullable', 'numeric'],
@@ -25,7 +36,7 @@ class CompleteStopRequest extends FormRequest
             'rejection_reason_id' => [
                 'required_if:status,failed',
                 'uuid',
-                'exists:delivery_rejection_reasons,id',
+                $validRejectionReason,
             ],
             'items' => ['required', 'array', 'min:1'],
             'items.*.route_stop_item_id' => [
@@ -38,10 +49,15 @@ class CompleteStopRequest extends FormRequest
                 'integer',
                 'min:0',
             ],
+            'items.*.quantity_released_for_extra_sale' => [
+                'sometimes',
+                'integer',
+                'min:0',
+            ],
             'items.*.rejection_reason_id' => [
                 'nullable',
                 'uuid',
-                'exists:delivery_rejection_reasons,id',
+                $validRejectionReason,
             ],
             'payments' => ['nullable', 'array'],
             'payments.*.store_payment_method_id' => [
@@ -79,6 +95,8 @@ class CompleteStopRequest extends FormRequest
             'items.*.quantity_delivered.required' => 'La cantidad entregada es obligatoria.',
             'items.*.quantity_delivered.integer' => 'La cantidad debe ser un número entero.',
             'items.*.quantity_delivered.min' => 'La cantidad entregada no puede ser negativa.',
+            'items.*.quantity_released_for_extra_sale.integer' => 'La cantidad liberada para Venta Extra debe ser un número entero.',
+            'items.*.quantity_released_for_extra_sale.min' => 'La cantidad liberada para Venta Extra no puede ser negativa.',
             'items.*.rejection_reason_id.exists' => 'El motivo de rechazo no es válido.',
             'payments.*.store_payment_method_id.required' => 'El método de pago es obligatorio.',
             'payments.*.store_payment_method_id.exists' => 'El método de pago no es válido.',

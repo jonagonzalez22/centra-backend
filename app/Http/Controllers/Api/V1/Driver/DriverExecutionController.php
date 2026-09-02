@@ -189,6 +189,7 @@ class DriverExecutionController extends Controller
    *
    *           @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
    *           @OA\Property(property="quantity_delivered", type="integer", example=5),
+   *           @OA\Property(property="quantity_released_for_extra_sale", type="integer", minimum=0, example=2),
    *           @OA\Property(property="rejection_reason_id", type="string", format="uuid", nullable=true)
    *         )
    *       ),

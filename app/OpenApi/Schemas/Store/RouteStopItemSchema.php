@@ -28,4 +28,7 @@ class RouteStopItemSchema
 
     #[OA\Property(example: 0)]
     public int $quantity_delivered;
+
+    #[OA\Property(example: 0, description: 'Cantidad del remanente liberada físicamente para Venta Extra')]
+    public int $quantity_released_for_extra_sale;
 }

@@ -21,12 +21,14 @@ class DeliveryRejectionReason extends Model
         'code',
         'label',
         'is_active',
+        'suggest_extra_sale',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'suggest_extra_sale' => 'boolean',
         ];
     }
 
@@ -42,8 +44,10 @@ class DeliveryRejectionReason extends Model
 
     public function scopeForStore(Builder $query, string $storeId): Builder
     {
-        return $query->whereNull('store_id')
-            ->orWhere('store_id', $storeId);
+        return $query->where(function (Builder $query) use ($storeId) {
+            $query->whereNull('store_id')
+                ->orWhere('store_id', $storeId);
+        });
     }
 
     public function scopeActive(Builder $query): Builder
