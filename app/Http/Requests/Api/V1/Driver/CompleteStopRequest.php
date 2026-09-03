@@ -42,6 +42,7 @@ class CompleteStopRequest extends FormRequest
             'items.*.route_stop_item_id' => [
                 'required',
                 'uuid',
+                'distinct',
                 'exists:route_stop_items,id',
             ],
             'items.*.quantity_delivered' => [

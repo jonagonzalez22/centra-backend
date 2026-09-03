@@ -55,9 +55,7 @@ class RouteStopResource extends JsonResource
 
                 // Add financial data when items and payments are loaded
                 if ($this->order->relationLoaded('items') && $this->order->relationLoaded('payments')) {
-                    $totalAmount = (float) $this->order->items->sum(function ($item) {
-                        return (float) $item->quantity * (float) $item->price;
-                    });
+                    $totalAmount = (float) $this->order->total;
                     $paidAmount = (float) $this->order->payments->sum('amount');
                     $data['total_amount'] = $totalAmount;
                     $data['paid_amount'] = $paidAmount;

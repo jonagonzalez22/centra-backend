@@ -280,6 +280,18 @@ test('reject collection with reason', function () {
     expect($collection->verified_by)->toBe($this->user->id);
 });
 
+test('reject collection requires reason', function () {
+    [$route, $stop, $product, $item, $order] = recRouteForReconciliation($this->store);
+    $collection = recCreateCollection($stop, $this->store, ['declared_by' => $this->user->id]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collections/{$collection->id}/reject")
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('reason');
+
+    expect($collection->fresh()->status)->toBe('declared');
+});
+
 // 6. reject collection does NOT create operation_payment
 test('reject collection does not create operation_payment', function () {
     [$route, $stop, $product, $item, $order] = recRouteForReconciliation($this->store);

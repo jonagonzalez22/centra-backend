@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Driver;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Driver\CollectionPreviewRequest;
 use App\Http\Requests\Api\V1\Driver\CompleteStopRequest;
 use App\Http\Resources\DeliveryRouteResource;
 use App\Http\Resources\DriverPaymentMethodResource;
@@ -240,6 +241,23 @@ class DriverExecutionController extends Controller
       'data' => RouteStopResource::make($stop),
       'errors' => null,
       'meta' => null,
+    ]);
+  }
+
+  public function collectionPreview(CollectionPreviewRequest $request, string $stopId): JsonResponse
+  {
+    $stop = RouteStop::findOrFail($stopId);
+    $amounts = $this->executionService->previewCollection(
+      $stop,
+      $request->validated('items'),
+      $request->user()
+    );
+
+    return response()->json([
+      'status' => 'success',
+      'message' => null,
+      'data' => $amounts,
+      'errors' => null,
     ]);
   }
 }

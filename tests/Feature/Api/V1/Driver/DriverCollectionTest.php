@@ -382,7 +382,7 @@ test('complete stop rejects payments when pending balance is zero', function () 
         ]);
 
     $response->assertStatus(422)
-        ->assertJsonPath('message', 'El pedido no tiene saldo pendiente.');
+        ->assertJsonPath('message', 'El pedido no tiene saldo habilitado para cobrar en esta entrega.');
 });
 
 test('complete stop rejects payments when total exceeds pending balance', function () {
@@ -405,7 +405,95 @@ test('complete stop rejects payments when total exceeds pending balance', functi
         ]);
 
     $response->assertStatus(422)
-        ->assertJsonPath('message', 'El total declarado supera el saldo pendiente del pedido.');
+        ->assertJsonPath('message', 'El total declarado supera el monto habilitado para cobrar en esta entrega.');
+});
+
+test('collection preview values proposed quantities without persisting them', function () {
+    $data = createDispatchedRouteWithFinancials($this->driver, $this->store, $this->vehicle);
+    $data['order']->payments()->delete();
+    $data['order']->items()->update(['tax_amount' => 0, 'discount_amount' => 0]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$data['stops'][0]->id}/collection-preview", [
+            'items' => [
+                ['route_stop_item_id' => $data['stopItems'][0]->id, 'quantity_delivered' => 3],
+                ['route_stop_item_id' => $data['stopItems'][1]->id, 'quantity_delivered' => 0],
+            ],
+        ])
+        ->assertOk();
+
+    expect((float) $response->json('data.delivered_value_current_stop'))->toBe(300.0)
+        ->and((float) $response->json('data.delivered_value_cumulative'))->toBe(300.0)
+        ->and((float) $response->json('data.amount_to_collect_now'))->toBe(300.0)
+        ->and($data['stopItems'][0]->fresh()->quantity_delivered)->toBe(0);
+});
+
+test('collection preview rejects duplicated foreign and excessive stop items', function () {
+    $data = createDispatchedRouteWithFinancials($this->driver, $this->store, $this->vehicle);
+    $otherItem = RouteStopItem::factory()->loaded(1)->create();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$data['stops'][0]->id}/collection-preview", [
+            'items' => [
+                ['route_stop_item_id' => $data['stopItems'][0]->id, 'quantity_delivered' => 1],
+                ['route_stop_item_id' => $data['stopItems'][0]->id, 'quantity_delivered' => 1],
+            ],
+        ])
+        ->assertStatus(422);
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$data['stops'][0]->id}/collection-preview", [
+            'items' => [['route_stop_item_id' => $otherItem->id, 'quantity_delivered' => 1]],
+        ])
+        ->assertStatus(422);
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$data['stops'][0]->id}/collection-preview", [
+            'items' => [[
+                'route_stop_item_id' => $data['stopItems'][0]->id,
+                'quantity_delivered' => 11,
+            ]],
+        ])
+        ->assertStatus(422);
+});
+
+test('collection preview enforces driver and store isolation', function () {
+    $data = createDispatchedRouteWithFinancials($this->driver, $this->store, $this->vehicle);
+
+    $this->withHeader('Authorization', "Bearer {$this->nonDriverToken}")
+        ->postJson("/api/v1/driver/stops/{$data['stops'][0]->id}/collection-preview", [
+            'items' => [[
+                'route_stop_item_id' => $data['stopItems'][0]->id,
+                'quantity_delivered' => 1,
+            ]],
+        ])
+        ->assertStatus(403);
+});
+
+test('complete stop cannot collect more than the value delivered in a partial delivery', function () {
+    $data = createDispatchedRouteWithFinancials($this->driver, $this->store, $this->vehicle);
+    $data['order']->payments()->delete();
+    $data['order']->items()->update(['tax_amount' => 0, 'discount_amount' => 0]);
+    $reason = DeliveryRejectionReason::where('code', 'rejected_by_customer')->firstOrFail();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$data['stops'][0]->id}/complete", [
+            'status' => 'completed',
+            'items' => [
+                [
+                    'route_stop_item_id' => $data['stopItems'][0]->id,
+                    'quantity_delivered' => 3,
+                    'rejection_reason_id' => $reason->id,
+                ],
+                [
+                    'route_stop_item_id' => $data['stopItems'][1]->id,
+                    'quantity_delivered' => 0,
+                ],
+            ],
+            'payments' => [['store_payment_method_id' => $data['spm1']->id, 'amount' => 301]],
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'El total declarado supera el monto habilitado para cobrar en esta entrega.');
 });
 
 test('complete stop validates payment method belongs to store', function () {

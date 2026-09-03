@@ -121,11 +121,11 @@ class CommercialOperation extends Model
     }
 
     /**
-     * Sum of (quantity * price) across all operation items.
+     * Current persisted commercial obligation, including taxes and discounts.
      */
     public function getTotalAmountAttribute(): float
     {
-        return (float) $this->items()->sum(DB::raw('quantity * price'));
+        return (float) $this->total;
     }
 
     /**

@@ -25,7 +25,8 @@ use Illuminate\Support\Facades\DB;
 class RouteManagementService
 {
     public function __construct(
-        private CommercialOperationService $commercialOperationService
+        private CommercialOperationService $commercialOperationService,
+        private DeliveryCollectionAmountService $deliveryCollectionAmountService
     ) {}
 
     /**
@@ -1242,7 +1243,7 @@ class RouteManagementService
                     'id' => $stop->order->id,
                     'operation_number' => $stop->order->operation_number,
                     'customer_name' => $stop->order->customer?->display_name ?? $stop->order->customer?->name,
-                    'total_amount' => (float) $stop->order->items?->sum(fn ($i) => (float) $i->quantity * (float) $i->price) ?? 0,
+                    'total_amount' => (float) $stop->order->total,
                     'paid_amount' => (float) ($stop->order->payments?->sum('amount') ?? 0),
                 ];
                 $stopOrderData['pending_balance'] = $stopOrderData['total_amount'] - $stopOrderData['paid_amount'];
@@ -1282,6 +1283,20 @@ class RouteManagementService
     public function verifyCollection(RouteStopCollection $collection, User $user): RouteStopCollection
     {
         return DB::transaction(function () use ($collection, $user) {
+            $order = CommercialOperation::forStore($collection->store_id)
+                ->where('id', $collection->commercial_operation_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $order) {
+                throw $this->validationError('El pedido asociado a la cobranza no existe.');
+            }
+
+            $collection = RouteStopCollection::where('id', $collection->id)
+                ->where('commercial_operation_id', $order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             if ($collection->status !== 'declared') {
                 throw $this->validationError('La cobranza ya fue procesada.');
             }
@@ -1290,20 +1305,20 @@ class RouteManagementService
                 throw $this->validationError('La cobranza ya tiene un pago asociado.');
             }
 
-            $collection = RouteStopCollection::where('id', $collection->id)->lockForUpdate()->first();
+            $stop = RouteStop::with('route')->findOrFail($collection->route_stop_id);
+            $proposedQuantities = RouteStopItem::where('route_stop_id', $stop->id)
+                ->pluck('quantity_delivered', 'id')
+                ->map(fn ($quantity) => (int) $quantity)
+                ->all();
+            $collectionAmounts = $this->deliveryCollectionAmountService->calculate(
+                $stop,
+                $proposedQuantities,
+                true,
+                $collection->id
+            );
 
-            $order = CommercialOperation::with(['items', 'payments'])->find($collection->commercial_operation_id);
-
-            if (! $order) {
-                throw $this->validationError('El pedido asociado a la cobranza no existe.');
-            }
-
-            $totalAmount = (float) $order->items->sum(fn ($i) => (float) $i->quantity * (float) $i->price);
-            $paidAmount = (float) $order->payments->sum('amount');
-            $pendingBalance = $totalAmount - $paidAmount;
-
-            if ((float) $collection->amount > $pendingBalance) {
-                throw $this->validationError('El monto supera el saldo pendiente del pedido.');
+            if ((float) $collection->amount > $collectionAmounts['amount_to_collect_now']) {
+                throw $this->validationError('El monto supera el valor entregado pendiente de cobro.');
             }
 
             $payment = OperationPayment::create([

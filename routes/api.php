@@ -56,6 +56,7 @@ Route::prefix('v1')->group(function () {
     Route::get('active-route', [DriverExecutionController::class, 'activeRoute']);
     Route::post('stops/{stop}/arrive', [DriverExecutionController::class, 'arrive']);
     Route::post('stops/{stop}/complete', [DriverExecutionController::class, 'complete']);
+    Route::post('stops/{stop}/collection-preview', [DriverExecutionController::class, 'collectionPreview']);
     Route::get('routes/{route}/stops', [DriverRouteController::class, 'stops']);
     Route::get('stops/{stop}', [DriverStopController::class, 'show']);
     Route::get('routes/{route}/available-surplus', [DriverExtraSaleController::class, 'availableSurplus']);

@@ -266,7 +266,7 @@ test('returned and rejected recalculate totals without modifying existing paymen
     'rejected becomes overpaid' => ['rejected_by_customer', 80.0, -30.0],
 ]);
 
-test('declared collection must be verified before total reduction and can leave a negative balance', function () {
+test('declared collection is limited to delivered value before total reduction', function () {
     $product = Product::factory()->forStore($this->store)->create([
         'price' => 10,
         'stock' => 20,
@@ -282,7 +282,7 @@ test('declared collection must be verified before total reduction and can leave 
         'route_stop_id' => $stop->id,
         'commercial_operation_id' => $order->id,
         'store_payment_method_id' => routeInventoryPaymentMethod($this)->id,
-        'amount' => 80,
+        'amount' => 50,
         'reference' => 'DECLARED-BEFORE-RETURN',
         'declared_by' => $this->driver->id,
         'declared_at' => now(),
@@ -304,13 +304,13 @@ test('declared collection must be verified before total reduction and can leave 
 
     expect($collection->fresh()->status)->toBe('verified')
         ->and(OperationPayment::where('operation_id', $order->id)->count())->toBe(1)
-        ->and((float) OperationPayment::where('operation_id', $order->id)->sole()->amount)->toBe(80.0);
+        ->and((float) OperationPayment::where('operation_id', $order->id)->sole()->amount)->toBe(50.0);
 
     routeInventoryFinalize($this, $route);
 
     expect((float) $order->fresh()->total)->toBe(50.0)
-        ->and($order->fresh()->paid_amount)->toBe(80.0)
-        ->and($order->fresh()->pending_balance)->toBe(-30.0)
+        ->and($order->fresh()->paid_amount)->toBe(50.0)
+        ->and($order->fresh()->pending_balance)->toBe(0.0)
         ->and(OperationPayment::where('operation_id', $order->id)->count())->toBe(1);
 });
 

@@ -20,8 +20,50 @@ use Illuminate\Support\Facades\DB;
 class DriverExecutionService
 {
     public function __construct(
-        private CommercialOperationService $commercialOperationService
+        private CommercialOperationService $commercialOperationService,
+        private DeliveryCollectionAmountService $deliveryCollectionAmountService
     ) {}
+
+    /**
+     * Preview collection amounts for proposed quantities without persisting execution data.
+     *
+     * @param  array<int, array{route_stop_item_id: string, quantity_delivered: int}>  $items
+     * @return array<string, float>
+     */
+    public function previewCollection(RouteStop $stop, array $items, User $driver): array
+    {
+        $route = $this->validateDriverRoute($stop, $driver);
+
+        if (! in_array($stop->status, ['pending', 'arrived'], true)) {
+            throw $this->validationError('Solo se puede calcular una cobranza para una parada pendiente o arribada.');
+        }
+
+        $stop->setRelation('route', $route);
+        $stopItems = RouteStopItem::where('route_stop_id', $stop->id)
+            ->whereIn('id', collect($items)->pluck('route_stop_item_id'))
+            ->get()
+            ->keyBy('id');
+        $proposedQuantities = [];
+
+        foreach ($items as $itemData) {
+            $stopItem = $stopItems->get($itemData['route_stop_item_id']);
+
+            if (! $stopItem) {
+                throw $this->validationError('Uno o más items no pertenecen a esta parada.');
+            }
+
+            $quantity = (int) $itemData['quantity_delivered'];
+            if ($quantity > (int) $stopItem->quantity_loaded) {
+                throw $this->validationError(
+                    "La cantidad entregada ({$quantity}) no puede superar la cargada ({$stopItem->quantity_loaded})."
+                );
+            }
+
+            $proposedQuantities[$stopItem->id] = $quantity;
+        }
+
+        return $this->deliveryCollectionAmountService->calculate($stop, $proposedQuantities);
+    }
 
     /**
      * Find the active (dispatched) route for a driver.
@@ -343,6 +385,7 @@ class DriverExecutionService
     {
         return DB::transaction(function () use ($stop, $data, $driver) {
             $route = $this->validateDriverRoute($stop, $driver);
+            $stop->setRelation('route', $route);
 
             // Lock the stop to prevent race conditions
             $stop = RouteStop::where('id', $stop->id)->lockForUpdate()->first();
@@ -432,22 +475,23 @@ class DriverExecutionService
                     throw $this->validationError('No se encontró el pedido asociado a este stop.');
                 }
 
-                // Calculate pending balance
-                $totalAmount = (float) $order->items->sum(function ($item) {
-                    return (float) $item->quantity * (float) $item->price;
-                });
+                $proposedQuantities = collect($items)->mapWithKeys(fn (array $item) => [
+                    $item['route_stop_item_id'] => (int) $item['quantity_delivered'],
+                ])->all();
+                $collectionAmounts = $this->deliveryCollectionAmountService->calculate(
+                    $stop,
+                    $proposedQuantities,
+                    true
+                );
 
-                $paidAmount = (float) $order->payments->sum('amount');
-                $pendingBalance = $totalAmount - $paidAmount;
-
-                if ($pendingBalance <= 0) {
-                    throw $this->validationError('El pedido no tiene saldo pendiente.');
+                if ($collectionAmounts['amount_to_collect_now'] <= 0) {
+                    throw $this->validationError('El pedido no tiene saldo habilitado para cobrar en esta entrega.');
                 }
 
                 $declaredTotal = array_sum(array_map(fn ($p) => (float) $p['amount'], $payments));
 
-                if ($declaredTotal > $pendingBalance) {
-                    throw $this->validationError('El total declarado supera el saldo pendiente del pedido.');
+                if (round($declaredTotal, 2) > $collectionAmounts['amount_to_collect_now']) {
+                    throw $this->validationError('El total declarado supera el monto habilitado para cobrar en esta entrega.');
                 }
 
                 // Validate each payment and create collection
