@@ -34,12 +34,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   ),
  *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true),
  *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido")
+ *   @OA\Property(property="has_pending_delivery", type="boolean")
+ *   @OA\Property(property="pending_delivery_quantity", type="integer")
  * )
  */
 class CommercialOperationListResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $deliverySummary = app(\App\Services\DeliverySummaryService::class)->summarize($this->resource);
+
         return [
             'id' => $this->id,
             'operation_number' => $this->operation_number,
@@ -65,6 +69,8 @@ class CommercialOperationListResource extends JsonResource
                 ->unique()
                 ->values()
                 ->toArray(), []),
+            'has_pending_delivery' => $deliverySummary['has_pending_delivery'],
+            'pending_delivery_quantity' => $deliverySummary['pending_delivery_quantity'],
         ];
     }
 

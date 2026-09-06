@@ -61,7 +61,7 @@ class OrderController extends Controller
 
         $query = CommercialOperation::forStore($storeId)
             ->byType('order')
-            ->with(['customer.addresses.locality', 'items', 'payments', 'routeStops']);
+            ->with(['customer.addresses.locality', 'items.product', 'payments', 'routeStops.items', 'routeStops.route']);
 
         // Status filter: applied only when explicitly provided
         if ($request->filled('status')) {
@@ -164,6 +164,8 @@ class OrderController extends Controller
                 'items.product',
                 'payments.storePaymentMethod.paymentMethod',
                 'user',
+                'routeStops.items.product',
+                'routeStops.route',
             ])
             ->withSum('payments', 'amount')
             ->find($id);

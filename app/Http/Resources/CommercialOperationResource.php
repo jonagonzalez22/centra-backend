@@ -52,6 +52,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="events", type="array", @OA\Items(ref="#/components/schemas/CommercialOperationEventResource")),
  *   @OA\Property(property="history", type="array", description="Historial funcional normalizado del pedido"),
  *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido")
+ *   @OA\Property(property="delivery_summary", type="object", description="Resumen operativo de mercadería pendiente")
  * )
  */
 class CommercialOperationResource extends JsonResource
@@ -97,6 +98,10 @@ class CommercialOperationResource extends JsonResource
                 ->unique()
                 ->values()
                 ->toArray(), []),
+            'delivery_summary' => $this->when(
+                $this->type === 'order',
+                fn () => app(\App\Services\DeliverySummaryService::class)->summarize($this->resource)
+            ),
         ];
     }
 
