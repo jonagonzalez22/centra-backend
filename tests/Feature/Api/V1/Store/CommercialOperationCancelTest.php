@@ -6,10 +6,13 @@ use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
 use App\Models\Customer;
+use App\Models\DeliveryRoute;
 use App\Models\Feature;
 use App\Models\OperationItem;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -87,6 +90,63 @@ function cancelOp(User $user, string $operationId, array $data = []): \Illuminat
     return test()->actingAs($user, 'sanctum')
         ->putJson("/api/v1/store/operations/{$operationId}/cancel", array_merge($default, $data));
 }
+
+function cancelPendingDelivery(User $user, string $operationId, array $data = []): \Illuminate\Testing\TestResponse
+{
+    return test()->actingAs($user, 'sanctum')->postJson(
+        "/api/v1/store/operations/{$operationId}/cancel-pending-delivery",
+        array_merge(['reason' => 'Cliente ya no necesita la mercadería'], $data)
+    );
+}
+
+describe('Cancelar pendiente', function () {
+    it('reduces only the undelivered obligation, releases its reservation and finishes as delivered', function () {
+        $user = makeAuthUserCancel($this->store, 'STORE_ADMIN', ['orders.edit']);
+        $order = makeOrderForCancel($this->store, [
+            'status' => 'partially_delivered',
+            'subtotal' => 200,
+            'total' => 200,
+        ]);
+        $this->product->update(['stock' => 10, 'stock_reserved' => 1]);
+        $item = OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'product_name' => $this->product->name,
+            'quantity' => 2,
+            'price' => 100,
+            'subtotal' => 200,
+            'tax_amount' => 0,
+            'discount_amount' => 0,
+        ]);
+        $route = DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'status' => 'completed']);
+        $stop = RouteStop::factory()->create([
+            'route_id' => $route->id,
+            'order_id' => $order->id,
+            'status' => 'completed',
+        ]);
+        RouteStopItem::factory()->create([
+            'route_stop_id' => $stop->id,
+            'product_id' => $this->product->id,
+            'quantity_planned' => 2,
+            'quantity_loaded' => 2,
+            'quantity_delivered' => 1,
+        ]);
+
+        cancelPendingDelivery($user, $order->id)->assertOk();
+
+        expect($item->fresh()->quantity)->toBe(1)
+            ->and($order->fresh()->status)->toBe('delivered')
+            ->and((float) $order->fresh()->total)->toBe(100.0)
+            ->and($this->product->fresh()->stock)->toBe(10)
+            ->and($this->product->fresh()->stock_reserved)->toBe(0);
+        $this->assertDatabaseHas('commercial_operation_events', [
+            'operation_id' => $order->id,
+            'event_type' => 'remaining_delivery_cancelled',
+            'user_id' => $user->id,
+            'new_status' => 'delivered',
+        ]);
+    });
+});
 
 // ─── CANCEL-008: Migration columns ─────────────────────────────────────
 

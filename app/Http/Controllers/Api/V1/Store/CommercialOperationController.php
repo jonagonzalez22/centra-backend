@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\CancelOrderRequest;
+use App\Http\Requests\Api\V1\Store\CancelPendingDeliveryRequest;
 use App\Http\Requests\Api\V1\Store\ListCommercialOperationsRequest;
 use App\Http\Requests\Api\V1\Store\RescheduleDeliveryDateRequest;
 use App\Http\Requests\Api\V1\Store\StoreCommercialOperationRequest;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
+use App\Services\CancelPendingDeliveryService;
 use App\Services\CommercialOperationService;
 use App\Services\OrderHistoryBuilder;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +19,46 @@ use Illuminate\Validation\ValidationException;
 
 class CommercialOperationController extends Controller
 {
+    public function cancelPendingDelivery(
+        CancelPendingDeliveryRequest $request,
+        CancelPendingDeliveryService $service,
+        OrderHistoryBuilder $historyBuilder,
+        string $id
+    ): JsonResponse {
+        $storeId = $request->user()->store_id;
+        $operation = CommercialOperation::forStore($storeId)->find($id);
+
+        if (! $operation) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Operación comercial no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La operación comercial no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $operation = $service->cancel(
+            $operation,
+            $request->validated('reason'),
+            $request->user()
+        );
+        $operation->load([
+            'customer.addresses.locality',
+            'user',
+            'items.product',
+            'payments.storePaymentMethod.paymentMethod',
+            'events.user',
+        ])->loadSum('payments', 'amount');
+        $historyBuilder->attach($operation, $storeId);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Mercadería pendiente cancelada exitosamente.',
+            'data' => CommercialOperationResource::make($operation),
+            'errors' => null,
+        ]);
+    }
+
     /**
      * Display a listing of commercial operations for the authenticated user's store.
      *

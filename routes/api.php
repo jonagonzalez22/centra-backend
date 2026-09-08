@@ -184,6 +184,9 @@ Route::prefix('v1')->group(function () {
         Route::put('operations/{operation}/cancel', [CommercialOperationController::class, 'cancel'])
           ->middleware('permission:orders.edit')
           ->name('store.operations.cancel');
+        Route::post('operations/{operation}/cancel-pending-delivery', [CommercialOperationController::class, 'cancelPendingDelivery'])
+          ->middleware('permission:orders.edit')
+          ->name('store.operations.cancel-pending-delivery');
       });
 
       Route::middleware('feature:customers')->group(function () {

@@ -26,6 +26,7 @@ class CommercialOperationEvent extends Model
         'new_date',
         'reason',
         'observation',
+        'metadata',
         'user_id',
         'previous_status',
         'new_status',
@@ -42,6 +43,7 @@ class CommercialOperationEvent extends Model
             'previous_status' => 'string',
             'new_status' => 'string',
             'reason_code' => 'string',
+            'metadata' => 'array',
         ];
     }
 
