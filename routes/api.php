@@ -369,6 +369,10 @@ Route::prefix('v1')->group(function () {
           ->middleware('permission:logistics.routes.reconcile')
           ->name('store.routes.collections.verify');
 
+        Route::post('routes/{route}/collection-groups/{storePaymentMethod}/verify', [RouteController::class, 'verifyCollectionGroup'])
+          ->middleware('permission:logistics.routes.reconcile')
+          ->name('store.routes.collection-groups.verify');
+
         Route::post('routes/{route}/collections/{collection}/reject', [RouteController::class, 'rejectCollection'])
           ->middleware('permission:logistics.routes.reconcile')
           ->name('store.routes.collections.reject');

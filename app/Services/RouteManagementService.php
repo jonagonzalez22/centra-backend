@@ -15,6 +15,7 @@ use App\Models\RouteStop;
 use App\Models\RouteStopCollection;
 use App\Models\RouteStopItem;
 use App\Models\Store;
+use App\Models\StorePaymentMethod;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Builder;
@@ -1149,7 +1150,7 @@ class RouteManagementService
             'stops.items.product',
             'stops.items.discrepancy',
             'stops.order' => fn ($q) => $q->with(['customer', 'payments.storePaymentMethod.paymentMethod']),
-            'stops.collections' => fn ($q) => $q->with(['storePaymentMethod.paymentMethod', 'declaredBy']),
+            'stops.collections' => fn ($q) => $q->with(['storePaymentMethod.paymentMethod', 'declaredBy', 'verifiedBy']),
             'vehicle',
             'driver',
             'events' => fn ($q) => $q->orderBy('created_at'),
@@ -1163,7 +1164,8 @@ class RouteManagementService
             ->map(fn ($group) => $group->sum('quantity'))
             ->toArray();
 
-        $declaredAmount = 0;
+        $totalDeclaredAmount = 0;
+        $pendingAmount = 0;
         $verifiedAmount = 0;
         $rejectedAmount = 0;
         $hasDeclaredCollections = false;
@@ -1215,9 +1217,10 @@ class RouteManagementService
             if ($stop->order) {
                 foreach ($stop->collections as $collection) {
                     $collectionAmount = (float) $collection->amount;
+                    $totalDeclaredAmount += $collectionAmount;
 
                     if ($collection->status === 'declared') {
-                        $declaredAmount += $collectionAmount;
+                        $pendingAmount += $collectionAmount;
                         $hasDeclaredCollections = true;
                     } elseif ($collection->status === 'verified') {
                         $verifiedAmount += $collectionAmount;
@@ -1227,6 +1230,8 @@ class RouteManagementService
 
                     $stopCollections[] = [
                         'id' => $collection->id,
+                        'commercial_operation_id' => $collection->commercial_operation_id,
+                        'store_payment_method_id' => $collection->store_payment_method_id,
                         'status' => $collection->status,
                         'amount' => $collectionAmount,
                         'reference' => $collection->reference,
@@ -1236,6 +1241,12 @@ class RouteManagementService
                         'declared_by' => $collection->declaredBy?->name,
                         'declared_at' => $collection->declared_at?->format('Y-m-d H:i:s'),
                         'verified_at' => $collection->verified_at?->format('Y-m-d H:i:s'),
+                        'verified_by' => $collection->verifiedBy?->name,
+                        'rejection_reason' => $collection->rejection_reason,
+                        'operation_payment_id' => $collection->operation_payment_id,
+                        'order_number' => $stop->order->operation_number,
+                        'customer_name' => $stop->order->customer?->display_name ?? $stop->order->customer?->name,
+                        'stop_id' => $stop->id,
                     ];
                 }
 
@@ -1260,6 +1271,30 @@ class RouteManagementService
         }
 
         $canClose = ! $hasDeclaredCollections && ! $hasNegativeDifferences && $allDiscrepanciesResolved;
+        $allCollections = collect($stopsData)->flatMap(fn (array $stop) => $stop['collections']);
+        $collectionGroups = $allCollections->groupBy('store_payment_method_id')->map(function ($collections, $methodId) {
+            $counts = $collections->countBy('status');
+            $amountFor = fn (string $status) => round((float) $collections->where('status', $status)->sum('amount'), 2);
+            $statuses = $collections->pluck('status')->unique();
+
+            return [
+                'store_payment_method_id' => $methodId,
+                'payment_method_name' => $collections->first()['payment_method'],
+                'collection_count' => $collections->count(),
+                'total_amount' => round((float) $collections->sum('amount'), 2),
+                'declared_count' => (int) $counts->get('declared', 0),
+                'declared_amount' => $amountFor('declared'),
+                'verified_count' => (int) $counts->get('verified', 0),
+                'verified_amount' => $amountFor('verified'),
+                'rejected_count' => (int) $counts->get('rejected', 0),
+                'rejected_amount' => $amountFor('rejected'),
+                'status' => $statuses->count() === 1
+                    ? ($statuses->first() === 'declared' ? 'pending' : $statuses->first())
+                    : 'partial',
+                'has_pending_collections' => $counts->get('declared', 0) > 0,
+                'collections' => $collections->values()->all(),
+            ];
+        })->values()->all();
 
         return [
             'route_id' => $route->id,
@@ -1268,10 +1303,12 @@ class RouteManagementService
             'vehicle' => $route->vehicle?->plate_number ?? $route->vehicle?->name,
             'driver' => $route->driver?->name,
             'stops' => $stopsData,
+            'collection_groups' => $collectionGroups,
             'totals' => [
-                'declared_amount' => $declaredAmount,
-                'verified_amount' => $verifiedAmount,
-                'rejected_amount' => $rejectedAmount,
+                'declared_amount' => round($totalDeclaredAmount, 2),
+                'pending_amount' => round($pendingAmount, 2),
+                'verified_amount' => round($verifiedAmount, 2),
+                'rejected_amount' => round($rejectedAmount, 2),
             ],
             'can_close' => $canClose,
         ];
@@ -1280,9 +1317,13 @@ class RouteManagementService
     /**
      * Verify a declared collection and create the corresponding OperationPayment.
      */
-    public function verifyCollection(RouteStopCollection $collection, User $user): RouteStopCollection
+    public function verifyCollection(DeliveryRoute $route, RouteStopCollection $collection, User $user): RouteStopCollection
     {
-        return DB::transaction(function () use ($collection, $user) {
+        return DB::transaction(function () use ($route, $collection, $user) {
+            $route = DeliveryRoute::forStore($collection->store_id)->whereKey($route->id)->lockForUpdate()->firstOrFail();
+            if ($route->status !== 'awaiting_reconciliation') {
+                throw $this->validationError('La ruta no está en estado de conciliación.');
+            }
             $order = CommercialOperation::forStore($collection->store_id)
                 ->where('id', $collection->commercial_operation_id)
                 ->lockForUpdate()
@@ -1294,66 +1335,114 @@ class RouteManagementService
 
             $collection = RouteStopCollection::where('id', $collection->id)
                 ->where('commercial_operation_id', $order->id)
+                ->whereHas('routeStop', fn ($query) => $query->where('route_id', $route->id))
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->first();
 
-            if ($collection->status !== 'declared') {
-                throw $this->validationError('La cobranza ya fue procesada.');
+            if (! $collection) {
+                throw $this->validationError('La cobranza no pertenece a la ruta indicada.');
             }
 
-            if ($collection->operation_payment_id !== null) {
-                throw $this->validationError('La cobranza ya tiene un pago asociado.');
-            }
-
-            $stop = RouteStop::with('route')->findOrFail($collection->route_stop_id);
-            $proposedQuantities = RouteStopItem::where('route_stop_id', $stop->id)
-                ->pluck('quantity_delivered', 'id')
-                ->map(fn ($quantity) => (int) $quantity)
-                ->all();
-            $collectionAmounts = $this->deliveryCollectionAmountService->calculate(
-                $stop,
-                $proposedQuantities,
-                true,
-                $collection->id
-            );
-
-            if ((float) $collection->amount > $collectionAmounts['amount_to_collect_now']) {
-                throw $this->validationError('El monto supera el valor entregado pendiente de cobro.');
-            }
-
-            $payment = OperationPayment::create([
-                'operation_id' => $collection->commercial_operation_id,
-                'store_payment_method_id' => $collection->store_payment_method_id,
-                'amount' => $collection->amount,
-                'reference' => $collection->reference,
-                'payment_details' => [
-                    'route_stop_collection_id' => $collection->id,
-                    'declared_by' => $collection->declared_by,
-                ],
-            ]);
-
-            $collection->update([
-                'status' => 'verified',
-                'verified_by' => $user->id,
-                'verified_at' => now(),
-                'operation_payment_id' => $payment->id,
-            ]);
-
-            return $collection;
+            return $this->verifyLockedCollection($collection, $user);
         });
+    }
+
+    public function verifyCollectionGroup(DeliveryRoute $route, StorePaymentMethod $paymentMethod, User $user): array
+    {
+        return DB::transaction(function () use ($route, $paymentMethod, $user) {
+            $route = DeliveryRoute::forStore($user->store_id)->whereKey($route->id)->lockForUpdate()->firstOrFail();
+            if ($route->status !== 'awaiting_reconciliation') {
+                throw $this->validationError('La ruta no está en estado de conciliación.');
+            }
+            if ($paymentMethod->store_id !== $route->store_id) {
+                throw $this->validationError('El medio de pago no pertenece a la tienda.');
+            }
+
+            $collections = RouteStopCollection::forStore($route->store_id)
+                ->where('store_payment_method_id', $paymentMethod->id)
+                ->where('status', 'declared')
+                ->whereHas('routeStop', fn ($query) => $query->where('route_id', $route->id))
+                ->orderBy('commercial_operation_id')->orderBy('id')->lockForUpdate()->get();
+            if ($collections->isEmpty()) {
+                throw $this->validationError('No hay cobranzas pendientes para este medio de pago.');
+            }
+
+            CommercialOperation::forStore($route->store_id)
+                ->whereIn('id', $collections->pluck('commercial_operation_id')->unique())
+                ->orderBy('id')->lockForUpdate()->get();
+
+            return $collections->map(fn ($item) => $this->verifyLockedCollection($item, $user))->all();
+        });
+    }
+
+    private function verifyLockedCollection(RouteStopCollection $collection, User $user): RouteStopCollection
+    {
+
+        if ($collection->status !== 'declared') {
+            throw $this->validationError('La cobranza ya fue procesada.');
+        }
+
+        if ($collection->operation_payment_id !== null) {
+            throw $this->validationError('La cobranza ya tiene un pago asociado.');
+        }
+
+        $stop = RouteStop::with('route')->findOrFail($collection->route_stop_id);
+        $proposedQuantities = RouteStopItem::where('route_stop_id', $stop->id)
+            ->pluck('quantity_delivered', 'id')
+            ->map(fn ($quantity) => (int) $quantity)
+            ->all();
+        $collectionAmounts = $this->deliveryCollectionAmountService->calculate(
+            $stop,
+            $proposedQuantities,
+            true,
+            $collection->id
+        );
+
+        if ((float) $collection->amount > $collectionAmounts['amount_to_collect_now']) {
+            throw $this->validationError('El monto supera el valor entregado pendiente de cobro.');
+        }
+
+        $payment = OperationPayment::create([
+            'operation_id' => $collection->commercial_operation_id,
+            'store_payment_method_id' => $collection->store_payment_method_id,
+            'amount' => $collection->amount,
+            'reference' => $collection->reference,
+            'payment_details' => [
+                'route_stop_collection_id' => $collection->id,
+                'declared_by' => $collection->declared_by,
+            ],
+        ]);
+
+        $collection->update([
+            'status' => 'verified',
+            'verified_by' => $user->id,
+            'verified_at' => now(),
+            'operation_payment_id' => $payment->id,
+        ]);
+
+        return $collection;
     }
 
     /**
      * Reject a declared collection (no OperationPayment created).
      */
-    public function rejectCollection(RouteStopCollection $collection, string $reason, User $user): RouteStopCollection
+    public function rejectCollection(DeliveryRoute $route, RouteStopCollection $collection, string $reason, User $user): RouteStopCollection
     {
-        return DB::transaction(function () use ($collection, $reason, $user) {
+        return DB::transaction(function () use ($route, $collection, $reason, $user) {
+            $route = DeliveryRoute::forStore($collection->store_id)->whereKey($route->id)->lockForUpdate()->firstOrFail();
+            if ($route->status !== 'awaiting_reconciliation') {
+                throw $this->validationError('La ruta no está en estado de conciliación.');
+            }
+
+            $collection = RouteStopCollection::where('id', $collection->id)
+                ->whereHas('routeStop', fn ($query) => $query->where('route_id', $route->id))
+                ->lockForUpdate()->first();
+            if (! $collection) {
+                throw $this->validationError('La cobranza no pertenece a la ruta indicada.');
+            }
             if ($collection->status !== 'declared') {
                 throw $this->validationError('La cobranza ya fue procesada.');
             }
-
-            $collection = RouteStopCollection::where('id', $collection->id)->lockForUpdate()->first();
 
             $collection->update([
                 'status' => 'rejected',

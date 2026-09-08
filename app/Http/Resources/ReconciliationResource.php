@@ -18,8 +18,10 @@ class ReconciliationResource extends JsonResource
             'vehicle' => $this['vehicle'],
             'driver' => $this['driver'],
             'stops' => $this['stops'],
+            'collection_groups' => $this['collection_groups'],
             'totals' => [
                 'declared_amount' => $this['totals']['declared_amount'],
+                'pending_amount' => $this['totals']['pending_amount'],
                 'verified_amount' => $this['totals']['verified_amount'],
                 'rejected_amount' => $this['totals']['rejected_amount'],
             ],

@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api\V1\Store;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\AddStopRequest;
 use App\Http\Requests\Api\V1\Store\AdjustItemsRequest;
-use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
 use App\Http\Requests\Api\V1\Store\BulkLoadRequest;
+use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
 use App\Http\Requests\Api\V1\Store\ConfirmLoadRequest;
 use App\Http\Requests\Api\V1\Store\DispatchRouteRequest;
 use App\Http\Requests\Api\V1\Store\FinalizeReconciliationRequest;
@@ -24,13 +24,13 @@ use App\Http\Resources\DeliveryRouteResource;
 use App\Http\Resources\EligibleOrderResource;
 use App\Http\Resources\LoadSheetResource;
 use App\Http\Resources\ReconciliationResource;
-use App\Http\Resources\RouteStopItemResource;
 use App\Http\Resources\RouteStopResource;
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRoute;
 use App\Models\RouteStop;
 use App\Models\RouteStopCollection;
 use App\Models\RouteStopItem;
+use App\Models\StorePaymentMethod;
 use App\Services\RouteManagementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -990,13 +990,17 @@ class RouteController extends Controller
      *
      *   @OA\RequestBody(
      *     required=true,
+     *
      *     @OA\JsonContent(
      *       required={"items"},
+     *
      *       @OA\Property(
      *         property="items",
      *         type="array",
+     *
      *         @OA\Items(
      *           required={"product_id", "quantity_planned"},
+     *
      *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
      *           @OA\Property(property="quantity_planned", type="integer", example=5)
      *         )
@@ -1124,13 +1128,17 @@ class RouteController extends Controller
      *
      *   @OA\RequestBody(
      *     required=true,
+     *
      *     @OA\JsonContent(
      *       required={"items"},
+     *
      *       @OA\Property(
      *         property="items",
      *         type="array",
+     *
      *         @OA\Items(
      *           required={"route_stop_item_id", "quantity_loaded"},
+     *
      *           @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
      *           @OA\Property(property="quantity_loaded", type="integer", example=5),
      *           @OA\Property(property="reason", type="string", example="Rotura de mercadería", nullable=true)
@@ -1196,13 +1204,17 @@ class RouteController extends Controller
      *
      *   @OA\RequestBody(
      *     required=true,
+     *
      *     @OA\JsonContent(
      *       required={"products"},
+     *
      *       @OA\Property(
      *         property="products",
      *         type="array",
+     *
      *         @OA\Items(
      *           required={"product_id", "quantity_loaded"},
+     *
      *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
      *           @OA\Property(property="quantity_loaded", type="integer", example=10),
      *           @OA\Property(property="reason", type="string", nullable=true, example="Falta de stock en depósito"),
@@ -1269,14 +1281,18 @@ class RouteController extends Controller
      *
      *   @OA\RequestBody(
      *     required=true,
+     *
      *     @OA\JsonContent(
      *       required={"product_id", "items"},
+     *
      *       @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
      *       @OA\Property(
      *         property="items",
      *         type="array",
+     *
      *         @OA\Items(
      *           required={"route_stop_item_id", "quantity_loaded"},
+     *
      *           @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440001"),
      *           @OA\Property(property="quantity_loaded", type="integer", example=5),
      *           @OA\Property(property="reason", type="string", nullable=true, example="Redistribución manual"),
@@ -1561,7 +1577,7 @@ class RouteController extends Controller
             ], 404);
         }
 
-        $collection = $this->routeService->verifyCollection($collection, $request->user());
+        $collection = $this->routeService->verifyCollection($route, $collection, $request->user());
 
         return response()->json([
             'status' => 'success',
@@ -1570,6 +1586,37 @@ class RouteController extends Controller
                 'id' => $collection->id,
                 'status' => $collection->status,
                 'operation_payment_id' => $collection->operation_payment_id,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    public function verifyCollectionGroup(
+        VerifyCollectionRequest $request,
+        string $routeId,
+        string $storePaymentMethodId
+    ): JsonResponse {
+        $storeId = $request->user()->store_id;
+        $route = DeliveryRoute::forStore($storeId)->find($routeId);
+        $paymentMethod = StorePaymentMethod::forStore($storeId)->find($storePaymentMethodId);
+
+        if (! $route || ! $paymentMethod) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta o medio de pago no encontrado.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta o el medio de pago no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $collections = $this->routeService->verifyCollectionGroup($route, $paymentMethod, $request->user());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cobranzas verificadas exitosamente.',
+            'data' => [
+                'verified_count' => count($collections),
+                'collection_ids' => collect($collections)->pluck('id')->values(),
             ],
             'errors' => null,
         ]);
@@ -1645,7 +1692,7 @@ class RouteController extends Controller
             ], 404);
         }
 
-        $collection = $this->routeService->rejectCollection($collection, $request->reason, $request->user());
+        $collection = $this->routeService->rejectCollection($route, $collection, $request->reason, $request->user());
 
         return response()->json([
             'status' => 'success',

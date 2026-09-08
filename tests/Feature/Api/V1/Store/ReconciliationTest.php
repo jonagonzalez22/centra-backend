@@ -4,7 +4,6 @@ use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
-use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
 use App\Models\Locality;
 use App\Models\OperationItem;
@@ -69,6 +68,7 @@ function recDriver(Store $store): User
 {
     $driver = User::factory()->create(['store_id' => $store->id]);
     $driver->assignRole('STORE_DRIVER');
+
     return $driver;
 }
 
@@ -636,4 +636,71 @@ test('permission check for logistics routes reconcile', function () {
             'quantity_to_resolve' => 1,
         ])
         ->assertStatus(403);
+});
+
+test('reconciliation groups collections by store payment method with historical totals', function () {
+    [$route, $stop] = recRouteForReconciliation($this->store);
+    $method = recStorePaymentMethod($this->store);
+    recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 180, 'status' => 'declared']);
+    recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 20, 'status' => 'rejected', 'rejection_reason' => 'Monto incorrecto']);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}/reconciliation")
+        ->assertOk();
+
+    expect($response->json('data.collection_groups.0.collection_count'))->toBe(2)
+        ->and($response->json('data.collection_groups.0.total_amount'))->toBe(200)
+        ->and($response->json('data.collection_groups.0.declared_amount'))->toBe(180)
+        ->and($response->json('data.collection_groups.0.rejected_amount'))->toBe(20)
+        ->and($response->json('data.collection_groups.0.status'))->toBe('partial')
+        ->and($response->json('data.totals.declared_amount'))->toBe(200)
+        ->and($response->json('data.totals.pending_amount'))->toBe(180);
+});
+
+test('group verification verifies only declared collections and preserves rejected ones', function () {
+    [$route, $stop] = recRouteForReconciliation($this->store);
+    $method = recStorePaymentMethod($this->store);
+    $declaredA = recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 40]);
+    $declaredB = recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 40]);
+    $rejected = recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 20, 'status' => 'rejected']);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collection-groups/{$method->id}/verify")
+        ->assertOk()
+        ->assertJsonPath('data.verified_count', 2);
+
+    expect($declaredA->fresh()->status)->toBe('verified')
+        ->and($declaredB->fresh()->status)->toBe('verified')
+        ->and($rejected->fresh()->status)->toBe('rejected')
+        ->and(OperationPayment::whereIn('id', [$declaredA->fresh()->operation_payment_id, $declaredB->fresh()->operation_payment_id])->count())->toBe(2);
+});
+
+test('individual endpoints reject a collection belonging to another route in the same store', function () {
+    [$route] = recRouteForReconciliation($this->store);
+    [, $otherStop] = recRouteForReconciliation($this->store);
+    $collection = recCreateCollection($otherStop, $this->store);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collections/{$collection->id}/verify")
+        ->assertStatus(422);
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collections/{$collection->id}/reject", ['reason' => 'Incorrecto'])
+        ->assertStatus(422);
+    expect($collection->fresh()->status)->toBe('declared');
+});
+
+test('group verification rolls back every collection when one amount is invalid', function () {
+    [$route, $stop] = recRouteForReconciliation($this->store);
+    $method = recStorePaymentMethod($this->store);
+    $valid = recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 40]);
+    $invalid = recCreateCollection($stop, $this->store, ['store_payment_method_id' => $method->id, 'amount' => 5000]);
+    $paymentsBefore = OperationPayment::count();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collection-groups/{$method->id}/verify")
+        ->assertStatus(422);
+
+    expect($valid->fresh()->status)->toBe('declared')
+        ->and($invalid->fresh()->status)->toBe('declared')
+        ->and(OperationPayment::count())->toBe($paymentsBefore);
 });
