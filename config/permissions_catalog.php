@@ -4,6 +4,7 @@ return [
     'Pedidos' => [
         ['name' => 'orders.view', 'label' => 'Ver'],
         ['name' => 'orders.edit', 'label' => 'Editar'],
+        ['name' => 'orders.collect', 'label' => 'Registrar pagos'],
     ],
     'Punto de Venta' => [
         ['name' => 'pos.view', 'label' => 'Ver'],

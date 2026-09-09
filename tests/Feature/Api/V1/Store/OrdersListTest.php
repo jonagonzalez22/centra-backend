@@ -320,6 +320,39 @@ describe('GET /api/v1/store/orders — Orders List', function () {
         expect((float) $data['pending_amount'])->toBe(400.00);
     });
 
+    test('filters orders by pending balance and combines with delivered status', function () {
+        $pending = createOrderForStore($this->store, ['total' => 1000, 'status' => 'delivered']);
+        $paid = createOrderForStore($this->store, ['total' => 500, 'status' => 'delivered']);
+        $open = createOrderForStore($this->store, ['total' => 700, 'status' => 'open']);
+        $method = StorePaymentMethod::factory()->forStore($this->store)->create();
+        OperationPayment::factory()->create([
+            'operation_id' => $paid->id,
+            'store_payment_method_id' => $method->id,
+            'amount' => 500,
+        ]);
+
+        $response = listOrders(['status' => 'delivered', 'has_pending_balance' => true]);
+
+        $response->assertOk();
+        expect(collect($response->json('data.items'))->pluck('id')->all())
+            ->toBe([$pending->id])
+            ->not->toContain($paid->id, $open->id);
+    });
+
+    test('pending amount never becomes negative', function () {
+        $order = createOrderForStore($this->store, ['total' => 500]);
+        $method = StorePaymentMethod::factory()->forStore($this->store)->create();
+        OperationPayment::factory()->create([
+            'operation_id' => $order->id,
+            'store_payment_method_id' => $method->id,
+            'amount' => 600,
+        ]);
+
+        $response = listOrders();
+        $item = collect($response->json('data.items'))->firstWhere('id', $order->id);
+        expect((float) $item['pending_amount'])->toBe(0.0);
+    });
+
     test('includes delivery_address from customer main address', function () {
         $order = createOrderForStore($this->store, [
             'customer_id' => $this->customer->id,

@@ -7750,6 +7750,11 @@
                                                     "type": "integer",
                                                     "example": 5
                                                 },
+                                                "quantity_released_for_extra_sale": {
+                                                    "type": "integer",
+                                                    "minimum": 0,
+                                                    "example": 2
+                                                },
                                                 "rejection_reason_id": {
                                                     "type": "string",
                                                     "format": "uuid",
@@ -12610,6 +12615,14 @@
                         }
                     },
                     {
+                        "name": "has_pending_balance",
+                        "in": "query",
+                        "description": "Filtrar pedidos con o sin saldo pendiente",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
                         "name": "per_page",
                         "in": "query",
                         "description": "Items por página",
@@ -12749,6 +12762,82 @@
                     },
                     "404": {
                         "description": "Pedido no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/orders/{order}/payments": {
+            "post": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Registrar un pago posterior de un pedido",
+                "description": "Register a payment against an existing order using the authenticated user's open cash session.",
+                "operationId": "b6bd28bbb81be9fc32cec77b572919d9",
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "store_payment_method_id",
+                                    "amount"
+                                ],
+                                "properties": {
+                                    "store_payment_method_id": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                    },
+                                    "amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 10000
+                                    },
+                                    "reference": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Pago registrado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommercialOperationResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permiso orders.collect"
+                    },
+                    "404": {
+                        "description": "Pedido no encontrado"
+                    },
+                    "422": {
+                        "description": "Saldo, caja o medio de pago inválido"
                     }
                 },
                 "security": [
@@ -17700,6 +17789,12 @@
                             "type": "string",
                             "format": "uuid"
                         }
+                    },
+                    "has_pending_delivery": {
+                        "type": "boolean"
+                    },
+                    "pending_delivery_quantity": {
+                        "type": "integer"
                     }
                 },
                 "type": "object"
@@ -17861,6 +17956,13 @@
                             "$ref": "#/components/schemas/CommercialOperationEventResource"
                         }
                     },
+                    "history": {
+                        "description": "Historial funcional normalizado del pedido",
+                        "type": "array",
+                        "items": {
+                            "type": "object"
+                        }
+                    },
                     "route_ids": {
                         "description": "IDs de rutas activas (no canceladas) donde está asignado este pedido",
                         "type": "array",
@@ -17868,6 +17970,10 @@
                             "type": "string",
                             "format": "uuid"
                         }
+                    },
+                    "delivery_summary": {
+                        "description": "Resumen operativo de mercadería pendiente",
+                        "type": "object"
                     }
                 },
                 "type": "object"
@@ -17924,6 +18030,40 @@
                         "nullable": true
                     },
                     "payment_details": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "origin": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "registered_by": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "cash_session": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "status": {
+                                "type": "string"
+                            }
+                        },
                         "type": "object",
                         "nullable": true
                     },
@@ -18704,6 +18844,11 @@
                     "is_active": {
                         "type": "boolean",
                         "example": true
+                    },
+                    "suggest_extra_sale": {
+                        "description": "Solo sugiere el valor inicial de disponibilidad en la UX",
+                        "type": "boolean",
+                        "example": false
                     }
                 },
                 "type": "object"
@@ -19838,6 +19983,11 @@
                         "example": 10
                     },
                     "quantity_delivered": {
+                        "type": "integer",
+                        "example": 0
+                    },
+                    "quantity_released_for_extra_sale": {
+                        "description": "Cantidad del remanente liberada físicamente para Venta Extra",
                         "type": "integer",
                         "example": 0
                     }

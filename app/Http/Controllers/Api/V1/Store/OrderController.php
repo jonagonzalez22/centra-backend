@@ -29,6 +29,7 @@ class OrderController extends Controller
      *   @OA\Parameter(name="operation_number", in="query", @OA\Schema(type="string"), description="Búsqueda por número de pedido (parcial)"),
      *   @OA\Parameter(name="customer_name", in="query", @OA\Schema(type="string"), description="Búsqueda por nombre de cliente"),
      *   @OA\Parameter(name="locality", in="query", @OA\Schema(type="string"), description="Búsqueda por localidad del domicilio de entrega"),
+     *   @OA\Parameter(name="has_pending_balance", in="query", @OA\Schema(type="boolean"), description="Filtrar pedidos con o sin saldo pendiente"),
      *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=20), description="Items por página"),
      *   @OA\Parameter(name="page", in="query", @OA\Schema(type="integer", default=1), description="Número de página"),
      *
@@ -103,6 +104,13 @@ class OrderController extends Controller
             });
         }
 
+        if ($request->has('has_pending_balance')) {
+            $operator = $request->boolean('has_pending_balance') ? '>' : '<=';
+            $query->whereRaw(
+                "commercial_operations.total {$operator} (SELECT COALESCE(SUM(operation_payments.amount), 0) FROM operation_payments WHERE operation_payments.operation_id = commercial_operations.id)"
+            );
+        }
+
         $query->orderBy('requested_delivery_date', 'asc')
             ->orderBy('operation_number', 'asc');
 
@@ -163,6 +171,8 @@ class OrderController extends Controller
                 'customer.addresses.locality',
                 'items.product',
                 'payments.storePaymentMethod.paymentMethod',
+                'payments.cashSession',
+                'payments.registeredBy',
                 'user',
                 'routeStops.items.product',
                 'routeStops.route',

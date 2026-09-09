@@ -50,8 +50,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="items", type="array", @OA\Items(ref="#/components/schemas/OperationItemResource")),
  *   @OA\Property(property="payments", type="array", @OA\Items(ref="#/components/schemas/OperationPaymentResource")),
  *   @OA\Property(property="events", type="array", @OA\Items(ref="#/components/schemas/CommercialOperationEventResource")),
- *   @OA\Property(property="history", type="array", description="Historial funcional normalizado del pedido"),
- *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido")
+ *   @OA\Property(property="history", type="array", description="Historial funcional normalizado del pedido", @OA\Items(type="object")),
+ *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido"),
  *   @OA\Property(property="delivery_summary", type="object", description="Resumen operativo de mercadería pendiente")
  * )
  */
@@ -72,7 +72,7 @@ class CommercialOperationResource extends JsonResource
             'discount' => (float) $this->discount,
             'total' => (float) $this->total,
             'paid_amount' => (float) ($this->payments_sum_amount ?? 0),
-            'pending_amount' => (float) ($this->total - ($this->payments_sum_amount ?? 0)),
+            'pending_amount' => max(0, (float) $this->total - (float) ($this->payments_sum_amount ?? 0)),
             'completed_at' => $this->completed_at?->format('Y-m-d H:i:s'),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),

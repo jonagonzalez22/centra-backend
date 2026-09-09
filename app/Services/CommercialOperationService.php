@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
 use App\Models\OperationItem;
-use App\Models\OperationPayment;
 use App\Models\Product;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
@@ -14,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class CommercialOperationService
 {
+    public function __construct(private readonly StoreOperationPaymentService $storePaymentService) {}
+
     /**
      * Reduce quantities that are no longer commercially owed while preserving
      * item price history and existing payments.
@@ -93,6 +94,7 @@ class CommercialOperationService
             $isSale = $type === 'sale';
             $items = $data['items'];
             $payments = $data['payments'] ?? [];
+            $user = User::where('id', $userId)->where('store_id', $storeId)->firstOrFail();
 
             $customerId = $data['customer_id'] ?? null;
             $requestedDeliveryDate = $data['requested_delivery_date'] ?? null;
@@ -185,11 +187,8 @@ class CommercialOperationService
             }
 
             foreach ($payments as $payment) {
-                OperationPayment::create([
-                    'operation_id' => $operation->id,
-                    'store_payment_method_id' => $payment['store_payment_method_id'],
-                    'amount' => $payment['amount'],
-                    'reference' => $payment['reference'] ?? null,
+                $this->storePaymentService->createForStore($operation, $payment, $user, [
+                    'origin' => $isSale ? 'pos_sale' : 'order_deposit',
                 ]);
             }
 
@@ -394,6 +393,8 @@ class CommercialOperationService
     {
         foreach ($payments as $index => $payment) {
             $storePaymentMethod = StorePaymentMethod::forStore($storeId)
+                ->where('is_enabled', true)
+                ->whereHas('paymentMethod', fn ($query) => $query->where('is_active', true))
                 ->find($payment['store_payment_method_id']);
 
             if (! $storePaymentMethod) {

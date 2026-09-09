@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\CommercialOperationController;
 use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
 use App\Http\Controllers\Api\V1\Store\OrderController;
+use App\Http\Controllers\Api\V1\Store\OrderPaymentController;
 use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\DriverController;
@@ -174,6 +175,9 @@ Route::prefix('v1')->group(function () {
         Route::get('orders/{id}', [OrderController::class, 'show'])
           ->middleware('permission:orders.view')
           ->name('store.orders.show');
+        Route::post('orders/{order}/payments', [OrderPaymentController::class, 'store'])
+          ->middleware('permission:orders.collect')
+          ->name('store.orders.payments.store');
 
         Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
         Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');

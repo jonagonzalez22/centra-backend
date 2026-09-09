@@ -103,6 +103,7 @@ class CommercialOperationController extends Controller
 
         $query = CommercialOperation::forStore($storeId)
             ->with(['customer', 'user', 'items', 'payments.storePaymentMethod'])
+            ->withSum('payments', 'amount')
             ->when($request->filled('type'), function ($query) use ($request) {
                 $query->byType($request->type);
             })
@@ -199,7 +200,10 @@ class CommercialOperationController extends Controller
                 $request->user()->id
             );
 
-            $operation->load(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod']);
+            $operation->load([
+                'customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod',
+                'payments.cashSession', 'payments.registeredBy',
+            ])->loadSum('payments', 'amount');
 
             return response()->json([
                 'status' => 'success',
@@ -245,6 +249,7 @@ class CommercialOperationController extends Controller
 
         $operation = CommercialOperation::forStore($storeId)
             ->with(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod'])
+            ->withSum('payments', 'amount')
             ->find($id);
 
         if (! $operation) {

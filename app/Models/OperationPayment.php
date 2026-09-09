@@ -18,6 +18,8 @@ class OperationPayment extends Model
     protected $fillable = [
         'operation_id',
         'store_payment_method_id',
+        'cash_session_id',
+        'registered_by',
         'amount',
         'reference',
         'payment_details',
@@ -36,5 +38,15 @@ class OperationPayment extends Model
     public function storePaymentMethod(): BelongsTo
     {
         return $this->belongsTo(StorePaymentMethod::class);
+    }
+
+    public function cashSession(): BelongsTo
+    {
+        return $this->belongsTo(CashSession::class);
+    }
+
+    public function registeredBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'registered_by');
     }
 }

@@ -82,6 +82,7 @@ class PermissionSeeder extends Seeder
       // Module: Orders
       'orders.view',
       'orders.edit',
+      'orders.collect',
 
       // Module: Cash
       'cash.view',

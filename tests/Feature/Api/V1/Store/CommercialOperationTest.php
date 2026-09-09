@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CashSession;
 use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
@@ -39,6 +40,14 @@ beforeEach(function () {
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
     $this->token = $this->user->createToken('test-token')->plainTextToken;
+    $this->cashSession = CashSession::create([
+        'store_id' => $this->store->id,
+        'user_id' => $this->user->id,
+        'status' => 'open',
+        'opening_amount' => 1000,
+        'expected_amount' => 1000,
+        'opened_at' => now(),
+    ]);
 
     $this->product = Product::factory()->create([
         'store_id' => $this->store->id,
@@ -442,6 +451,80 @@ describe('POST /api/v1/store/operations - Business Rules', function () {
 });
 
 describe('POST /api/v1/store/operations - Payments', function () {
+    test('cash payment is linked to open session and increments expected amount', function () {
+        $method = PaymentMethod::factory()->create(['code' => 'cash', 'is_active' => true]);
+        $spm = StorePaymentMethod::factory()->create([
+            'store_id' => $this->store->id, 'payment_method_id' => $method->id,
+        ]);
+        createOperation([
+            'type' => 'sale',
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100]],
+            'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 100]],
+        ])->assertCreated();
+
+        $payment = OperationPayment::sole();
+        expect($payment->cash_session_id)->toBe($this->cashSession->id)
+            ->and($payment->registered_by)->toBe($this->user->id)
+            ->and($payment->payment_details['origin'])->toBe('pos_sale')
+            ->and((float) $this->cashSession->fresh()->expected_amount)->toBe(1100.0);
+    });
+
+    test('non cash order deposit is linked without incrementing expected amount', function () {
+        $method = PaymentMethod::factory()->create(['code' => 'transfer', 'is_active' => true]);
+        $spm = StorePaymentMethod::factory()->create([
+            'store_id' => $this->store->id, 'payment_method_id' => $method->id,
+        ]);
+        createOperation([
+            'type' => 'order', 'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [['product_id' => $this->product->id, 'quantity' => 2, 'price' => 100]],
+            'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 50]],
+        ])->assertCreated();
+
+        expect(OperationPayment::sole()->cash_session_id)->toBe($this->cashSession->id)
+            ->and(OperationPayment::sole()->payment_details['origin'])->toBe('order_deposit')
+            ->and((float) $this->cashSession->fresh()->expected_amount)->toBe(1000.0);
+    });
+
+    test('payment requires open cash session but order without payment does not', function () {
+        $this->cashSession->update(['status' => 'closed', 'closed_at' => now()]);
+        $spm = makePaymentMethodForStore($this->store);
+        createOperation([
+            'type' => 'sale', 'customer_id' => $this->customer->id,
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100]],
+            'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 100]],
+        ])->assertUnprocessable()->assertJsonValidationErrors('cash_session');
+
+        createOperation([
+            'type' => 'order', 'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100]],
+            'payments' => [],
+        ])->assertCreated();
+    });
+
+    test('store payment method rules apply to initial payments', function () {
+        $method = PaymentMethod::factory()->create(['code' => 'transfer', 'is_active' => true]);
+        $spm = StorePaymentMethod::factory()->create([
+            'store_id' => $this->store->id,
+            'payment_method_id' => $method->id,
+            'is_enabled' => true,
+            'requires_reference' => true,
+        ]);
+        createOperation([
+            'type' => 'sale', 'customer_id' => $this->customer->id,
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100]],
+            'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 100]],
+        ])->assertUnprocessable()->assertJsonValidationErrors('reference');
+
+        $spm->update(['requires_reference' => false, 'is_enabled' => false]);
+        createOperation([
+            'type' => 'sale', 'customer_id' => $this->customer->id,
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100]],
+            'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 100]],
+        ])->assertUnprocessable();
+    });
+
     test('payment exceeds total returns 422', function () {
         $spm = makePaymentMethodForStore($this->store);
 

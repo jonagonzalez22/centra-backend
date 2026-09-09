@@ -24,6 +24,7 @@ class ListOrdersRequest extends FormRequest
             'operation_number' => ['nullable', 'string', 'max:20'],
             'customer_name' => ['nullable', 'string', 'max:255'],
             'locality' => ['nullable', 'string', 'max:255'],
+            'has_pending_balance' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];

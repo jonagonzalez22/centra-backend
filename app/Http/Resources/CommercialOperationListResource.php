@@ -33,8 +33,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *     @OA\Property(property="full_address", type="string", nullable=true)
  *   ),
  *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true),
- *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido")
- *   @OA\Property(property="has_pending_delivery", type="boolean")
+ *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido"),
+ *   @OA\Property(property="has_pending_delivery", type="boolean"),
  *   @OA\Property(property="pending_delivery_quantity", type="integer")
  * )
  */
@@ -54,7 +54,7 @@ class CommercialOperationListResource extends JsonResource
             'delivery_time_to' => null,
             'total' => (float) $this->total,
             'paid_amount' => (float) ($this->payments_sum_amount ?? 0),
-            'pending_amount' => (float) ($this->total - ($this->payments_sum_amount ?? 0)),
+            'pending_amount' => max(0, (float) $this->total - (float) ($this->payments_sum_amount ?? 0)),
             'items_count' => $this->whenLoaded('items', fn () => $this->items->count(), 0),
             'customer' => $this->whenLoaded('customer', fn () => [
                 'id' => $this->customer->id,

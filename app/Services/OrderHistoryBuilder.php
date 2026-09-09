@@ -87,6 +87,7 @@ class OrderHistoryBuilder
             'reschedule' => 'Fecha de entrega reprogramada',
             'order_cancelled' => 'Pedido cancelado',
             'remaining_delivery_cancelled' => 'Remanente cancelado',
+            'payment_registered' => 'Pago registrado',
         ];
 
         return [
@@ -108,6 +109,7 @@ class OrderHistoryBuilder
                 'reason_note' => $event->reason_note,
                 'observation' => $event->observation,
                 'items' => $event->metadata['items'] ?? null,
+                'payment' => $event->event_type === 'payment_registered' ? $event->metadata : null,
             ],
             'sort_order' => 10,
         ];
