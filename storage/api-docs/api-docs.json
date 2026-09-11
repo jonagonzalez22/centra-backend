@@ -16500,6 +16500,90 @@
                 ]
             }
         },
+        "/store/routes/{route}/reconciliation/batch": {
+            "post": {
+                "tags": [
+                    "Store - Rutas"
+                ],
+                "summary": "Resolver discrepancias de stock en lote",
+                "description": "Resolve multiple RouteStopItems atomically during route reconciliation.",
+                "operationId": "d1779fcfb01dc9bd1b1a8d504e768bd8",
+                "parameters": [
+                    {
+                        "name": "route",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "route_stop_item_id",
+                                                "resolution_type",
+                                                "quantity_to_resolve"
+                                            ],
+                                            "properties": {
+                                                "route_stop_item_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "resolution_type": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "returned",
+                                                        "rejected_by_customer",
+                                                        "missing",
+                                                        "damaged",
+                                                        "pending_redelivery"
+                                                    ]
+                                                },
+                                                "quantity_to_resolve": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "notes": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Discrepancias resueltas exitosamente"
+                    },
+                    "422": {
+                        "description": "Batch inválido; no se aplicó ninguna resolución"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/routes/{route}/finalize-reconciliation": {
             "post": {
                 "tags": [

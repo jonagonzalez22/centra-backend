@@ -410,6 +410,211 @@ test('resolve discrepancy for positive difference', function () {
     expect($discrepancy->resolution_type)->toBe('returned');
 });
 
+test('batch resolves eligible route stop items atomically', function (string $resolutionType) {
+    [$route, $stop, $product, $firstItem, $firstOrder, $customer] = recRouteForReconciliation(
+        $this->store,
+        ['quantity_delivered' => 6]
+    );
+    $secondOrder = recEligibleOrder($this->store, $customer, [
+        'requested_delivery_date' => $route->operational_date->format('Y-m-d'),
+    ]);
+    OperationItem::factory()->create([
+        'operation_id' => $secondOrder->id,
+        'product_id' => $product->id,
+        'quantity' => 10,
+        'price' => 100.00,
+    ]);
+    $secondStop = RouteStop::create([
+        'route_id' => $route->id,
+        'order_id' => $secondOrder->id,
+        'sequence' => 2,
+        'status' => 'completed',
+    ]);
+    $secondItem = RouteStopItem::create([
+        'route_stop_id' => $secondStop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => 10,
+        'quantity_loaded' => 10,
+        'quantity_delivered' => 7,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [
+                [
+                    'route_stop_item_id' => $firstItem->id,
+                    'resolution_type' => $resolutionType,
+                    'quantity_to_resolve' => 4,
+                ],
+                [
+                    'route_stop_item_id' => $secondItem->id,
+                    'resolution_type' => $resolutionType,
+                    'quantity_to_resolve' => 3,
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.resolved_count', 2);
+
+    expect(DeliveryDiscrepancy::where('route_stop_item_id', $firstItem->id)->value('resolution_type'))->toBe($resolutionType)
+        ->and(DeliveryDiscrepancy::where('route_stop_item_id', $secondItem->id)->value('resolution_type'))->toBe($resolutionType);
+})->with(['returned', 'rejected_by_customer', 'missing', 'damaged', 'pending_redelivery']);
+
+test('batch rolls back every discrepancy when one item is invalid', function () {
+    [$route, $stop, $product, $firstItem, $firstOrder, $customer] = recRouteForReconciliation(
+        $this->store,
+        ['quantity_delivered' => 6]
+    );
+    $secondOrder = recEligibleOrder($this->store, $customer, [
+        'requested_delivery_date' => $route->operational_date->format('Y-m-d'),
+    ]);
+    $secondStop = RouteStop::create([
+        'route_id' => $route->id,
+        'order_id' => $secondOrder->id,
+        'sequence' => 2,
+        'status' => 'completed',
+    ]);
+    $secondItem = RouteStopItem::create([
+        'route_stop_id' => $secondStop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => 10,
+        'quantity_loaded' => 10,
+        'quantity_delivered' => 7,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [
+                [
+                    'route_stop_item_id' => $firstItem->id,
+                    'resolution_type' => 'returned',
+                    'quantity_to_resolve' => 4,
+                ],
+                [
+                    'route_stop_item_id' => $secondItem->id,
+                    'resolution_type' => 'returned',
+                    'quantity_to_resolve' => 2,
+                ],
+            ],
+        ])
+        ->assertStatus(422);
+
+    expect(DeliveryDiscrepancy::whereIn('route_stop_item_id', [$firstItem->id, $secondItem->id])->count())->toBe(0);
+});
+
+test('batch rejects an item from another route without resolving the valid items', function () {
+    [$route, $stop, $product, $item] = recRouteForReconciliation($this->store, ['quantity_delivered' => 6]);
+    [$otherRoute, $otherStop, $otherProduct, $otherItem] = recRouteForReconciliation(
+        $this->store,
+        ['quantity_delivered' => 6]
+    );
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [
+                [
+                    'route_stop_item_id' => $item->id,
+                    'resolution_type' => 'returned',
+                    'quantity_to_resolve' => 4,
+                ],
+                [
+                    'route_stop_item_id' => $otherItem->id,
+                    'resolution_type' => 'returned',
+                    'quantity_to_resolve' => 4,
+                ],
+            ],
+        ])
+        ->assertStatus(422);
+
+    expect(DeliveryDiscrepancy::whereIn('route_stop_item_id', [$item->id, $otherItem->id])->count())->toBe(0);
+});
+
+test('batch resolutions retain their individual inventory effects at finalization', function () {
+    [$route, $stop, $product, $firstItem, $firstOrder, $customer] = recRouteForReconciliation(
+        $this->store,
+        ['quantity_delivered' => 6]
+    );
+    $secondOrder = recEligibleOrder($this->store, $customer, [
+        'requested_delivery_date' => $route->operational_date->format('Y-m-d'),
+    ]);
+    $secondStop = RouteStop::create([
+        'route_id' => $route->id,
+        'order_id' => $secondOrder->id,
+        'sequence' => 2,
+        'status' => 'completed',
+    ]);
+    $secondItem = RouteStopItem::create([
+        'route_stop_id' => $secondStop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => 10,
+        'quantity_loaded' => 10,
+        'quantity_delivered' => 7,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [
+                [
+                    'route_stop_item_id' => $firstItem->id,
+                    'resolution_type' => 'missing',
+                    'quantity_to_resolve' => 4,
+                ],
+                [
+                    'route_stop_item_id' => $secondItem->id,
+                    'resolution_type' => 'missing',
+                    'quantity_to_resolve' => 3,
+                ],
+            ],
+        ])
+        ->assertOk();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertOk();
+
+    expect($product->fresh()->stock)->toBe(80)
+        ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(2)
+        ->and(DeliveryDiscrepancy::whereIn('route_stop_item_id', [$firstItem->id, $secondItem->id])
+            ->whereNotNull('processed_at')->count())->toBe(2);
+});
+
+test('batch rejects a manual extra sale resolution', function () {
+    [$route, $stop, $product, $item] = recRouteForReconciliation($this->store, ['quantity_delivered' => 6]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'resolution_type' => 'extra_sale',
+                'quantity_to_resolve' => 4,
+            ]],
+        ])
+        ->assertStatus(422);
+
+    expect(DeliveryDiscrepancy::where('route_stop_item_id', $item->id)->exists())->toBeFalse();
+});
+
+test('batch rejects a route that was already finalized', function () {
+    [$route, $stop, $product, $item] = recRouteForReconciliation($this->store);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertOk();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'resolution_type' => 'returned',
+                'quantity_to_resolve' => 1,
+            ]],
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'La ruta ya fue conciliada.');
+
+    expect(DeliveryDiscrepancy::where('route_stop_item_id', $item->id)->exists())->toBeFalse();
+});
+
 // 13. resolve discrepancy fails for zero difference
 test('resolve discrepancy fails for zero difference', function () {
     [$route, $stop, $product, $item] = recRouteForReconciliation($this->store);
@@ -659,6 +864,16 @@ test('multi-tenant isolation on all endpoints', function () {
     // Finalize
     $response = $this->withHeader('Authorization', "Bearer $otherToken")
         ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation");
+    $response->assertStatus(404); // route scoped to store
+
+    $response = $this->withHeader('Authorization', "Bearer $otherToken")
+        ->postJson("/api/v1/store/routes/{$route->id}/reconciliation/batch", [
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'resolution_type' => 'returned',
+                'quantity_to_resolve' => 1,
+            ]],
+        ]);
     $response->assertStatus(404); // route scoped to store
 });
 

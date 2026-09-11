@@ -390,6 +390,10 @@ Route::prefix('v1')->group(function () {
           ->middleware('permission:logistics.routes.reconcile')
           ->name('store.routes.discrepancies.resolve');
 
+        Route::post('routes/{route}/reconciliation/batch', [RouteController::class, 'resolveDiscrepanciesBatch'])
+          ->middleware('permission:logistics.routes.reconcile')
+          ->name('store.routes.reconciliation.batch');
+
         Route::post('routes/{route}/finalize-reconciliation', [RouteController::class, 'finalizeReconciliation'])
           ->middleware('permission:logistics.routes.reconcile')
           ->name('store.routes.finalize-reconciliation');

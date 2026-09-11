@@ -14,6 +14,7 @@ use App\Http\Requests\Api\V1\Store\PlanRouteRequest;
 use App\Http\Requests\Api\V1\Store\RejectCollectionRequest;
 use App\Http\Requests\Api\V1\Store\RemoveStopRequest;
 use App\Http\Requests\Api\V1\Store\ReorderStopsRequest;
+use App\Http\Requests\Api\V1\Store\ResolveDiscrepanciesBatchRequest;
 use App\Http\Requests\Api\V1\Store\ResolveDiscrepancyRequest;
 use App\Http\Requests\Api\V1\Store\RevertRouteRequest;
 use App\Http\Requests\Api\V1\Store\StoreRouteItemsRequest;
@@ -1807,6 +1808,60 @@ class RouteController extends Controller
                 'route_stop_item_id' => $discrepancy->route_stop_item_id,
                 'resolution_type' => $discrepancy->resolution_type,
                 'difference_quantity' => $discrepancy->difference_quantity,
+            ],
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Resolve multiple RouteStopItems atomically during route reconciliation.
+     *
+     * @OA\Post(
+     *   path="/store/routes/{route}/reconciliation/batch",
+     *   summary="Resolver discrepancias de stock en lote",
+     *   tags={"Store - Rutas"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\RequestBody(required=true, @OA\JsonContent(required={"items"}, @OA\Property(property="items", type="array", @OA\Items(required={"route_stop_item_id", "resolution_type", "quantity_to_resolve"}, @OA\Property(property="route_stop_item_id", type="string", format="uuid"), @OA\Property(property="resolution_type", type="string", enum={"returned", "rejected_by_customer", "missing", "damaged", "pending_redelivery"}), @OA\Property(property="quantity_to_resolve", type="integer", minimum=1), @OA\Property(property="notes", type="string", nullable=true))))),
+     *
+     *   @OA\Response(response=200, description="Discrepancias resueltas exitosamente"),
+     *   @OA\Response(response=422, description="Batch inválido; no se aplicó ninguna resolución")
+     * )
+     */
+    public function resolveDiscrepanciesBatch(
+        ResolveDiscrepanciesBatchRequest $request,
+        string $routeId
+    ): JsonResponse {
+        $route = DeliveryRoute::forStore($request->user()->store_id)->find($routeId);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $discrepancies = $this->routeService->resolveDiscrepanciesBatch(
+            $route,
+            $request->validated('items'),
+            $request->user()
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Discrepancias resueltas exitosamente.',
+            'data' => [
+                'resolved_count' => count($discrepancies),
+                'items' => collect($discrepancies)->map(fn ($discrepancy) => [
+                    'id' => $discrepancy->id,
+                    'route_stop_item_id' => $discrepancy->route_stop_item_id,
+                    'resolution_type' => $discrepancy->resolution_type,
+                    'difference_quantity' => $discrepancy->difference_quantity,
+                ])->values(),
             ],
             'errors' => null,
         ]);

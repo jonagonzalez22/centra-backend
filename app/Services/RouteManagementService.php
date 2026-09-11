@@ -1465,62 +1465,153 @@ class RouteManagementService
         User $user
     ): DeliveryDiscrepancy {
         return DB::transaction(function () use ($route, $item, $data, $user) {
-            // The route is the reconciliation mutex. This serializes discrepancy
-            // resolutions with finalization and makes the status check authoritative.
-            $route = DeliveryRoute::forStore($user->store_id)
-                ->whereKey($route->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+            $route = $this->lockReconciliationRoute($route, $user);
+            $item = $this->lockRouteStopItem($route, $item->id);
 
-            if ($route->processed_at !== null) {
-                throw $this->validationError('La ruta ya fue conciliada.');
-            }
-
-            if ($route->status !== 'awaiting_reconciliation') {
-                throw $this->validationError('La ruta no está en estado de conciliación.');
-            }
-
-            $item = RouteStopItem::whereKey($item->id)
-                ->whereHas('routeStop', fn (Builder $query) => $query->where('route_id', $route->id))
-                ->lockForUpdate()
-                ->first();
-
-            if (! $item) {
-                throw $this->validationError('El item no pertenece a esta ruta.');
-            }
-
-            $diff = $this->getReconciliationDifference($item);
-
-            if ($diff <= 0) {
-                throw $this->validationError('No hay diferencia que resolver.');
-            }
-
-            $quantityToResolve = (int) $data['quantity_to_resolve'];
-
-            if ($quantityToResolve !== $diff) {
-                throw $this->validationError('La cantidad a resolver debe coincidir con la diferencia pendiente.');
-            }
-
-            if ($data['resolution_type'] === 'extra_sale') {
-                throw $this->validationError('La venta extra debe estar respaldada por una asignación de mercadería en ruta.');
-            }
-
-            $discrepancy = DeliveryDiscrepancy::updateOrCreate(
-                ['route_stop_item_id' => $item->id],
-                [
-                    'product_id' => $item->product_id,
-                    'quantity_loaded' => $item->quantity_loaded,
-                    'quantity_delivered' => $item->quantity_delivered,
-                    'difference_quantity' => $diff,
-                    'resolution_type' => $data['resolution_type'],
-                    'notes' => $data['notes'] ?? null,
-                    'resolved_by' => $user->id,
-                    'resolved_at' => now(),
-                ]
-            );
-
-            return $discrepancy;
+            return $this->resolveLockedDiscrepancy($item, $data, $user);
         });
+    }
+
+    /**
+     * Resolve multiple RouteStopItems atomically. The product grouping remains
+     * a presentation concern; every persisted resolution remains item-level.
+     *
+     * @param  array<int, array{route_stop_item_id: string, resolution_type: string, quantity_to_resolve: int, notes?: string|null}>  $itemsData
+     * @return array<int, DeliveryDiscrepancy>
+     */
+    public function resolveDiscrepanciesBatch(DeliveryRoute $route, array $itemsData, User $user): array
+    {
+        return DB::transaction(function () use ($route, $itemsData, $user) {
+            $route = $this->lockReconciliationRoute($route, $user);
+            $itemIds = collect($itemsData)->pluck('route_stop_item_id')->sort()->values();
+
+            $items = RouteStopItem::query()
+                ->whereIn('id', $itemIds)
+                ->whereHas('routeStop', fn (Builder $query) => $query->where('route_id', $route->id))
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($items->count() !== $itemIds->count()) {
+                throw $this->validationError('Uno o más items no pertenecen a esta ruta.');
+            }
+
+            $allocations = ExtraSaleAllocation::query()
+                ->where('route_id', $route->id)
+                ->where(function (Builder $query) use ($itemIds) {
+                    $query->whereIn('source_stop_item_id', $itemIds)
+                        ->orWhereIn('destination_stop_item_id', $itemIds);
+                })
+                ->lockForUpdate()
+                ->exists();
+
+            if ($allocations) {
+                throw $this->validationError('Los items afectados por Venta Extra deben resolverse individualmente.');
+            }
+
+            $existingDiscrepancies = DeliveryDiscrepancy::query()
+                ->whereIn('route_stop_item_id', $itemIds)
+                ->orderBy('route_stop_item_id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('route_stop_item_id');
+
+            foreach ($itemsData as $data) {
+                $item = $items->get($data['route_stop_item_id']);
+                $existingDiscrepancy = $existingDiscrepancies->get($item->id);
+
+                if ($existingDiscrepancy?->resolution_type !== null) {
+                    throw $this->validationError('Uno o más items ya tienen una resolución y deben revisarse individualmente.');
+                }
+
+                $this->validateDiscrepancyResolution($item, $data);
+            }
+
+            return collect($itemsData)
+                ->map(fn (array $data) => $this->resolveLockedDiscrepancy(
+                    $items->get($data['route_stop_item_id']),
+                    $data,
+                    $user
+                ))
+                ->all();
+        });
+    }
+
+    private function lockReconciliationRoute(DeliveryRoute $route, User $user): DeliveryRoute
+    {
+        $route = DeliveryRoute::forStore($user->store_id)
+            ->whereKey($route->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ($route->processed_at !== null) {
+            throw $this->validationError('La ruta ya fue conciliada.');
+        }
+
+        if ($route->status !== 'awaiting_reconciliation') {
+            throw $this->validationError('La ruta no está en estado de conciliación.');
+        }
+
+        return $route;
+    }
+
+    private function lockRouteStopItem(DeliveryRoute $route, string $itemId): RouteStopItem
+    {
+        $item = RouteStopItem::whereKey($itemId)
+            ->whereHas('routeStop', fn (Builder $query) => $query->where('route_id', $route->id))
+            ->lockForUpdate()
+            ->first();
+
+        if (! $item) {
+            throw $this->validationError('El item no pertenece a esta ruta.');
+        }
+
+        return $item;
+    }
+
+    /**
+     * @param  array{resolution_type: string, quantity_to_resolve: int, notes?: string|null}  $data
+     */
+    private function validateDiscrepancyResolution(RouteStopItem $item, array $data): int
+    {
+        $diff = $this->getReconciliationDifference($item);
+
+        if ($diff <= 0) {
+            throw $this->validationError('No hay diferencia que resolver.');
+        }
+
+        if ((int) $data['quantity_to_resolve'] !== $diff) {
+            throw $this->validationError('La cantidad a resolver debe coincidir con la diferencia pendiente.');
+        }
+
+        if ($data['resolution_type'] === 'extra_sale') {
+            throw $this->validationError('La venta extra debe estar respaldada por una asignación de mercadería en ruta.');
+        }
+
+        return $diff;
+    }
+
+    /**
+     * @param  array{resolution_type: string, quantity_to_resolve: int, notes?: string|null}  $data
+     */
+    private function resolveLockedDiscrepancy(RouteStopItem $item, array $data, User $user): DeliveryDiscrepancy
+    {
+        $diff = $this->validateDiscrepancyResolution($item, $data);
+
+        return DeliveryDiscrepancy::updateOrCreate(
+            ['route_stop_item_id' => $item->id],
+            [
+                'product_id' => $item->product_id,
+                'quantity_loaded' => $item->quantity_loaded,
+                'quantity_delivered' => $item->quantity_delivered,
+                'difference_quantity' => $diff,
+                'resolution_type' => $data['resolution_type'],
+                'notes' => $data['notes'] ?? null,
+                'resolved_by' => $user->id,
+                'resolved_at' => now(),
+            ]
+        );
     }
 
     /**
