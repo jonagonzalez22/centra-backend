@@ -1458,10 +1458,37 @@ class RouteManagementService
     /**
      * Resolve a delivery discrepancy for a RouteStopItem.
      */
-    public function resolveDiscrepancy(RouteStopItem $item, array $data, User $user): DeliveryDiscrepancy
-    {
-        return DB::transaction(function () use ($item, $data, $user) {
-            $item = RouteStopItem::where('id', $item->id)->lockForUpdate()->firstOrFail();
+    public function resolveDiscrepancy(
+        DeliveryRoute $route,
+        RouteStopItem $item,
+        array $data,
+        User $user
+    ): DeliveryDiscrepancy {
+        return DB::transaction(function () use ($route, $item, $data, $user) {
+            // The route is the reconciliation mutex. This serializes discrepancy
+            // resolutions with finalization and makes the status check authoritative.
+            $route = DeliveryRoute::forStore($user->store_id)
+                ->whereKey($route->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($route->processed_at !== null) {
+                throw $this->validationError('La ruta ya fue conciliada.');
+            }
+
+            if ($route->status !== 'awaiting_reconciliation') {
+                throw $this->validationError('La ruta no está en estado de conciliación.');
+            }
+
+            $item = RouteStopItem::whereKey($item->id)
+                ->whereHas('routeStop', fn (Builder $query) => $query->where('route_id', $route->id))
+                ->lockForUpdate()
+                ->first();
+
+            if (! $item) {
+                throw $this->validationError('El item no pertenece a esta ruta.');
+            }
+
             $diff = $this->getReconciliationDifference($item);
 
             if ($diff <= 0) {
@@ -1504,7 +1531,14 @@ class RouteManagementService
     public function finalizeReconciliation(DeliveryRoute $route, User $user, ?string $observations = null): DeliveryRoute
     {
         return DB::transaction(function () use ($route, $user, $observations) {
-            // Idempotency check — must be BEFORE status validation
+            // The route is the reconciliation mutex. All validation must use the
+            // freshly locked row, never the instance read by the controller.
+            $route = DeliveryRoute::forStore($user->store_id)
+                ->whereKey($route->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            // Idempotency check — must be BEFORE status validation.
             if ($route->processed_at !== null) {
                 throw new HttpResponseException(
                     response()->json([
@@ -1519,8 +1553,6 @@ class RouteManagementService
             if ($route->status !== 'awaiting_reconciliation') {
                 throw $this->validationError('La ruta no está en estado de conciliación.');
             }
-
-            $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
 
             $stops = $route->stops()
                 ->where('status', '!=', 'cancelled')

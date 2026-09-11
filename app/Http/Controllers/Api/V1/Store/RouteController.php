@@ -1792,7 +1792,12 @@ class RouteController extends Controller
             ], 422);
         }
 
-        $discrepancy = $this->routeService->resolveDiscrepancy($item, $request->validated(), $request->user());
+        $discrepancy = $this->routeService->resolveDiscrepancy(
+            $route,
+            $item,
+            $request->validated(),
+            $request->user()
+        );
 
         return response()->json([
             'status' => 'success',

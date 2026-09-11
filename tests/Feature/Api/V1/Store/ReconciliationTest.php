@@ -5,6 +5,7 @@ use App\Models\CustomerAddress;
 use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
 use App\Models\Feature;
+use App\Models\InventoryMovement;
 use App\Models\Locality;
 use App\Models\OperationItem;
 use App\Models\OperationPayment;
@@ -507,11 +508,82 @@ test('finalize is idempotent rejects second call', function () {
         ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
         ->assertStatus(200);
 
+    $stockAfterFirstFinalize = $product->fresh()->stock;
+    $reservedAfterFirstFinalize = $product->fresh()->stock_reserved;
+    $movementsAfterFirstFinalize = InventoryMovement::count();
+
     // Second call
     $response = $this->withHeader('Authorization', "Bearer $this->token")
         ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation");
 
     $response->assertStatus(409);
+    expect($product->fresh()->stock)->toBe($stockAfterFirstFinalize)
+        ->and($product->fresh()->stock_reserved)->toBe($reservedAfterFirstFinalize)
+        ->and(InventoryMovement::count())->toBe($movementsAfterFirstFinalize);
+});
+
+test('a processed discrepancy is not applied again after a rejected second finalize', function () {
+    [$route, $stop, $product, $item] = recRouteForReconciliation($this->store, ['quantity_delivered' => 6]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/discrepancies", [
+            'route_stop_item_id' => $item->id,
+            'resolution_type' => 'missing',
+            'quantity_to_resolve' => 4,
+        ])
+        ->assertOk();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertOk();
+
+    $discrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $item->id)->sole();
+    $stockAfterFirstFinalize = $product->fresh()->stock;
+    $movementCountAfterFirstFinalize = InventoryMovement::where('product_id', $product->id)->count();
+
+    expect($discrepancy->processed_at)->not->toBeNull()
+        ->and($movementCountAfterFirstFinalize)->toBe(1);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertStatus(409);
+
+    expect($product->fresh()->stock)->toBe($stockAfterFirstFinalize)
+        ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe($movementCountAfterFirstFinalize);
+});
+
+test('resolve after finalize is rejected without changing the processed discrepancy', function () {
+    [$route, $stop, $product, $item] = recRouteForReconciliation($this->store, ['quantity_delivered' => 6]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/discrepancies", [
+            'route_stop_item_id' => $item->id,
+            'resolution_type' => 'returned',
+            'quantity_to_resolve' => 4,
+        ])
+        ->assertOk();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertOk();
+
+    $discrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $item->id)->sole();
+    $resolvedAt = $discrepancy->resolved_at;
+    $stockAfterFinalize = $product->fresh()->stock;
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/discrepancies", [
+            'route_stop_item_id' => $item->id,
+            'resolution_type' => 'damaged',
+            'quantity_to_resolve' => 4,
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'La ruta ya fue conciliada.');
+
+    $discrepancy->refresh();
+    expect($discrepancy->resolution_type)->toBe('returned')
+        ->and($discrepancy->resolved_at->equalTo($resolvedAt))->toBeTrue()
+        ->and($product->fresh()->stock)->toBe($stockAfterFinalize);
 });
 
 // 20. verify collection rolls back on insufficient pending balance
