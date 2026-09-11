@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\Store;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
+use App\Services\CashBusinessDateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
@@ -44,6 +45,7 @@ beforeEach(function () {
         'store_id' => $this->store->id,
         'user_id' => $this->user->id,
         'status' => 'open',
+        'business_date' => app(CashBusinessDateService::class)->currentForStore($this->store),
         'opening_amount' => 1000,
         'expected_amount' => 1000,
         'opened_at' => now(),
@@ -502,6 +504,25 @@ describe('POST /api/v1/store/operations - Payments', function () {
             'payments' => [],
         ])->assertCreated();
     });
+
+    test('initial payment rejects stale and pending cash sessions', function (array $sessionState) {
+        $this->cashSession->update($sessionState);
+        $spm = makePaymentMethodForStore($this->store);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_id' => $this->customer->id,
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100]],
+            'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 100]],
+        ])->assertUnprocessable()->assertJsonValidationErrors('cash_session');
+    })->with([
+        'stale open' => [['business_date' => now()->subDay()->toDateString()]],
+        'pending reconciliation' => [[
+            'status' => 'pending_reconciliation',
+            'declared_amount' => 1000,
+            'submitted_at' => now(),
+        ]],
+    ]);
 
     test('store payment method rules apply to initial payments', function () {
         $method = PaymentMethod::factory()->create(['code' => 'transfer', 'is_active' => true]);

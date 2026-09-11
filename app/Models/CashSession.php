@@ -22,19 +22,28 @@ class CashSession extends Model
         'store_id',
         'user_id',
         'status',
+        'business_date',
         'opening_amount',
         'expected_amount',
         'real_amount',
+        'declared_amount',
         'notes',
+        'declaration_notes',
+        'reconciliation_notes',
         'opened_at',
+        'submitted_at',
         'closed_at',
+        'closed_by',
     ];
 
     protected $casts = [
         'opening_amount' => 'decimal:2',
         'expected_amount' => 'decimal:2',
         'real_amount' => 'decimal:2',
+        'declared_amount' => 'decimal:2',
+        'business_date' => 'date',
         'opened_at' => 'datetime',
+        'submitted_at' => 'datetime',
         'closed_at' => 'datetime',
     ];
 
@@ -57,6 +66,11 @@ class CashSession extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function closedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by');
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(OperationPayment::class);
@@ -67,8 +81,10 @@ class CashSession extends Model
         return $query->where('store_id', $storeId);
     }
 
-    public function scopeCurrent(Builder $query, string $userId): Builder
+    public function scopeOperational(Builder $query, string $userId, string $businessDate): Builder
     {
-        return $query->where('user_id', $userId)->where('status', 'open');
+        return $query->where('user_id', $userId)
+            ->where('status', 'open')
+            ->whereDate('business_date', $businessDate);
     }
 }

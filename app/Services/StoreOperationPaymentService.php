@@ -13,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class StoreOperationPaymentService
 {
+    public function __construct(private readonly CashSessionService $cashSessionService) {}
+
     public function registerOrderPayment(CommercialOperation $operation, array $data, User $user): CommercialOperation
     {
         return DB::transaction(function () use ($operation, $data, $user) {
@@ -117,11 +119,7 @@ class StoreOperationPaymentService
 
     private function openSession(User $user): CashSession
     {
-        $sessions = CashSession::forStore($user->store_id)
-            ->current($user->id)
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->get();
+        $sessions = $this->cashSessionService->operationalSessions($user, true);
 
         if ($sessions->isEmpty()) {
             throw ValidationException::withMessages(['cash_session' => ['Debes abrir una caja antes de registrar cobros.']]);

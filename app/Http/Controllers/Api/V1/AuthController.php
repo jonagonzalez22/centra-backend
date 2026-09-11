@@ -129,7 +129,6 @@ class AuthController extends Controller
         $user = User::with([
             'store.businessType',
             'store.plan.features',
-            'currentCashSession',
         ])
             ->where('email', $request->email)
             ->first();
@@ -293,7 +292,6 @@ class AuthController extends Controller
             'roles',
             'store.businessType',
             'store.plan.features',
-            'currentCashSession',
         ]);
 
         return response()->json([
@@ -338,12 +336,14 @@ class AuthController extends Controller
         ];
 
         if ($this->shouldIncludeCashSession($user)) {
-            $session = $user->currentCashSession;
+            $sessions = app(\App\Services\CashSessionService::class)->operationalSessions($user);
+            $session = $sessions->count() === 1 ? $sessions->first() : null;
 
             $data['cash_session'] = $session ? [
                 'id' => $session->id,
                 'status' => $session->status,
                 'opening_amount' => (float) $session->opening_amount,
+                'business_date' => $session->business_date?->format('Y-m-d'),
                 'opened_at' => $session->opened_at->format('Y-m-d H:i:s'),
             ] : null;
         }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\CashBusinessDateService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -63,8 +64,11 @@ class User extends Authenticatable
 
     public function currentCashSession(): HasOne
     {
+        $businessDate = app(CashBusinessDateService::class)
+            ->currentForStore($this->store ?? $this->store()->firstOrFail());
+
         return $this->hasOne(CashSession::class)
-            ->where('status', 'open');
+            ->operational($this->id, $businessDate);
     }
 
     public function scopeActive($query)

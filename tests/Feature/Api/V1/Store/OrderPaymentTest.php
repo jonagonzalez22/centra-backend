@@ -10,6 +10,7 @@ use App\Models\RouteStopCollection;
 use App\Models\Store;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
+use App\Services\CashBusinessDateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -56,6 +57,7 @@ beforeEach(function () {
         'store_id' => $this->store->id,
         'user_id' => $this->user->id,
         'status' => 'open',
+        'business_date' => app(CashBusinessDateService::class)->currentForStore($this->store),
         'opening_amount' => 20000,
         'expected_amount' => 20000,
         'opened_at' => now(),
@@ -130,9 +132,43 @@ test('requires current user open cash session', function () {
     ])->assertUnprocessable()->assertJsonValidationErrors('cash_session');
 });
 
+test('does not use a stale or pending cash session for payments', function (array $sessionState) {
+    $this->session->update($sessionState);
+    postOrderPayment($this->order->id, [
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'amount' => 100,
+    ])->assertUnprocessable()->assertJsonValidationErrors('cash_session');
+    $this->assertDatabaseCount('operation_payments', 0);
+})->with([
+    'stale open' => [['business_date' => now()->subDay()->toDateString()]],
+    'pending reconciliation' => [[
+        'status' => 'pending_reconciliation',
+        'declared_amount' => 20000,
+        'submitted_at' => now(),
+    ]],
+]);
+
+test('uses the current session while a stale open session also exists', function () {
+    CashSession::create([
+        'store_id' => $this->store->id,
+        'user_id' => $this->user->id,
+        'status' => 'open',
+        'business_date' => now()->subDay()->toDateString(),
+        'opening_amount' => 0,
+        'expected_amount' => 0,
+        'opened_at' => now()->subDay(),
+    ]);
+
+    postOrderPayment($this->order->id, [
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'amount' => 100,
+    ])->assertCreated()->assertJsonPath('data.payments.0.cash_session.id', $this->session->id);
+});
+
 test('rejects anomalous multiple open sessions', function () {
     CashSession::create([
         'store_id' => $this->store->id, 'user_id' => $this->user->id, 'status' => 'open',
+        'business_date' => $this->session->business_date,
         'opening_amount' => 0, 'expected_amount' => 0, 'opened_at' => now(),
     ]);
     postOrderPayment($this->order->id, [

@@ -17,7 +17,7 @@ class CloseCashSessionRequest extends FormRequest
     {
         return [
             'real_amount' => ['required', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string', 'max:1000'],
+            'reconciliation_notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 

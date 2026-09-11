@@ -8529,7 +8529,7 @@
                                                 "data": {
                                                     "oneOf": [
                                                         {
-                                                            "$ref": "#/components/schemas/CashSession"
+                                                            "$ref": "#/components/schemas/CashSessionBlind"
                                                         }
                                                     ],
                                                     "nullable": true
@@ -8618,7 +8618,7 @@
                                                     "example": "Sesión de caja abierta correctamente."
                                                 },
                                                 "data": {
-                                                    "$ref": "#/components/schemas/CashSession"
+                                                    "$ref": "#/components/schemas/CashSessionBlind"
                                                 },
                                                 "errors": {
                                                     "example": null,
@@ -8666,7 +8666,7 @@
                     "Store - Caja"
                 ],
                 "summary": "Cerrar sesión de caja",
-                "description": "Cierra una sesión de caja abierta del usuario autenticado. Requiere que la sesión pertenezca a la tienda, al usuario y esté en estado open.",
+                "description": "Cierra definitivamente una sesión pending_reconciliation de otro usuario de la misma tienda.",
                 "operationId": "cashSessionClose",
                 "parameters": [
                     {
@@ -8696,10 +8696,10 @@
                                         "format": "float",
                                         "example": 1495.5
                                     },
-                                    "notes": {
-                                        "description": "Notas u observaciones",
+                                    "reconciliation_notes": {
+                                        "description": "Obligatoria cuando existe diferencia",
                                         "type": "string",
-                                        "example": "Cierre de turno mañana",
+                                        "example": "Faltante verificado",
                                         "nullable": true
                                     }
                                 },
@@ -8770,6 +8770,224 @@
                                 }
                             }
                         }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/overview": {
+            "get": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Obtener panorama operativo blind del cajero",
+                "operationId": "b47d5087c5cc518f875829f9091a6c44",
+                "responses": {
+                    "200": {
+                        "description": "Sesión vigente, abiertas antiguas y pendientes propias"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/{cashSession}/submit": {
+            "post": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Enviar caja abierta a arqueo",
+                "operationId": "85d642fb695db9b7f0773d550e4c2cab",
+                "parameters": [
+                    {
+                        "name": "cashSession",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "declared_amount"
+                                ],
+                                "properties": {
+                                    "declared_amount": {
+                                        "type": "number",
+                                        "format": "float"
+                                    },
+                                    "declaration_notes": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Caja enviada a arqueo",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CashSessionBlind"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/pending-reconciliation": {
+            "get": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Listar cajas pendientes de arqueo de la tienda",
+                "operationId": "f2479d0e98d3b4b6935720d86cddc0ad",
+                "responses": {
+                    "200": {
+                        "description": "Listado paginado de cajas pendientes"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/{cashSession}/reconciliation": {
+            "get": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Obtener detalle financiero para arqueo",
+                "operationId": "df5baa18a73cbe8a014c129895f543b5",
+                "parameters": [
+                    {
+                        "name": "cashSession",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Detalle de arqueo",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CashSessionReconciliation"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/cash/{cashSession}/reconciliation/payment-methods/{storePaymentMethod}/payments": {
+            "get": {
+                "tags": [
+                    "Store - Caja"
+                ],
+                "summary": "Listar pagos no efectivos de un medio dentro de un arqueo",
+                "operationId": "2415c1dfee4170e43e1d853d1810ad60",
+                "parameters": [
+                    {
+                        "name": "cashSession",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "storePaymentMethod",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 100,
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pagos paginados del medio seleccionado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ApiResponse"
+                                        },
+                                        {
+                                            "properties": {
+                                                "data": {
+                                                    "$ref": "#/components/schemas/CashSessionPaymentPage"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Sin permiso, sesión propia o medio efectivo"
+                    },
+                    "404": {
+                        "description": "Sesión o medio no encontrado"
                     }
                 },
                 "security": [
@@ -18884,6 +19102,42 @@
                 },
                 "type": "object"
             },
+            "CashSessionBlind": {
+                "description": "Vista operativa blind de una sesión de caja",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "pending_reconciliation"
+                        ],
+                        "example": "open"
+                    },
+                    "business_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "opening_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "declared_amount": {
+                        "type": "number",
+                        "format": "float",
+                        "nullable": true
+                    },
+                    "submitted_at": {
+                        "type": "string",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "CashSessionLight": {
                 "title": "CashSessionLight",
                 "description": "Versión resumida de CashSession para contexto de autenticación",
@@ -18896,8 +19150,7 @@
                     "status": {
                         "type": "string",
                         "enum": [
-                            "open",
-                            "closed"
+                            "open"
                         ],
                         "example": "open"
                     },
@@ -18906,9 +19159,157 @@
                         "format": "float",
                         "example": 1000
                     },
+                    "business_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
                     "opened_at": {
                         "type": "string",
                         "example": "2026-07-10 08:00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "CashSessionPaymentDetail": {
+                "description": "Pago individual informativo de un arqueo",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "reference": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "origin": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "payment_details": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "operation": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "operation_number": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "registered_by": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "CashSessionPaymentPage": {
+                "description": "Detalle paginado de pagos de un medio no efectivo",
+                "properties": {
+                    "payment_method": {
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "format": "uuid"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "code": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CashSessionPaymentDetail"
+                        }
+                    },
+                    "total": {
+                        "type": "integer"
+                    },
+                    "per_page": {
+                        "type": "integer"
+                    },
+                    "current_page": {
+                        "type": "integer"
+                    },
+                    "last_page": {
+                        "type": "integer"
+                    }
+                },
+                "type": "object"
+            },
+            "CashSessionReconciliation": {
+                "description": "Detalle financiero para el arqueo de una sesión pendiente",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "pending_reconciliation"
+                    },
+                    "opening_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "expected_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "declared_amount": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "cash_income": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "total_collected": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "payment_count": {
+                        "type": "integer"
+                    },
+                    "operation_count": {
+                        "type": "integer"
+                    },
+                    "totals_by_payment_method": {
+                        "type": "array",
+                        "items": {
+                            "type": "object"
+                        }
                     }
                 },
                 "type": "object"
@@ -18922,29 +19323,19 @@
                         "format": "uuid",
                         "example": "550e8400-e29b-41d4-a716-446655440000"
                     },
-                    "store": {
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/StoreLight"
-                            }
-                        ],
-                        "nullable": true
-                    },
-                    "user": {
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/User"
-                            }
-                        ],
-                        "nullable": true
-                    },
                     "status": {
                         "type": "string",
                         "enum": [
                             "open",
+                            "pending_reconciliation",
                             "closed"
                         ],
                         "example": "open"
+                    },
+                    "business_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
                     },
                     "opening_amount": {
                         "description": "Monto inicial de apertura de caja",
@@ -18953,7 +19344,7 @@
                         "example": 1000
                     },
                     "expected_amount": {
-                        "description": "Monto esperado (apertura + ventas - egresos)",
+                        "description": "Monto esperado (apertura + pagos en efectivo)",
                         "type": "number",
                         "format": "float",
                         "example": 1500
@@ -18963,6 +19354,30 @@
                         "type": "number",
                         "format": "float",
                         "example": 1495.5,
+                        "nullable": true
+                    },
+                    "declared_amount": {
+                        "description": "Efectivo declarado por el cajero",
+                        "type": "number",
+                        "format": "float",
+                        "example": 1495,
+                        "nullable": true
+                    },
+                    "closed_by": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "declaration_notes": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "reconciliation_notes": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "difference": {
+                        "type": "number",
+                        "format": "float",
                         "nullable": true
                     },
                     "notes": {
@@ -18975,18 +19390,15 @@
                         "type": "string",
                         "example": "2026-07-10 08:00:00"
                     },
-                    "closed_at": {
+                    "submitted_at": {
                         "type": "string",
                         "example": null,
                         "nullable": true
                     },
-                    "created_at": {
+                    "closed_at": {
                         "type": "string",
-                        "example": "2026-07-10 08:00:00"
-                    },
-                    "updated_at": {
-                        "type": "string",
-                        "example": "2026-07-10 18:00:00"
+                        "example": null,
+                        "nullable": true
                     }
                 },
                 "type": "object"

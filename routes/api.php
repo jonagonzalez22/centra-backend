@@ -164,7 +164,12 @@ Route::prefix('v1')->group(function () {
 
       Route::middleware('feature:cash')->group(function () {
         Route::get('cash/current', [CashSessionController::class, 'current'])->name('store.cash.current');
+        Route::get('cash/overview', [CashSessionController::class, 'overview'])->name('store.cash.overview');
+        Route::get('cash/pending-reconciliation', [CashSessionController::class, 'pendingReconciliation'])->name('store.cash.pending-reconciliation');
         Route::post('cash/open', [CashSessionController::class, 'open'])->name('store.cash.open');
+        Route::post('cash/{cashSession}/submit', [CashSessionController::class, 'submit'])->name('store.cash.submit');
+        Route::get('cash/{cashSession}/reconciliation', [CashSessionController::class, 'reconciliation'])->name('store.cash.reconciliation');
+        Route::get('cash/{cashSession}/reconciliation/payment-methods/{storePaymentMethod}/payments', [CashSessionController::class, 'reconciliationPayments'])->name('store.cash.reconciliation.payments');
         Route::post('cash/{cashSession}/close', [CashSessionController::class, 'close'])->name('store.cash.close');
       });
 

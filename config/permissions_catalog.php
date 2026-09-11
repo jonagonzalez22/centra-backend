@@ -49,6 +49,7 @@ return [
     'Caja' => [
         ['name' => 'cash.view', 'label' => 'Ver'],
         ['name' => 'cash.open', 'label' => 'Abrir'],
+        ['name' => 'cash.submit', 'label' => 'Enviar a arqueo'],
         ['name' => 'cash.close', 'label' => 'Cerrar'],
     ],
     'Métodos de pago' => [
