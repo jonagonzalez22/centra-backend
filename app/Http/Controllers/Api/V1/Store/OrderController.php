@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ListOrdersRequest;
+use App\Http\Requests\Api\V1\Store\UpdateOrderItemsRequest;
 use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
 use App\Http\Resources\OrderEditabilityResource;
 use App\Models\CommercialOperation;
 use App\Services\OrderEditabilityService;
 use App\Services\OrderHistoryBuilder;
+use App\Services\OrderItemEditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -263,6 +265,95 @@ class OrderController extends Controller
             'status' => 'success',
             'message' => 'Editabilidad del pedido obtenida exitosamente.',
             'data' => OrderEditabilityResource::make($editabilityService->describe($operation)),
+            'errors' => null,
+        ]);
+    }
+
+    /**
+     * Actualiza únicamente el estado final de los ítems de un pedido. La fecha
+     * de entrega y el domicilio permanecen fuera de este endpoint.
+     *
+     * @OA\Put(
+     *   path="/store/orders/{id}",
+     *   summary="Editar los ítems de un pedido",
+     *   tags={"Store - Pedidos"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\RequestBody(
+     *     required=true,
+     *
+     *     @OA\JsonContent(
+     *       required={"items"},
+     *
+     *       @OA\Property(property="items", type="array", minItems=1, @OA\Items(
+     *         type="object",
+     *         required={"product_id", "quantity"},
+     *         @OA\Property(property="product_id", type="string", format="uuid"),
+     *         @OA\Property(property="quantity", type="integer", minimum=1, example=10)
+     *       ))
+     *     )
+     *   ),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Pedido actualizado exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Pedido actualizado exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/CommercialOperationResource"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=403, description="Sin permisos"),
+     *   @OA\Response(response=404, description="Pedido no encontrado"),
+     *   @OA\Response(response=422, description="Edición no permitida o datos inválidos")
+     * )
+     */
+    public function updateItems(
+        UpdateOrderItemsRequest $request,
+        OrderItemEditService $itemEditService,
+        OrderHistoryBuilder $historyBuilder,
+        string $id
+    ): JsonResponse {
+        $storeId = $request->user()->store_id;
+        $operation = CommercialOperation::forStore($storeId)->find($id);
+
+        if (! $operation || $operation->type !== 'order') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Pedido no encontrado.',
+                'data' => null,
+                'errors' => ['id' => ['El pedido no existe, no pertenece a tu tienda o no es un pedido.']],
+            ], 404);
+        }
+
+        $operation = $itemEditService->updateItems(
+            $operation,
+            $request->validated('items'),
+            $request->user()
+        );
+        $operation->load([
+            'customer.addresses.locality',
+            'user',
+            'items.product',
+            'payments.storePaymentMethod.paymentMethod',
+            'payments.cashSession',
+            'payments.registeredBy',
+            'events.user',
+            'routeStops.items.product',
+            'routeStops.route',
+        ])->loadSum('payments', 'amount');
+        $historyBuilder->attach($operation, $storeId);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pedido actualizado exitosamente.',
+            'data' => CommercialOperationResource::make($operation),
             'errors' => null,
         ]);
     }

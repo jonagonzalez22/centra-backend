@@ -183,6 +183,9 @@ Route::prefix('v1')->group(function () {
         Route::get('orders/{id}/editability', [OrderController::class, 'editability'])
           ->middleware('permission:orders.edit')
           ->name('store.orders.editability');
+        Route::put('orders/{id}', [OrderController::class, 'updateItems'])
+          ->middleware('permission:orders.edit')
+          ->name('store.orders.update-items');
         Route::post('orders/{order}/payments', [OrderPaymentController::class, 'store'])
           ->middleware('permission:orders.collect')
           ->name('store.orders.payments.store');

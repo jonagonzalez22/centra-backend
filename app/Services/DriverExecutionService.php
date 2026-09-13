@@ -387,6 +387,17 @@ class DriverExecutionService
             $route = $this->validateDriverRoute($stop, $driver);
             $stop->setRelation('route', $route);
 
+            // Commercial stops share the order mutex with item edits. Some
+            // driver-only stops have no commercial operation and keep their
+            // existing execution behavior.
+            $order = null;
+            if ($stop->order_id) {
+                $order = CommercialOperation::forStore($driver->store_id)
+                    ->whereKey($stop->order_id)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
             // Lock the stop to prevent race conditions
             $stop = RouteStop::where('id', $stop->id)->lockForUpdate()->first();
 
@@ -466,7 +477,7 @@ class DriverExecutionService
             $payments = $data['payments'] ?? [];
 
             if (! empty($payments)) {
-                $order = $stop->order()
+                $order ??= $stop->order()
                     ->with(['items', 'payments'])
                     ->lockForUpdate()
                     ->first();
@@ -474,6 +485,8 @@ class DriverExecutionService
                 if (! $order) {
                     throw $this->validationError('No se encontró el pedido asociado a este stop.');
                 }
+
+                $order->loadMissing(['items', 'payments']);
 
                 $proposedQuantities = collect($items)->mapWithKeys(fn (array $item) => [
                     $item['route_stop_item_id'] => (int) $item['quantity_delivered'],

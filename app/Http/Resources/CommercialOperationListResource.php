@@ -55,7 +55,15 @@ class CommercialOperationListResource extends JsonResource
             'total' => (float) $this->total,
             'paid_amount' => (float) ($this->payments_sum_amount ?? 0),
             'pending_amount' => max(0, (float) $this->total - (float) ($this->payments_sum_amount ?? 0)),
-            'items_count' => $this->whenLoaded('items', fn () => $this->items->count(), 0),
+            'items_count' => $this->whenLoaded(
+                'items',
+                fn () => $this->items
+                    ->filter(fn ($item): bool => (int) $item->quantity > 0)
+                    ->pluck('product_id')
+                    ->unique()
+                    ->count(),
+                0
+            ),
             'customer' => $this->whenLoaded('customer', fn () => [
                 'id' => $this->customer->id,
                 'name' => $this->customer->display_name,

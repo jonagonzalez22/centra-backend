@@ -2,8 +2,10 @@
 
 namespace App\Http\Resources;
 
+use App\Models\OperationItem;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Collection;
 
 /**
  * @OA\Schema(
@@ -88,7 +90,7 @@ class CommercialOperationResource extends JsonResource
                 'email' => null,
             ]),
             'delivery_address' => $this->getDeliveryAddress(),
-            'items' => OperationItemResource::collection($this->whenLoaded('items')),
+            'items' => $this->whenLoaded('items', fn () => $this->currentCommercialItems()),
             'payments' => OperationPaymentResource::collection($this->whenLoaded('payments')),
             'events' => CommercialOperationEventResource::collection($this->whenLoaded('events')),
             'history' => $this->history ?? [],
@@ -126,5 +128,88 @@ class CommercialOperationResource extends JsonResource
             'notes' => $address->observations,
             'full_address' => $fullAddress ?: null,
         ];
+    }
+
+    /**
+     * OperationItem preserves commercial history, including lines reduced to
+     * zero. The order response instead represents the products currently
+     * owed: inactive lines are omitted and only economically equivalent lines
+     * of the same product are combined.
+     *
+     * @return array<int, array<string, int|float|string>>
+     */
+    private function currentCommercialItems(): array
+    {
+        /** @var Collection<int, OperationItem> $items */
+        $items = $this->items
+            ->filter(fn (OperationItem $item): bool => (int) $item->quantity > 0)
+            ->sortBy([
+                ['product_id', 'asc'],
+                ['created_at', 'asc'],
+                ['id', 'asc'],
+            ]);
+
+        return $items
+            ->groupBy('product_id')
+            ->flatMap(function (Collection $productItems): array {
+                $groups = [];
+
+                foreach ($productItems as $item) {
+                    $groupIndex = collect($groups)->search(
+                        fn (array $group): bool => $this->hasSameCommercialTerms($group['source'], $item)
+                    );
+
+                    if ($groupIndex === false) {
+                        $groups[] = [
+                            'source' => $item,
+                            'quantity' => (int) $item->quantity,
+                            'subtotal' => (float) $item->subtotal,
+                            'tax_amount' => (float) $item->tax_amount,
+                            'discount_amount' => (float) $item->discount_amount,
+                        ];
+
+                        continue;
+                    }
+
+                    $groups[$groupIndex]['quantity'] += (int) $item->quantity;
+                    $groups[$groupIndex]['subtotal'] += (float) $item->subtotal;
+                    $groups[$groupIndex]['tax_amount'] += (float) $item->tax_amount;
+                    $groups[$groupIndex]['discount_amount'] += (float) $item->discount_amount;
+                }
+
+                return collect($groups)->map(function (array $group): array {
+                    /** @var OperationItem $source */
+                    $source = $group['source'];
+
+                    return [
+                        // Stable representative key for the display line. The
+                        // underlying OperationItems remain untouched.
+                        'id' => $source->id,
+                        'product_id' => $source->product_id,
+                        'product_name' => $source->product_name,
+                        'quantity' => $group['quantity'],
+                        'price' => (float) $source->price,
+                        'subtotal' => round($group['subtotal'], 2),
+                        'tax_amount' => round($group['tax_amount'], 2),
+                        'discount_amount' => round($group['discount_amount'], 2),
+                    ];
+                })->all();
+            })
+            ->values()
+            ->all();
+    }
+
+    private function hasSameCommercialTerms(OperationItem $first, OperationItem $second): bool
+    {
+        return $this->amountInCents($first->price) === $this->amountInCents($second->price)
+            && $this->amountInCents($first->tax_amount) * (int) $second->quantity
+                === $this->amountInCents($second->tax_amount) * (int) $first->quantity
+            && $this->amountInCents($first->discount_amount) * (int) $second->quantity
+                === $this->amountInCents($second->discount_amount) * (int) $first->quantity;
+    }
+
+    private function amountInCents(mixed $amount): int
+    {
+        return (int) round((float) $amount * 100);
     }
 }

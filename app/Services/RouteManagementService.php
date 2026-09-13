@@ -746,22 +746,24 @@ class RouteManagementService
     public function assignItems(DeliveryRoute $route, RouteStop $stop, array $items, User $user): void
     {
         DB::transaction(function () use ($route, $stop, $items, $user) {
-            if (! in_array($route->status, ['draft', 'planned'])) {
-                throw $this->validationError('Solo se pueden asignar items en rutas draft o planned.');
-            }
-
-            if ($stop->route_id !== $route->id) {
-                throw $this->validationError('El stop no pertenece a esta ruta.');
+            // The order is the shared mutex with commercial item edits.
+            $order = CommercialOperation::where('id', $stop->order_id)->lockForUpdate()->first();
+            if (! $order) {
+                throw $this->validationError('El pedido asociado al stop no existe.');
             }
 
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
             $stop = RouteStop::where('id', $stop->id)->lockForUpdate()->first();
 
-            // Load order items for validation
-            $order = CommercialOperation::with('items')->find($stop->order_id);
-            if (! $order) {
-                throw $this->validationError('El pedido asociado al stop no existe.');
+            if (! $route || ! in_array($route->status, ['draft', 'planned'])) {
+                throw $this->validationError('Solo se pueden asignar items en rutas draft o planned.');
             }
+
+            if (! $stop || $stop->route_id !== $route->id) {
+                throw $this->validationError('El stop no pertenece a esta ruta.');
+            }
+
+            $order->load('items');
 
             foreach ($items as $item) {
                 $productId = $item['product_id'];

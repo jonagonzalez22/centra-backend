@@ -88,6 +88,7 @@ class OrderHistoryBuilder
             'order_cancelled' => 'Pedido cancelado',
             'remaining_delivery_cancelled' => 'Remanente cancelado',
             'payment_registered' => 'Pago registrado',
+            'order_edited' => 'Pedido editado',
         ];
 
         return [
@@ -109,6 +110,7 @@ class OrderHistoryBuilder
                 'reason_note' => $event->reason_note,
                 'observation' => $event->observation,
                 'items' => $event->metadata['items'] ?? null,
+                'totals' => $event->metadata['totals'] ?? null,
                 'payment' => $event->event_type === 'payment_registered' ? $event->metadata : null,
             ],
             'sort_order' => 10,
