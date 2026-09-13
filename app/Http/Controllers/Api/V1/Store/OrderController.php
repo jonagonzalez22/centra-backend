@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ListOrdersRequest;
 use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
+use App\Http\Resources\OrderEditabilityResource;
 use App\Models\CommercialOperation;
+use App\Services\OrderEditabilityService;
 use App\Services\OrderHistoryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -206,5 +208,62 @@ class OrderController extends Controller
             'data' => CommercialOperationResource::make($operation),
             'errors' => null,
         ], 200);
+    }
+
+    /**
+     * Snapshot read-only de editabilidad. La futura edición debe recalcular
+     * estas reglas bajo lock dentro de su propia transacción.
+     *
+     * @OA\Get(
+     *   path="/store/orders/{id}/editability",
+     *   summary="Consultar restricciones de edición de un pedido",
+     *   tags={"Store - Pedidos"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Editabilidad del pedido obtenida exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Editabilidad del pedido obtenida exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/OrderEditability"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=401, description="No autenticado"),
+     *   @OA\Response(response=403, description="Sin permisos"),
+     *   @OA\Response(response=404, description="Pedido no encontrado")
+     * )
+     */
+    public function editability(
+        Request $request,
+        OrderEditabilityService $editabilityService,
+        string $id
+    ): JsonResponse {
+        $operation = CommercialOperation::query()
+            ->forStore($request->user()->store_id)
+            ->with('items.product')
+            ->find($id);
+
+        if (! $operation || $operation->type !== 'order') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Pedido no encontrado.',
+                'data' => null,
+                'errors' => ['id' => ['El pedido no existe, no pertenece a tu tienda o no es un pedido.']],
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Editabilidad del pedido obtenida exitosamente.',
+            'data' => OrderEditabilityResource::make($editabilityService->describe($operation)),
+            'errors' => null,
+        ]);
     }
 }

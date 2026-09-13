@@ -12989,6 +12989,70 @@
                 ]
             }
         },
+        "/store/orders/{id}/editability": {
+            "get": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Consultar restricciones de edición de un pedido",
+                "description": "Snapshot read-only de editabilidad. La futura edición debe recalcular\nestas reglas bajo lock dentro de su propia transacción.",
+                "operationId": "07441f88b662a92e247c5e13d124e11d",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Editabilidad del pedido obtenida exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Editabilidad del pedido obtenida exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/OrderEditability"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "Sin permisos"
+                    },
+                    "404": {
+                        "description": "Pedido no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/orders/{order}/payments": {
             "post": {
                 "tags": [
@@ -20296,6 +20360,83 @@
                     "total_items": {
                         "type": "integer",
                         "example": 30
+                    }
+                },
+                "type": "object"
+            },
+            "OrderEditability": {
+                "title": "OrderEditability",
+                "description": "Snapshot informativo de las restricciones de edición de un pedido",
+                "properties": {
+                    "order_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "partially_delivered"
+                    },
+                    "editable": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "block_reason": {
+                        "type": "string",
+                        "enum": [
+                            "terminal_status",
+                            "active_extra_sale"
+                        ],
+                        "nullable": true
+                    },
+                    "block_message": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "paid_amount": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 6000
+                    },
+                    "delivery_date_editable": {
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "product_id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                },
+                                "product_name": {
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "current_quantity": {
+                                    "type": "integer",
+                                    "example": 10
+                                },
+                                "delivered_quantity": {
+                                    "type": "integer",
+                                    "example": 4
+                                },
+                                "active_committed_quantity": {
+                                    "description": "Planificado en rutas draft/planned; cargado en rutas loaded, dispatched o awaiting_reconciliation",
+                                    "type": "integer",
+                                    "example": 3
+                                },
+                                "minimum_quantity": {
+                                    "type": "integer",
+                                    "example": 7
+                                },
+                                "editable_quantity": {
+                                    "type": "integer",
+                                    "example": 3
+                                }
+                            },
+                            "type": "object"
+                        }
                     }
                 },
                 "type": "object"

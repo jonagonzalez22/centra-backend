@@ -180,6 +180,9 @@ Route::prefix('v1')->group(function () {
         Route::get('orders/{id}', [OrderController::class, 'show'])
           ->middleware('permission:orders.view')
           ->name('store.orders.show');
+        Route::get('orders/{id}/editability', [OrderController::class, 'editability'])
+          ->middleware('permission:orders.edit')
+          ->name('store.orders.editability');
         Route::post('orders/{order}/payments', [OrderPaymentController::class, 'store'])
           ->middleware('permission:orders.collect')
           ->name('store.orders.payments.store');
