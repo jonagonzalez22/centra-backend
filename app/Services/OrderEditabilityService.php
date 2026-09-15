@@ -46,6 +46,8 @@ class OrderEditabilityService
             : ($hasActiveExtraSale ? 'active_extra_sale' : null);
 
         $editable = $blockReason === null;
+        $hasActiveRouteCommitment = $activeCommittedQuantities->sum() > 0;
+        $deliveryDateBlockReason = $blockReason ?? ($hasActiveRouteCommitment ? 'active_route_commitment' : null);
 
         return [
             'order_id' => $order->id,
@@ -54,7 +56,9 @@ class OrderEditabilityService
             'block_reason' => $blockReason,
             'block_message' => $this->blockMessage($blockReason),
             'paid_amount' => (float) $order->payments()->sum('amount'),
-            'delivery_date_editable' => $editable && $activeCommittedQuantities->sum() === 0,
+            'delivery_date_editable' => $deliveryDateBlockReason === null,
+            'delivery_date_block_reason' => $deliveryDateBlockReason,
+            'delivery_date_block_message' => $this->deliveryDateBlockMessage($deliveryDateBlockReason),
             'items' => $currentQuantities
                 ->map(function (int $currentQuantity, string $productId) use ($order, $deliveredQuantities, $activeCommittedQuantities): array {
                     $lines = $order->items->where('product_id', $productId);
@@ -129,6 +133,14 @@ class OrderEditabilityService
             'terminal_status' => 'El pedido no puede editarse en su estado actual.',
             'active_extra_sale' => 'El pedido tiene una venta extra activa en una ruta operativa.',
             default => null,
+        };
+    }
+
+    private function deliveryDateBlockMessage(?string $blockReason): ?string
+    {
+        return match ($blockReason) {
+            'active_route_commitment' => 'La fecha de entrega no puede modificarse porque el pedido tiene mercadería comprometida en una ruta activa.',
+            default => $this->blockMessage($blockReason),
         };
     }
 }

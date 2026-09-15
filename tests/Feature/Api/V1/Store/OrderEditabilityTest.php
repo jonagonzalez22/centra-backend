@@ -128,6 +128,8 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertJsonPath('data.editable', true)
             ->assertJsonPath('data.block_reason', null)
             ->assertJsonPath('data.delivery_date_editable', true)
+            ->assertJsonPath('data.delivery_date_block_reason', null)
+            ->assertJsonPath('data.delivery_date_block_message', null)
             ->assertJsonPath('data.items.0.product_id', $this->product->id)
             ->assertJsonPath('data.items.0.current_quantity', 10)
             ->assertJsonPath('data.items.0.delivered_quantity', 0)
@@ -153,6 +155,8 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
         $response
             ->assertJsonPath('data.editable', true)
             ->assertJsonPath('data.delivery_date_editable', false)
+            ->assertJsonPath('data.delivery_date_block_reason', 'active_route_commitment')
+            ->assertJsonPath('data.delivery_date_block_message', 'La fecha de entrega no puede modificarse porque el pedido tiene mercadería comprometida en una ruta activa.')
             ->assertJsonPath('data.items.0.current_quantity', 10)
             ->assertJsonPath('data.items.0.delivered_quantity', 4)
             ->assertJsonPath('data.items.0.active_committed_quantity', 5)
@@ -246,7 +250,9 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertOk()
             ->assertJsonPath('data.editable', false)
             ->assertJsonPath('data.block_reason', 'terminal_status')
-            ->assertJsonPath('data.delivery_date_editable', false);
+            ->assertJsonPath('data.delivery_date_editable', false)
+            ->assertJsonPath('data.delivery_date_block_reason', 'terminal_status')
+            ->assertJsonPath('data.delivery_date_block_message', 'El pedido no puede editarse en su estado actual.');
     })->with(['delivered', 'cancelled', 'closed']);
 
     test('blocks the whole order when an active extra sale allocation touches one of its route stop items', function () {
@@ -269,7 +275,9 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertOk()
             ->assertJsonPath('data.editable', false)
             ->assertJsonPath('data.block_reason', 'active_extra_sale')
-            ->assertJsonPath('data.delivery_date_editable', false);
+            ->assertJsonPath('data.delivery_date_editable', false)
+            ->assertJsonPath('data.delivery_date_block_reason', 'active_extra_sale')
+            ->assertJsonPath('data.delivery_date_block_message', 'El pedido tiene una venta extra activa en una ruta operativa.');
     });
 
     test('does not block a historical extra sale allocation from a completed route', function () {

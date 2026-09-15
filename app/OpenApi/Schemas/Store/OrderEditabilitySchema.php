@@ -32,6 +32,12 @@ class OrderEditabilitySchema
     #[OA\Property(example: false)]
     public bool $delivery_date_editable;
 
+    #[OA\Property(nullable: true, enum: ['terminal_status', 'active_extra_sale', 'active_route_commitment'])]
+    public ?string $delivery_date_block_reason;
+
+    #[OA\Property(nullable: true)]
+    public ?string $delivery_date_block_message;
+
     #[OA\Property(
         type: 'array',
         items: new OA\Items(

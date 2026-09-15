@@ -20519,6 +20519,19 @@
                         "type": "boolean",
                         "example": false
                     },
+                    "delivery_date_block_reason": {
+                        "type": "string",
+                        "enum": [
+                            "terminal_status",
+                            "active_extra_sale",
+                            "active_route_commitment"
+                        ],
+                        "nullable": true
+                    },
+                    "delivery_date_block_message": {
+                        "type": "string",
+                        "nullable": true
+                    },
                     "items": {
                         "type": "array",
                         "items": {
