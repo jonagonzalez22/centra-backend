@@ -17,7 +17,7 @@ beforeEach(function () {
     $this->store = Store::factory()->create();
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->customer = Customer::factory()->create(['store_id' => $this->store->id]);
-    $this->service = new CommercialOperationService();
+    $this->service = app(CommercialOperationService::class);
 });
 
 function makeOrder(Store $store, array $attributes = []): CommercialOperation

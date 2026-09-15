@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ListOrdersRequest;
-use App\Http\Requests\Api\V1\Store\UpdateOrderItemsRequest;
+use App\Http\Requests\Api\V1\Store\UpdateOrderRequest;
 use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
 use App\Http\Resources\OrderEditabilityResource;
@@ -270,12 +270,12 @@ class OrderController extends Controller
     }
 
     /**
-     * Actualiza únicamente el estado final de los ítems de un pedido. La fecha
-     * de entrega y el domicilio permanecen fuera de este endpoint.
+     * Actualiza los ítems y/o la fecha de entrega de un pedido. El domicilio
+     * permanece fuera de este endpoint.
      *
      * @OA\Put(
      *   path="/store/orders/{id}",
-     *   summary="Editar los ítems de un pedido",
+     *   summary="Editar ítems y/o fecha de entrega de un pedido",
      *   tags={"Store - Pedidos"},
      *   security={{"sanctum":{}}},
      *
@@ -285,14 +285,16 @@ class OrderController extends Controller
      *     required=true,
      *
      *     @OA\JsonContent(
-     *       required={"items"},
      *
      *       @OA\Property(property="items", type="array", minItems=1, @OA\Items(
      *         type="object",
      *         required={"product_id", "quantity"},
      *         @OA\Property(property="product_id", type="string", format="uuid"),
      *         @OA\Property(property="quantity", type="integer", minimum=1, example=10)
-     *       ))
+     *       )),
+     *       @OA\Property(property="requested_delivery_date", type="string", format="date", example="2026-09-20", description="Requiere reason cuando cambia."),
+     *       @OA\Property(property="reason", type="string", enum={"customer_requested_reschedule", "customer_absent", "address_closed", "weather_conditions", "operational_issue", "other"}),
+     *       @OA\Property(property="observation", type="string", nullable=true, description="Obligatoria cuando reason es other.")
      *     )
      *   ),
      *
@@ -314,8 +316,8 @@ class OrderController extends Controller
      *   @OA\Response(response=422, description="Edición no permitida o datos inválidos")
      * )
      */
-    public function updateItems(
-        UpdateOrderItemsRequest $request,
+    public function update(
+        UpdateOrderRequest $request,
         OrderItemEditService $itemEditService,
         OrderHistoryBuilder $historyBuilder,
         string $id
@@ -332,9 +334,12 @@ class OrderController extends Controller
             ], 404);
         }
 
-        $operation = $itemEditService->updateItems(
+        $operation = $itemEditService->update(
             $operation,
-            $request->validated('items'),
+            $request->has('items') ? $request->validated('items') : null,
+            $request->has('requested_delivery_date') ? $request->validated('requested_delivery_date') : null,
+            $request->validated('reason'),
+            $request->validated('observation'),
             $request->user()
         );
         $operation->load([

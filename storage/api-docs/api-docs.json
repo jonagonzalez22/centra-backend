@@ -12992,9 +12992,9 @@
                 "tags": [
                     "Store - Pedidos"
                 ],
-                "summary": "Editar los ítems de un pedido",
-                "description": "Actualiza únicamente el estado final de los ítems de un pedido. La fecha\nde entrega y el domicilio permanecen fuera de este endpoint.",
-                "operationId": "73f0db2e4f5b50b47d2ac1072195df5b",
+                "summary": "Editar ítems y/o fecha de entrega de un pedido",
+                "description": "Actualiza los ítems y/o la fecha de entrega de un pedido. El domicilio\npermanece fuera de este endpoint.",
+                "operationId": "557f5373c8df141224ab981edb615e2d",
                 "parameters": [
                     {
                         "name": "id",
@@ -13011,9 +13011,6 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "required": [
-                                    "items"
-                                ],
                                 "properties": {
                                     "items": {
                                         "type": "array",
@@ -13036,6 +13033,28 @@
                                             "type": "object"
                                         },
                                         "minItems": 1
+                                    },
+                                    "requested_delivery_date": {
+                                        "description": "Requiere reason cuando cambia.",
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-09-20"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                            "customer_requested_reschedule",
+                                            "customer_absent",
+                                            "address_closed",
+                                            "weather_conditions",
+                                            "operational_issue",
+                                            "other"
+                                        ]
+                                    },
+                                    "observation": {
+                                        "description": "Obligatoria cuando reason es other.",
+                                        "type": "string",
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"

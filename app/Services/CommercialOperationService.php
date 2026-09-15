@@ -13,7 +13,10 @@ use Illuminate\Validation\ValidationException;
 
 class CommercialOperationService
 {
-    public function __construct(private readonly StoreOperationPaymentService $storePaymentService) {}
+    public function __construct(
+        private readonly StoreOperationPaymentService $storePaymentService,
+        private readonly OrderDeliveryDateService $orderDeliveryDateService,
+    ) {}
 
     /**
      * Reduce quantities that are no longer commercially owed while preserving
@@ -212,25 +215,7 @@ class CommercialOperationService
                 ]);
             }
 
-            if (! in_array($operation->status, ['open', 'confirmed'], true)) {
-                throw ValidationException::withMessages([
-                    'status' => ['Solo los pedidos activos pueden ser reprogramados.'],
-                ]);
-            }
-
-            if ($operation->requested_delivery_date === null) {
-                throw ValidationException::withMessages([
-                    'requested_delivery_date' => ['La operación no tiene fecha de entrega asignada.'],
-                ]);
-            }
-
-            $currentDate = $operation->requested_delivery_date->format('Y-m-d');
-
-            if ($newDate === $currentDate) {
-                throw ValidationException::withMessages([
-                    'new_date' => ['La nueva fecha debe ser diferente a la actual.'],
-                ]);
-            }
+            $currentDate = $this->orderDeliveryDateService->change($operation, $newDate, 'new_date');
 
             CommercialOperationEvent::create([
                 'store_id' => $operation->store_id,
@@ -241,10 +226,6 @@ class CommercialOperationService
                 'reason' => $reason,
                 'observation' => $observation,
                 'user_id' => $user->id,
-            ]);
-
-            $operation->update([
-                'requested_delivery_date' => $newDate,
             ]);
 
             return $operation->fresh();

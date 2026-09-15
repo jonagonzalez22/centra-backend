@@ -5,11 +5,15 @@ declare(strict_types=1);
 use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
+use App\Models\DeliveryRoute;
 use App\Models\Feature;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
+use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -84,7 +88,32 @@ function rescheduleOp(User $user, string $operationId, array $data = []): \Illum
         ->putJson("/api/v1/store/operations/{$operationId}/reschedule", array_merge($default, $data));
 }
 
+function rescheduleRouteCommitment(Store $store, User $user, CommercialOperation $order, Product $product, string $status, int $planned, int $loaded): void
+{
+    $route = DeliveryRoute::create([
+        'store_id' => $store->id,
+        'vehicle_id' => Vehicle::factory()->forStore($store)->create()->id,
+        'driver_id' => $user->id,
+        'operational_date' => now()->toDateString(),
+        'status' => $status,
+        'created_by' => $user->id,
+    ]);
+    $stop = RouteStop::create(['route_id' => $route->id, 'order_id' => $order->id, 'sequence' => 1, 'status' => $status === 'completed' ? 'completed' : 'pending']);
+    RouteStopItem::create(['route_stop_id' => $stop->id, 'product_id' => $product->id, 'quantity_planned' => $planned, 'quantity_loaded' => $loaded, 'quantity_delivered' => $status === 'completed' ? $loaded : 0]);
+}
+
 describe('PUT /api/v1/store/operations/{operation}/reschedule', function () {
+    test('shares active-commitment semantics with order editing', function () {
+        $user = makeAuthUser($this->store, 'STORE_ADMIN', ['orders.edit']);
+        $order = makeOrderForStore($this->store, ['status' => 'partially_delivered']);
+        rescheduleRouteCommitment($this->store, $user, $order, $this->product, 'completed', 4, 4);
+
+        rescheduleOp($user, $order->id)->assertOk();
+
+        rescheduleRouteCommitment($this->store, $user, $order, $this->product, 'loaded', 2, 1);
+        rescheduleOp($user, $order->id, ['new_date' => now()->addDays(12)->toDateString()])
+            ->assertStatus(422)->assertJsonValidationErrors('new_date');
+    });
     test('it returns 200 with updated operation on valid reschedule', function () {
         $user = makeAuthUser($this->store, 'STORE_ADMIN', ['orders.edit']);
         $order = makeOrderForStore($this->store);

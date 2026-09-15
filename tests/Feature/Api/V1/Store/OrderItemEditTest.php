@@ -130,12 +130,102 @@ function updateEditableOrder(User $user, CommercialOperation $order, array $item
         ->putJson('/api/v1/store/orders/'.$order->id, ['items' => $items]);
 }
 
+function updateEditableOrderDate(User $user, CommercialOperation $order, array $data): \Illuminate\Testing\TestResponse
+{
+    return test()->actingAs($user, 'sanctum')
+        ->putJson('/api/v1/store/orders/'.$order->id, $data);
+}
+
 function orderPayloadItem(Product $product, int $quantity): array
 {
     return ['product_id' => $product->id, 'quantity' => $quantity];
 }
 
 describe('PUT /api/v1/store/orders/{order} — item editing', function () {
+    test('changes delivery date without changing stock, reservations or items', function (string $status) {
+        $order = editableOrder($this->store, $this->user, $this->customer, ['status' => $status]);
+        editableOrderLine($order, $this->productA, 10);
+        $newDate = now()->addDays(7)->toDateString();
+
+        updateEditableOrderDate($this->user, $order, [
+            'requested_delivery_date' => $newDate,
+            'reason' => 'customer_requested_reschedule',
+        ])->assertOk()->assertJsonPath('data.requested_delivery_date', $newDate);
+
+        expect($order->fresh()->requested_delivery_date->format('Y-m-d'))->toBe($newDate)
+            ->and($this->productA->fresh()->stock_reserved)->toBe(10)
+            ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(10);
+        $event = CommercialOperationEvent::where('operation_id', $order->id)->sole();
+        expect($event->event_type)->toBe('order_edited')
+            ->and($event->previous_date->format('Y-m-d'))->not->toBe($newDate)
+            ->and($event->new_date->format('Y-m-d'))->toBe($newDate);
+    })->with(['open', 'confirmed', 'partially_delivered']);
+
+    test('blocks delivery date changes for active route commitments', function (string $routeStatus, int $planned, int $loaded) {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        editableOrderLine($order, $this->productA, 10);
+        editableOrderRouteItem($this->store, $this->user, $order, $this->productA, $routeStatus, 'pending', $planned, $loaded);
+
+        updateEditableOrderDate($this->user, $order, [
+            'requested_delivery_date' => now()->addDays(7)->toDateString(),
+            'reason' => 'customer_requested_reschedule',
+        ])->assertStatus(422)->assertJsonValidationErrors('requested_delivery_date');
+    })->with([
+        ['draft', 2, 0], ['planned', 2, 0], ['loaded', 10, 6], ['dispatched', 10, 6], ['awaiting_reconciliation', 10, 6],
+    ]);
+
+    test('allows a delivery date change with completed route history only and rejects same date', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer, ['status' => 'partially_delivered']);
+        editableOrderLine($order, $this->productA, 10);
+        editableOrderRouteItem($this->store, $this->user, $order, $this->productA, 'completed', 'completed', 4, 4, 4);
+
+        updateEditableOrderDate($this->user, $order, [
+            'requested_delivery_date' => now()->addDays(7)->toDateString(),
+            'reason' => 'customer_requested_reschedule',
+        ])->assertOk();
+
+        updateEditableOrderDate($this->user, $order->fresh(), [
+            'requested_delivery_date' => now()->addDays(7)->toDateString(),
+            'reason' => 'customer_requested_reschedule',
+        ])->assertStatus(422)->assertJsonValidationErrors('requested_delivery_date');
+    });
+
+    test('updates items and date atomically and rolls both back when the date is blocked', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        editableOrderLine($order, $this->productA, 10);
+        editableOrderRouteItem($this->store, $this->user, $order, $this->productA, 'planned', 'pending', 2, 0);
+        $originalDate = $order->requested_delivery_date->format('Y-m-d');
+
+        updateEditableOrderDate($this->user, $order, [
+            'items' => [orderPayloadItem($this->productA, 9)],
+            'requested_delivery_date' => now()->addDays(7)->toDateString(),
+            'reason' => 'customer_requested_reschedule',
+        ])->assertStatus(422)->assertJsonValidationErrors('requested_delivery_date');
+
+        expect((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(10)
+            ->and($order->fresh()->requested_delivery_date->format('Y-m-d'))->toBe($originalDate);
+    });
+
+    test('requires a valid new date and reason, and applies valid combined edits', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        editableOrderLine($order, $this->productA, 10);
+        $newDate = now()->addDays(7)->toDateString();
+
+        updateEditableOrderDate($this->user, $order, ['requested_delivery_date' => 'not-a-date'])
+            ->assertStatus(422)->assertJsonValidationErrors('requested_delivery_date');
+        updateEditableOrderDate($this->user, $order, ['requested_delivery_date' => $newDate])
+            ->assertStatus(422)->assertJsonValidationErrors('reason');
+
+        updateEditableOrderDate($this->user, $order, [
+            'items' => [orderPayloadItem($this->productA, 8)],
+            'requested_delivery_date' => $newDate,
+            'reason' => 'customer_requested_reschedule',
+        ])->assertOk();
+
+        expect((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(8)
+            ->and($order->fresh()->requested_delivery_date->format('Y-m-d'))->toBe($newDate)
+            ->and(CommercialOperationEvent::where('operation_id', $order->id)->count())->toBe(1);
+    });
     test('increases an existing product, reserves only the delta and records history', function () {
         $order = editableOrder($this->store, $this->user, $this->customer);
         editableOrderLine($order, $this->productA, 10, 120, 10, 5);

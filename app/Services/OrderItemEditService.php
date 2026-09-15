@@ -16,15 +16,22 @@ class OrderItemEditService
     public function __construct(
         private readonly CommercialOperationService $commercialOperationService,
         private readonly OrderEditabilityService $orderEditabilityService,
+        private readonly OrderDeliveryDateService $orderDeliveryDateService,
     ) {}
 
     /**
      * Updates the final commercial quantities only. The editability snapshot is
      * recalculated while the order is locked; callers must not send it back.
      */
-    public function updateItems(CommercialOperation $operation, array $items, User $user): CommercialOperation
-    {
-        return DB::transaction(function () use ($operation, $items, $user) {
+    public function update(
+        CommercialOperation $operation,
+        ?array $items,
+        ?string $requestedDeliveryDate,
+        ?string $reason,
+        ?string $observation,
+        User $user
+    ): CommercialOperation {
+        return DB::transaction(function () use ($operation, $items, $requestedDeliveryDate, $reason, $observation, $user) {
             $order = CommercialOperation::forStore($user->store_id)
                 ->whereKey($operation->id)
                 ->lockForUpdate()
@@ -34,6 +41,26 @@ class OrderItemEditService
                 throw ValidationException::withMessages([
                     'order' => ['La operación indicada no es un pedido.'],
                 ]);
+            }
+
+            if ($items === null) {
+                $previousDate = $this->changeDeliveryDate($order, $requestedDeliveryDate, $reason);
+
+                CommercialOperationEvent::create([
+                    'store_id' => $order->store_id,
+                    'operation_id' => $order->id,
+                    'event_type' => 'order_edited',
+                    'previous_date' => $previousDate,
+                    'new_date' => $requestedDeliveryDate,
+                    'reason' => $reason,
+                    'observation' => $observation,
+                    'metadata' => ['items' => []],
+                    'user_id' => $user->id,
+                    'previous_status' => $order->status,
+                    'new_status' => $order->status,
+                ]);
+
+                return $order->fresh();
             }
 
             $lockedItems = OperationItem::query()
@@ -103,9 +130,13 @@ class OrderItemEditService
                 }
             }
 
-            if ($changes === []) {
+            if ($changes === [] && $requestedDeliveryDate === null) {
                 return $order->fresh();
             }
+
+            $previousDate = $requestedDeliveryDate === null
+                ? $order->requested_delivery_date?->format('Y-m-d')
+                : $this->changeDeliveryDate($order, $requestedDeliveryDate, $reason);
 
             $order->payments()->orderBy('id')->lockForUpdate()->get();
             $paidInCents = (int) round((float) $order->payments()->sum('amount') * 100);
@@ -160,9 +191,10 @@ class OrderItemEditService
                 'store_id' => $updatedOrder->store_id,
                 'operation_id' => $updatedOrder->id,
                 'event_type' => 'order_edited',
-                'previous_date' => $updatedOrder->requested_delivery_date,
+                'previous_date' => $previousDate,
                 'new_date' => $updatedOrder->requested_delivery_date,
-                'reason' => 'items_updated',
+                'reason' => $requestedDeliveryDate === null ? 'items_updated' : $reason,
+                'observation' => $requestedDeliveryDate === null ? null : $observation,
                 'metadata' => [
                     'items' => array_values($changes),
                     'totals' => [
@@ -177,6 +209,23 @@ class OrderItemEditService
 
             return $updatedOrder->fresh();
         });
+    }
+
+    private function changeDeliveryDate(CommercialOperation $order, ?string $requestedDeliveryDate, ?string $reason): string
+    {
+        if ($requestedDeliveryDate === null) {
+            throw ValidationException::withMessages([
+                'requested_delivery_date' => ['La fecha de entrega es obligatoria.'],
+            ]);
+        }
+
+        if ($reason === null) {
+            throw ValidationException::withMessages([
+                'reason' => ['El motivo es obligatorio cuando cambia la fecha de entrega.'],
+            ]);
+        }
+
+        return $this->orderDeliveryDateService->change($order, $requestedDeliveryDate);
     }
 
     private function addCommercialObligation(CommercialOperation $order, Product $product, int $quantity): void
