@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1\Store;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ProductSearchRequest;
 use App\Http\Resources\ProductSearchResource;
-use App\Models\Product;
+use App\Services\CommercialProductCatalogService;
 use Illuminate\Http\JsonResponse;
 
 class ProductSearchController extends Controller
@@ -48,19 +48,12 @@ class ProductSearchController extends Controller
      *   @OA\Response(response=422, description="Error de validación")
      * )
      */
-    public function __invoke(ProductSearchRequest $request): JsonResponse
+    public function __invoke(ProductSearchRequest $request, CommercialProductCatalogService $catalog): JsonResponse
     {
         $storeId = $request->user()->store_id;
         $q = $request->validated('q');
 
-        $products = Product::forStore($storeId)
-            ->where('is_active', true)
-            ->where(function ($query) use ($q) {
-                $query->where('name', 'like', '%'.$q.'%')
-                    ->orWhere('sku', 'like', '%'.$q.'%');
-            })
-            ->limit(10)
-            ->get(['id', 'name', 'sku']);
+        $products = $catalog->search($storeId, $q);
 
         return response()->json([
             'status' => 'success',

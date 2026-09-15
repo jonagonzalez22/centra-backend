@@ -10432,6 +10432,103 @@
                 ]
             }
         },
+        "/store/operations/products/search": {
+            "get": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Buscar productos vendibles para operaciones comerciales",
+                "description": "Catálogo comercial para POS y pedidos. Retorna hasta 10 productos activos de la tienda actual por nombre, SKU o código de barras.",
+                "operationId": "2fbdd1cce9b167a4edfeb28ebb184100",
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "Búsqueda parcial por nombre o SKU. No combinar con barcode.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255,
+                            "minLength": 2
+                        }
+                    },
+                    {
+                        "name": "barcode",
+                        "in": "query",
+                        "description": "Código de barras exacto. No combinar con q.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 100,
+                            "minLength": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Productos vendibles obtenidos exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Productos vendibles obtenidos exitosamente."
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "Cinta Métrica 5m"
+                                                    },
+                                                    "sku": {
+                                                        "type": "string",
+                                                        "example": "CINTA-5M",
+                                                        "nullable": true
+                                                    },
+                                                    "barcode": {
+                                                        "type": "string",
+                                                        "example": "7791234567890",
+                                                        "nullable": true
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Feature POS no disponible"
+                    },
+                    "422": {
+                        "description": "Debe informar q o barcode"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/customers/{customerId}/addresses": {
             "get": {
                 "tags": [
