@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\CommercialOperationController;
 use App\Http\Controllers\Api\V1\Store\CommercialProductCatalogController;
+use App\Http\Controllers\Api\V1\Store\CommercialProductDetailController;
 use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
 use App\Http\Controllers\Api\V1\Store\OrderController;
 use App\Http\Controllers\Api\V1\Store\OrderPaymentController;
@@ -177,6 +178,8 @@ Route::prefix('v1')->group(function () {
       Route::middleware('feature:pos')->group(function () {
         Route::get('operations/products/search', CommercialProductCatalogController::class)
           ->name('store.operations.products.search');
+        Route::get('operations/products/{id}', CommercialProductDetailController::class)
+          ->name('store.operations.products.show');
         Route::get('orders', [OrderController::class, 'index'])
           ->middleware('permission:orders.view')
           ->name('store.orders.index');

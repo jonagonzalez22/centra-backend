@@ -7,6 +7,13 @@ use Illuminate\Support\Collection;
 
 class CommercialProductCatalogService
 {
+    public function findActiveForStore(string $storeId, string $productId): ?Product
+    {
+        return Product::forStore($storeId)
+            ->where('is_active', true)
+            ->find($productId);
+    }
+
     /**
      * @return Collection<int, Product>
      */

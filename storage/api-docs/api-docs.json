@@ -10529,6 +10529,97 @@
                 ]
             }
         },
+        "/store/operations/products/{id}": {
+            "get": {
+                "tags": [
+                    "Store - Operaciones Comerciales"
+                ],
+                "summary": "Ver detalle comercial de un producto vendible",
+                "description": "Retorna el precio de venta actual y stock disponible de un producto activo de la tienda actual para utilizarlo en una operación comercial.",
+                "operationId": "521aff4da7b699d34f38cfdd6017fb64",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del producto",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Detalle comercial obtenido exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Detalle comercial obtenido exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "Cinta Métrica 5m"
+                                                },
+                                                "sku": {
+                                                    "type": "string",
+                                                    "example": "CINTA-5M",
+                                                    "nullable": true
+                                                },
+                                                "barcode": {
+                                                    "type": "string",
+                                                    "example": "7791234567890",
+                                                    "nullable": true
+                                                },
+                                                "price": {
+                                                    "type": "number",
+                                                    "format": "float",
+                                                    "example": 7500
+                                                },
+                                                "available_stock": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Feature POS no disponible"
+                    },
+                    "404": {
+                        "description": "Producto vendible no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/customers/{customerId}/addresses": {
             "get": {
                 "tags": [
