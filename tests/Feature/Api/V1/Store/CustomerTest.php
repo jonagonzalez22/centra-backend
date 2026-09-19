@@ -65,6 +65,76 @@ test('filters customers by search', function () {
         ->assertJsonPath('data.items.0.display_name', 'Juan Pérez');
 });
 
+test('keeps broad search by default and limits identity search to customer identity fields', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'display_name' => 'Florencia Pistone',
+        'document_type_id' => $this->documentType->id,
+        'document_number' => '11111111112',
+        'customer_code' => 'C-000006',
+    ]);
+    CustomerAddress::factory()->forCustomer($customer)->create(['street' => 'Guemes']);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=me')
+        ->assertStatus(200)
+        ->assertJsonPath('data.items.0.id', $customer->id);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=me&search_mode=identity')
+        ->assertStatus(200)
+        ->assertJsonCount(0, 'data.items');
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=FLORENCIA&search_mode=identity')
+        ->assertStatus(200)
+        ->assertJsonPath('data.items.0.id', $customer->id);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=111111&search_mode=identity')
+        ->assertStatus(200)
+        ->assertJsonPath('data.items.0.id', $customer->id);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=C-000006&search_mode=identity')
+        ->assertStatus(200)
+        ->assertJsonPath('data.items.0.id', $customer->id);
+});
+
+test('identity search preserves store and status filters', function () {
+    $inactiveCustomer = Customer::factory()->forStore($this->store)->inactive()->create([
+        'display_name' => 'Fernando Inactivo',
+        'document_type_id' => $this->documentType->id,
+    ]);
+    $otherStore = Store::factory()->create();
+    Customer::factory()->forStore($otherStore)->create([
+        'display_name' => 'Fernando Otra Tienda',
+        'document_type_id' => $this->documentType->id,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=fernando&search_mode=identity&status=active')
+        ->assertStatus(200)
+        ->assertJsonCount(0, 'data.items');
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=fernando&search_mode=identity&status=inactive')
+        ->assertStatus(200)
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $inactiveCustomer->id);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search=otra tienda&search_mode=identity')
+        ->assertStatus(200)
+        ->assertJsonCount(0, 'data.items');
+});
+
+test('rejects an unknown customer search mode', function () {
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/customers?search_mode=address')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('search_mode');
+});
+
 test('filters customers by status', function () {
     Customer::factory()->forStore($this->store)->create([
         'display_name' => 'Juan Pérez',

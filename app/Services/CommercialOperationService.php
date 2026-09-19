@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
+use App\Models\Customer;
 use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\StorePaymentMethod;
@@ -100,9 +101,22 @@ class CommercialOperationService
             $user = User::where('id', $userId)->where('store_id', $storeId)->firstOrFail();
 
             $customerId = $data['customer_id'] ?? null;
+            $customerDisplayName = $data['customer_display_name'] ?? null;
             $requestedDeliveryDate = $data['requested_delivery_date'] ?? null;
 
             $this->validateBusinessRules($data, $storeId);
+
+            if ($customerId) {
+                $customer = Customer::forStore($storeId)->find($customerId);
+
+                if (! $customer) {
+                    throw ValidationException::withMessages([
+                        'customer_id' => 'El cliente no existe o no pertenece a tu tienda.',
+                    ]);
+                }
+
+                $customerDisplayName = $customer->display_name;
+            }
 
             usort($items, fn ($a, $b) => strcmp($a['product_id'], $b['product_id']));
 
@@ -163,6 +177,7 @@ class CommercialOperationService
                 'store_id' => $storeId,
                 'user_id' => $userId,
                 'customer_id' => $customerId,
+                'customer_display_name' => $customerDisplayName,
                 'operation_number' => $operationNumber,
                 'type' => $type,
                 'status' => $status,

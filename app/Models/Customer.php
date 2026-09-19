@@ -90,6 +90,15 @@ class Customer extends Model
         return $query->where('search_text', 'like', '%'.$term.'%');
     }
 
+    public function scopeIdentitySearch(Builder $query, string $term): Builder
+    {
+        return $query->where(function (Builder $query) use ($term) {
+            $query->where('display_name', 'like', '%'.$term.'%')
+                ->orWhere('document_number_normalized', 'like', '%'.$term.'%')
+                ->orWhere('customer_code', 'like', '%'.$term.'%');
+        });
+    }
+
     public function scopeHasLocation(Builder $query): Builder
     {
         return $query->whereHas('addresses', function ($query) {

@@ -9,6 +9,7 @@ use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 
 class CustomerController extends Controller
@@ -22,6 +23,7 @@ class CustomerController extends Controller
         tags: ['Store - Clientes']
     )]
     #[OA\Parameter(name: 'search', in: 'query', required: false, description: 'Búsqueda por nombre, documento o código', schema: new OA\Schema(type: 'string', example: 'Juan'))]
+    #[OA\Parameter(name: 'search_mode', in: 'query', required: false, description: 'Modo de búsqueda: identity limita la búsqueda a identidad del cliente.', schema: new OA\Schema(type: 'string', enum: ['identity']))]
     #[OA\Parameter(name: 'status', in: 'query', required: false, description: 'Filtrar por estado', schema: new OA\Schema(type: 'string', enum: ['active', 'inactive']))]
     #[OA\Parameter(name: 'location_status', in: 'query', required: false, description: 'Filtrar por geolocalización', schema: new OA\Schema(type: 'string', enum: ['all', 'with_location', 'without_location']))]
     #[OA\Parameter(name: 'per_page', in: 'query', required: false, description: 'Resultados por página (default: 15)', schema: new OA\Schema(type: 'integer', example: 15))]
@@ -65,6 +67,10 @@ class CustomerController extends Controller
     )]
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'search_mode' => ['nullable', 'string', Rule::in(['identity'])],
+        ]);
+
         $storeId = $request->user()->store_id;
 
         $customers = Customer::forStore($storeId)
@@ -75,7 +81,13 @@ class CustomerController extends Controller
                 },
             ])
             ->when($request->filled('search'), function ($query) use ($request) {
-                $query->where('search_text', 'like', '%'.$request->search.'%');
+                if ($request->input('search_mode') === 'identity') {
+                    $query->identitySearch($request->search);
+
+                    return;
+                }
+
+                $query->search($request->search);
             })
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->where('status', $request->status);

@@ -9,6 +9,24 @@ use Illuminate\Validation\Rule;
 
 class StoreCommercialOperationRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('customer_display_name')) {
+            return;
+        }
+
+        $customerDisplayName = $this->input('customer_display_name');
+
+        if (is_string($customerDisplayName)) {
+            $customerDisplayName = trim($customerDisplayName);
+            $customerDisplayName = $customerDisplayName === '' ? null : $customerDisplayName;
+        }
+
+        $this->merge([
+            'customer_display_name' => $customerDisplayName,
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -26,6 +44,12 @@ class StoreCommercialOperationRequest extends FormRequest
                 Rule::exists('customers', 'id')->where(function ($query) use ($storeId) {
                     return $query->where('store_id', $storeId);
                 }),
+            ],
+            'customer_display_name' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::prohibitedIf(fn () => $this->filled('customer_id')),
             ],
             'requested_delivery_date' => [
                 'prohibited_if:type,sale',
@@ -66,6 +90,8 @@ class StoreCommercialOperationRequest extends FormRequest
             'type.in' => 'El tipo de operación debe ser: sale u order.',
             'customer_id.uuid' => 'El ID del cliente debe ser un UUID válido.',
             'customer_id.exists' => 'El cliente no existe o no pertenece a tu tienda.',
+            'customer_display_name.max' => 'El nombre del cliente no puede exceder los 100 caracteres.',
+            'customer_display_name.prohibited' => 'No podés indicar un nombre manual junto con un cliente registrado.',
             'requested_delivery_date.prohibited_if' => 'La fecha de entrega solicitada no aplica para ventas.',
             'requested_delivery_date.date' => 'La fecha de entrega debe ser una fecha válida.',
             'requested_delivery_date.after_or_equal' => 'La fecha de entrega debe ser igual o posterior a hoy.',

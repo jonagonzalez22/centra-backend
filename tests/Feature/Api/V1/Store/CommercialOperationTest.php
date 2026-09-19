@@ -376,6 +376,123 @@ describe('POST /api/v1/store/operations - Stock', function () {
 });
 
 describe('POST /api/v1/store/operations - Business Rules', function () {
+    test('sale with a registered customer persists its display name snapshot', function () {
+        $this->customer->update(['display_name' => 'Juan Pérez']);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_id' => $this->customer->id,
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertCreated()
+            ->assertJsonPath('data.customer_display_name', 'Juan Pérez');
+
+        $operation = CommercialOperation::sole();
+        expect($operation->customer_id)->toBe($this->customer->id)
+            ->and($operation->customer_display_name)->toBe('Juan Pérez');
+    });
+
+    test('sale persists a trimmed manual customer display name', function () {
+        $spm = makePaymentMethodForStore($this->store);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_display_name' => '  Federico  ',
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [
+                ['store_payment_method_id' => $spm->id, 'amount' => 100.00],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('data.customer_display_name', 'Federico');
+
+        $operation = CommercialOperation::sole();
+        expect($operation->customer_id)->toBeNull()
+            ->and($operation->customer_display_name)->toBe('Federico');
+    });
+
+    test('anonymous sale persists no customer display name', function () {
+        $spm = makePaymentMethodForStore($this->store);
+
+        createOperation([
+            'type' => 'sale',
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [
+                ['store_payment_method_id' => $spm->id, 'amount' => 100.00],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('data.customer_display_name', null);
+
+        $operation = CommercialOperation::sole();
+        expect($operation->customer_id)->toBeNull()
+            ->and($operation->customer_display_name)->toBeNull();
+    });
+
+    test('sale rejects a registered customer with a manual display name', function () {
+        createOperation([
+            'type' => 'sale',
+            'customer_id' => $this->customer->id,
+            'customer_display_name' => 'Federico',
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_display_name');
+    });
+
+    test('sale rejects a customer from another store when creating a snapshot', function () {
+        $otherCustomer = Customer::factory()->create(['store_id' => Store::factory()->create()->id]);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_id' => $otherCustomer->id,
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_id');
+    });
+
+    test('sale rejects a manual display name longer than 100 characters', function () {
+        $spm = makePaymentMethodForStore($this->store);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_display_name' => str_repeat('a', 101),
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [
+                ['store_payment_method_id' => $spm->id, 'amount' => 100.00],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_display_name');
+    });
+
+    test('sale normalizes a whitespace-only display name to null', function () {
+        $spm = makePaymentMethodForStore($this->store);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_display_name' => '   ',
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [
+                ['store_payment_method_id' => $spm->id, 'amount' => 100.00],
+            ],
+        ])->assertCreated();
+
+        expect(CommercialOperation::sole()->customer_display_name)->toBeNull();
+    });
+
     test('order requires customer_id and requested_delivery_date', function () {
         $response = createOperation([
             'type' => 'order',
@@ -387,6 +504,58 @@ describe('POST /api/v1/store/operations - Business Rules', function () {
 
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['customer_id', 'requested_delivery_date']);
+    });
+
+    test('manual display name does not replace the required customer for an order', function () {
+        createOperation([
+            'type' => 'order',
+            'customer_display_name' => 'Federico',
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_id');
+    });
+
+    test('order with a registered customer persists its display name snapshot', function () {
+        $this->customer->update(['display_name' => 'Cliente Pedido']);
+
+        createOperation([
+            'type' => 'order',
+            'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertCreated();
+
+        expect(CommercialOperation::sole()->customer_display_name)->toBe('Cliente Pedido');
+    });
+
+    test('customer display name snapshot remains after the customer is renamed or deleted', function () {
+        $this->customer->update(['display_name' => 'Nombre Original']);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_id' => $this->customer->id,
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertCreated();
+
+        $operation = CommercialOperation::sole();
+        $this->customer->update(['display_name' => 'Nombre Actualizado']);
+
+        expect($operation->fresh()->customer_display_name)->toBe('Nombre Original');
+
+        $this->customer->delete();
+
+        expect($operation->fresh()->customer_id)->toBeNull()
+            ->and($operation->fresh()->customer_display_name)->toBe('Nombre Original');
     });
 
     test('sale prohibits requested_delivery_date', function () {

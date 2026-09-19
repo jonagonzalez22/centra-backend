@@ -30,6 +30,7 @@ use Illuminate\Support\Collection;
  *   @OA\Property(property="created_at", type="string", format="date-time"),
  *   @OA\Property(property="updated_at", type="string", format="date-time"),
  *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true),
+ *   @OA\Property(property="customer_display_name", type="string", nullable=true),
  *   @OA\Property(property="created_by", type="object",
  *     @OA\Property(property="id", type="string", format="uuid"),
  *     @OA\Property(property="name", type="string")
@@ -79,6 +80,7 @@ class CommercialOperationResource extends JsonResource
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
             'branch_id' => $this->branch_id,
+            'customer_display_name' => $this->customer_display_name,
             'created_by' => $this->whenLoaded('user', fn () => [
                 'id' => $this->user_id,
                 'name' => $this->user?->name,

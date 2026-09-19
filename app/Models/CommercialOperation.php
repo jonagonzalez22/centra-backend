@@ -24,6 +24,7 @@ class CommercialOperation extends Model
         'branch_id',
         'user_id',
         'customer_id',
+        'customer_display_name',
         'operation_number',
         'type',
         'status',
