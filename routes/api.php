@@ -198,6 +198,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
         Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');
+        Route::get('operations/{operation}/receipt', [CommercialOperationController::class, 'receipt'])->name('store.operations.receipt');
         Route::post('operations', [CommercialOperationController::class, 'store'])->name('store.operations.store');
         Route::put('operations/{operation}/reschedule', [CommercialOperationController::class, 'reschedule'])
           ->middleware('permission:orders.edit')

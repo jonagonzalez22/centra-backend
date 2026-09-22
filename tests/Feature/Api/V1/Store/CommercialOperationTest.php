@@ -84,6 +84,12 @@ function getOperation(string $id): \Illuminate\Testing\TestResponse
         ->getJson('/api/v1/store/operations/'.$id);
 }
 
+function getOperationReceipt(string $id): \Illuminate\Testing\TestResponse
+{
+    return test()->withHeader('Authorization', 'Bearer '.test()->token)
+        ->getJson('/api/v1/store/operations/'.$id.'/receipt');
+}
+
 function createOperation(array $data = []): \Illuminate\Testing\TestResponse
 {
     return test()->withHeader('Authorization', 'Bearer '.test()->token)
@@ -250,6 +256,164 @@ describe('GET /api/v1/store/operations/{id}', function () {
         $operation = createOperationForStore($this->store);
         $response = $this->getJson('/api/v1/store/operations/'.$operation->id);
         $response->assertStatus(401);
+    });
+});
+
+describe('GET /api/v1/store/operations/{id}/receipt', function () {
+    test('returns persisted sale receipt data in the store timezone', function () {
+        $this->store->update([
+            'name' => 'Ferretería Ejemplo',
+            'cuit' => '20123456789',
+            'address' => 'San Martín 123',
+            'city' => 'Mendoza',
+            'state' => 'Mendoza',
+            'timezone' => 'America/Argentina/Mendoza',
+        ]);
+        $this->user->update(['name' => 'Jonathan Caja']);
+        $this->customer->update(['display_name' => 'Nombre actual del cliente']);
+
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'customer_display_name' => 'Nombre al momento de cobrar',
+            'operation_number' => 'V-000123',
+            'type' => 'sale',
+            'status' => 'confirmed',
+            'subtotal' => 30000,
+            'tax' => 150,
+            'discount' => 1000,
+            'total' => 29150,
+        ]);
+        $operation->forceFill(['created_at' => '2026-09-19 13:35:00'])->save();
+
+        OperationItem::factory()->create([
+            'operation_id' => $operation->id,
+            'product_id' => $this->product->id,
+            'product_name' => 'Martillo Stanley histórico',
+            'quantity' => 2,
+            'price' => 15000,
+            'subtotal' => 30000,
+            'tax_amount' => 150,
+            'discount_amount' => 1000,
+        ]);
+        $this->product->update(['name' => 'Martillo Stanley actualizado', 'price' => 99999]);
+
+        $cashMethod = PaymentMethod::factory()->create(['name' => 'Efectivo', 'code' => 'cash']);
+        $transferMethod = PaymentMethod::factory()->create(['name' => 'Transferencia', 'code' => 'transfer']);
+        $storeCashMethod = StorePaymentMethod::factory()->create([
+            'store_id' => $this->store->id,
+            'payment_method_id' => $cashMethod->id,
+        ]);
+        $storeTransferMethod = StorePaymentMethod::factory()->create([
+            'store_id' => $this->store->id,
+            'payment_method_id' => $transferMethod->id,
+            'custom_name' => 'Transferencia bancaria',
+        ]);
+        OperationPayment::factory()->create([
+            'operation_id' => $operation->id,
+            'store_payment_method_id' => $storeCashMethod->id,
+            'amount' => 20000,
+        ]);
+        OperationPayment::factory()->create([
+            'operation_id' => $operation->id,
+            'store_payment_method_id' => $storeTransferMethod->id,
+            'amount' => 9150,
+        ]);
+
+        $this->customer->update(['display_name' => 'Nombre cambiado después de cobrar']);
+
+        getOperationReceipt($operation->id)
+            ->assertOk()
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.store.name', 'Ferretería Ejemplo')
+            ->assertJsonPath('data.store.cuit', '20123456789')
+            ->assertJsonPath('data.store.address', 'San Martín 123')
+            ->assertJsonPath('data.store.city', 'Mendoza')
+            ->assertJsonPath('data.store.state', 'Mendoza')
+            ->assertJsonPath('data.store.timezone', 'America/Argentina/Mendoza')
+            ->assertJsonPath('data.operation.id', $operation->id)
+            ->assertJsonPath('data.operation.operation_number', 'V-000123')
+            ->assertJsonPath('data.operation.type', 'sale')
+            ->assertJsonPath('data.operation.status', 'confirmed')
+            ->assertJsonPath('data.operation.occurred_at', '2026-09-19T13:35:00-03:00')
+            ->assertJsonPath('data.operation.cashier.id', $this->user->id)
+            ->assertJsonPath('data.operation.cashier.name', 'Jonathan Caja')
+            ->assertJsonPath('data.customer.display_name', 'Nombre al momento de cobrar')
+            ->assertJsonPath('data.items.0.product_name', 'Martillo Stanley histórico')
+            ->assertJsonPath('data.items.0.quantity', 2)
+            ->assertJsonPath('data.items.0.unit_price', 15000)
+            ->assertJsonPath('data.items.0.subtotal', 30000)
+            ->assertJsonPath('data.items.0.discount_amount', 1000)
+            ->assertJsonPath('data.items.0.tax_amount', 150)
+            ->assertJsonPath('data.totals.subtotal', 30000)
+            ->assertJsonPath('data.totals.tax', 150)
+            ->assertJsonPath('data.totals.discount', 1000)
+            ->assertJsonPath('data.totals.total', 29150)
+            ->assertJsonPath('data.totals.paid_amount', 29150)
+            ->assertJsonPath('data.totals.pending_amount', 0)
+            ->assertJsonPath('data.payments.0.method_name', 'Efectivo')
+            ->assertJsonPath('data.payments.0.amount', 20000)
+            ->assertJsonPath('data.payments.1.method_name', 'Transferencia bancaria')
+            ->assertJsonPath('data.payments.1.amount', 9150)
+            ->assertJsonCount(2, 'data.payments');
+    });
+
+    test('does not expose another store sale receipt', function () {
+        $otherStore = Store::factory()->create();
+        $otherOperation = createOperationForStore($otherStore, ['type' => 'sale']);
+
+        getOperationReceipt($otherOperation->id)
+            ->assertNotFound()
+            ->assertJsonPath('status', 'error');
+    });
+
+    test('represents an anonymous sale customer as null', function () {
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => null,
+            'customer_display_name' => null,
+            'type' => 'sale',
+        ]);
+
+        getOperationReceipt($operation->id)
+            ->assertOk()
+            ->assertJsonPath('data.customer', null);
+    });
+
+    test('falls back to the current customer name only for historical operations without a snapshot', function () {
+        $this->customer->update(['display_name' => 'Cliente histórico actual']);
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'customer_display_name' => null,
+            'type' => 'sale',
+        ]);
+
+        getOperationReceipt($operation->id)
+            ->assertOk()
+            ->assertJsonPath('data.customer.display_name', 'Cliente histórico actual');
+    });
+
+    test('returns 404 for a missing sale receipt', function () {
+        getOperationReceipt((string) \Illuminate\Support\Str::uuid())
+            ->assertNotFound()
+            ->assertJsonPath('status', 'error');
+    });
+
+    test('rejects order receipts explicitly', function () {
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'type' => 'order',
+        ]);
+
+        getOperationReceipt($operation->id)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('operation');
     });
 });
 

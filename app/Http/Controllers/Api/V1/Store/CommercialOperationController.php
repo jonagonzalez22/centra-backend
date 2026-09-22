@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Store\CancelPendingDeliveryRequest;
 use App\Http\Requests\Api\V1\Store\ListCommercialOperationsRequest;
 use App\Http\Requests\Api\V1\Store\RescheduleDeliveryDateRequest;
 use App\Http\Requests\Api\V1\Store\StoreCommercialOperationRequest;
+use App\Http\Resources\CommercialOperationReceiptResource;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
 use App\Services\CancelPendingDeliveryService;
@@ -267,6 +268,70 @@ class CommercialOperationController extends Controller
             'data' => CommercialOperationResource::make($operation),
             'errors' => null,
         ], 200);
+    }
+
+    /**
+     * @OA\Get(
+     *   path="/store/operations/{id}/receipt",
+     *   summary="Obtener los datos documentales de una venta",
+     *   tags={"Store - Operaciones Comerciales"},
+     *   security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\Response(
+     *     response=200,
+     *     description="Comprobante de venta obtenido exitosamente",
+     *
+     *     @OA\JsonContent(
+     *
+     *       @OA\Property(property="status", type="string", example="success"),
+     *       @OA\Property(property="message", type="string", example="Comprobante de venta obtenido exitosamente."),
+     *       @OA\Property(property="data", ref="#/components/schemas/CommercialOperationReceiptResource"),
+     *       @OA\Property(property="errors", type="null", example=null)
+     *     )
+     *   ),
+     *
+     *   @OA\Response(response=404, description="Operación comercial no encontrada"),
+     *   @OA\Response(response=422, description="La operación no es una venta")
+     * )
+     */
+    public function receipt(Request $request, string $id): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        $operation = CommercialOperation::forStore($storeId)
+            ->with([
+                'store',
+                'customer',
+                'user',
+                'items' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
+                'payments' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
+                'payments.storePaymentMethod.paymentMethod',
+            ])
+            ->find($id);
+
+        if (! $operation) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Operación comercial no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La operación comercial no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        if ($operation->type !== 'sale') {
+            throw ValidationException::withMessages([
+                'operation' => ['El comprobante está disponible únicamente para ventas.'],
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Comprobante de venta obtenido exitosamente.',
+            'data' => CommercialOperationReceiptResource::make($operation),
+            'errors' => null,
+        ]);
     }
 
     /**
