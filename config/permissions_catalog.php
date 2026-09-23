@@ -9,6 +9,13 @@ return [
     'Punto de Venta' => [
         ['name' => 'pos.view', 'label' => 'Ver'],
     ],
+    'Historial de ventas' => [
+        ['name' => 'sales_history.view', 'label' => 'Ver historial de ventas'],
+        ['name' => 'sales_history.print', 'label' => 'Reimprimir comprobantes'],
+    ],
+    'Ventas' => [
+        ['name' => 'sales.cancel', 'label' => 'Cancelar ventas'],
+    ],
     'Inventario' => [
         ['name' => 'inventory.view', 'label' => 'Ver'],
         ['name' => 'inventory.create', 'label' => 'Crear'],

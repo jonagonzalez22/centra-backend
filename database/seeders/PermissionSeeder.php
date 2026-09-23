@@ -8,122 +8,129 @@ use Spatie\Permission\Models\Role;
 
 class PermissionSeeder extends Seeder
 {
-  public function run(): void
-  {
-    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+    public function run(): void
+    {
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-    // 📦 Define all backoffice permissions grouped by module
-    $permissions = [
-      // Module: Stores
-      'stores.view',
-      'stores.create',
-      'stores.edit',
-      'stores.delete',
+        // 📦 Define all backoffice permissions grouped by module
+        $permissions = [
+            // Module: Stores
+            'stores.view',
+            'stores.create',
+            'stores.edit',
+            'stores.delete',
 
-      // Module: Backoffice users
-      'backoffice_users.view',
-      'backoffice_users.create',
-      'backoffice_users.edit',
-      'backoffice_users.delete',
+            // Module: Backoffice users
+            'backoffice_users.view',
+            'backoffice_users.create',
+            'backoffice_users.edit',
+            'backoffice_users.delete',
 
-      // Module: Plans
-      'plans.view',
-      'plans.create',
-      'plans.edit',
-      'plans.delete',
+            // Module: Plans
+            'plans.view',
+            'plans.create',
+            'plans.edit',
+            'plans.delete',
 
-      // Module: Geography
-      'geography.view',
+            // Module: Geography
+            'geography.view',
 
-      // Module: POS
-      'pos.view',
+            // Module: POS
+            'pos.view',
 
-      // Module: Inventory
-      'inventory.view',
-      'inventory.create',
-      'inventory.edit',
-      'inventory.adjust',
-      'inventory.delete',
+            // Module: Sales history
+            'sales_history.view',
+            'sales_history.print',
 
-      // Module: Categories
-      'categories.view',
-      'categories.create',
-      'categories.edit',
-      'categories.delete',
+            // Module: Sales
+            'sales.cancel',
 
-      // Module: Commercial Groups
-      'commercial_groups.view',
-      'commercial_groups.create',
-      'commercial_groups.edit',
-      'commercial_groups.delete',
+            // Module: Inventory
+            'inventory.view',
+            'inventory.create',
+            'inventory.edit',
+            'inventory.adjust',
+            'inventory.delete',
 
-      // Module: Customers
-      'customers.view',
-      'customers.create',
-      'customers.edit',
-      'customers.delete',
+            // Module: Categories
+            'categories.view',
+            'categories.create',
+            'categories.edit',
+            'categories.delete',
 
-      // Module: Customer Addresses
-      'customer_addresses.view',
-      'customer_addresses.create',
-      'customer_addresses.edit',
-      'customer_addresses.delete',
+            // Module: Commercial Groups
+            'commercial_groups.view',
+            'commercial_groups.create',
+            'commercial_groups.edit',
+            'commercial_groups.delete',
 
-      // Module: Customer Contacts
-      'customer_contacts.view',
-      'customer_contacts.create',
-      'customer_contacts.edit',
-      'customer_contacts.delete',
+            // Module: Customers
+            'customers.view',
+            'customers.create',
+            'customers.edit',
+            'customers.delete',
 
-      // Module: Store Payment Methods
-      'store_payment_methods.view',
-      'store_payment_methods.configure',
-      
-      // Module: Orders
-      'orders.view',
-      'orders.edit',
-      'orders.collect',
+            // Module: Customer Addresses
+            'customer_addresses.view',
+            'customer_addresses.create',
+            'customer_addresses.edit',
+            'customer_addresses.delete',
 
-      // Module: Cash
-      'cash.view',
-      'cash.open',
-      'cash.submit',
-      'cash.close',
+            // Module: Customer Contacts
+            'customer_contacts.view',
+            'customer_contacts.create',
+            'customer_contacts.edit',
+            'customer_contacts.delete',
 
-      // Module: Vehicles
-      'vehicles.view',
-      'vehicles.create',
-      'vehicles.edit',
-      'vehicles.delete',
+            // Module: Store Payment Methods
+            'store_payment_methods.view',
+            'store_payment_methods.configure',
 
-      // Module: Drivers
-      'drivers.view',
+            // Module: Orders
+            'orders.view',
+            'orders.edit',
+            'orders.collect',
 
-      // Module: Logistics — Route Management
-      'logistics.routes.view',
-      'logistics.routes.manage',
-      'logistics.routes.plan',
-      'logistics.routes.revert',
-      'logistics.routes.cancel',
-      'logistics.routes.load',
-      'logistics.routes.dispatch',
-      'logistics.routes.reconcile',
-    ];
+            // Module: Cash
+            'cash.view',
+            'cash.open',
+            'cash.submit',
+            'cash.close',
 
-    // Create each permission if it doesn't exist
-    foreach ($permissions as $permission) {
-      Permission::firstOrCreate(['name' => $permission]);
+            // Module: Vehicles
+            'vehicles.view',
+            'vehicles.create',
+            'vehicles.edit',
+            'vehicles.delete',
+
+            // Module: Drivers
+            'drivers.view',
+
+            // Module: Logistics — Route Management
+            'logistics.routes.view',
+            'logistics.routes.manage',
+            'logistics.routes.plan',
+            'logistics.routes.revert',
+            'logistics.routes.cancel',
+            'logistics.routes.load',
+            'logistics.routes.dispatch',
+            'logistics.routes.reconcile',
+        ];
+
+        // Create each permission if it doesn't exist
+        foreach ($permissions as $permission) {
+            Permission::firstOrCreate(['name' => $permission]);
+        }
+
+        // SUPER_ADMIN → all permissions
+        $superAdmin = Role::firstOrCreate(['name' => 'SUPER_ADMIN']);
+        $superAdmin->syncPermissions(Permission::all());
+
+        // BACKOFFICE_USER → read-only for now
+        $backofficeUser = Role::firstOrCreate(['name' => 'BACKOFFICE_USER']);
+        $backofficeUser->syncPermissions([
+            'stores.view',
+            'plans.view',
+        ]);
     }
-
-    // SUPER_ADMIN → all permissions
-    $superAdmin = Role::firstOrCreate(['name' => 'SUPER_ADMIN']);
-    $superAdmin->syncPermissions(Permission::all());
-
-    // BACKOFFICE_USER → read-only for now
-    $backofficeUser = Role::firstOrCreate(['name' => 'BACKOFFICE_USER']);
-    $backofficeUser->syncPermissions([
-      'stores.view',
-      'plans.view',
-    ]);
-  }
 }

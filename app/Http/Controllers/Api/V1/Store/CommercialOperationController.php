@@ -111,6 +111,9 @@ class CommercialOperationController extends Controller
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->byStatus($request->status);
             })
+            ->when($request->filled('operation_number'), function ($query) use ($request) {
+                $query->where('operation_number', 'like', trim($request->operation_number).'%');
+            })
             ->when($request->filled('customer_id'), function ($query) use ($request) {
                 $query->forCustomer($request->customer_id);
             })
