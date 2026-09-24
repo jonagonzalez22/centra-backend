@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\CommercialOperation;
+use App\Models\CommercialOperationEvent;
 use App\Models\Feature;
 use App\Models\Plan;
 use App\Models\Store;
@@ -72,6 +73,66 @@ test('sales.cancel alone does not grant access to sales history', function () {
     $this->actingAs($this->user, 'sanctum')
         ->getJson('/api/v1/store/sales')
         ->assertForbidden();
+});
+
+test('confirmed sale detail keeps an empty cancellation history and its creation data', function () {
+    $sale = saleHistoryOperation($this->store, ['operation_number' => 'V-000029']);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/sales/{$sale->id}")
+        ->assertOk()
+        ->assertJsonPath('data.id', $sale->id)
+        ->assertJsonPath('data.created_by.id', $sale->user_id)
+        ->assertJsonPath('data.history', []);
+});
+
+test('cancelled sale detail exposes its cancellation event with the actor and reason data', function () {
+    $sale = saleHistoryOperation($this->store, ['status' => 'cancelled']);
+    $actor = User::factory()->create(['store_id' => $this->store->id, 'name' => 'Juan Pérez']);
+    $event = CommercialOperationEvent::create([
+        'store_id' => $this->store->id,
+        'operation_id' => $sale->id,
+        'event_type' => 'sale_cancelled',
+        'previous_status' => 'confirmed',
+        'new_status' => 'cancelled',
+        'reason' => 'pricing_error',
+        'reason_code' => 'pricing_error',
+        'reason_note' => 'Importe cargado incorrectamente',
+        'metadata' => [],
+        'user_id' => $actor->id,
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/sales/{$sale->id}")
+        ->assertOk()
+        ->assertJsonPath('data.history.0.id', $event->id)
+        ->assertJsonPath('data.history.0.event_type', 'sale_cancelled')
+        ->assertJsonPath('data.history.0.previous_status', 'confirmed')
+        ->assertJsonPath('data.history.0.new_status', 'cancelled')
+        ->assertJsonPath('data.history.0.reason_code', 'pricing_error')
+        ->assertJsonPath('data.history.0.reason_note', 'Importe cargado incorrectamente')
+        ->assertJsonPath('data.history.0.user.id', $actor->id)
+        ->assertJsonPath('data.history.0.user.name', 'Juan Pérez')
+        ->assertJsonPath('data.history.0.created_at', $event->created_at->format('Y-m-d H:i:s'));
+});
+
+test('sale detail history remains store scoped', function () {
+    $otherStore = Store::factory()->create();
+    $sale = saleHistoryOperation($otherStore, ['status' => 'cancelled']);
+
+    CommercialOperationEvent::create([
+        'store_id' => $otherStore->id,
+        'operation_id' => $sale->id,
+        'event_type' => 'sale_cancelled',
+        'reason' => 'pricing_error',
+        'reason_code' => 'pricing_error',
+        'metadata' => [],
+        'user_id' => User::factory()->create(['store_id' => $otherStore->id])->id,
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/sales/{$sale->id}")
+        ->assertNotFound();
 });
 
 test('sales history defaults to newest sales first and supports created at sorting', function () {

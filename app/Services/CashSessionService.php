@@ -137,6 +137,7 @@ class CashSessionService
     public function reconciliationSummary(CashSession $session): array
     {
         $totals = $session->payments()
+            ->where('operation_payments.status', 'active')
             ->join('store_payment_methods', 'store_payment_methods.id', '=', 'operation_payments.store_payment_method_id')
             ->join('payment_methods', 'payment_methods.id', '=', 'store_payment_methods.payment_method_id')
             ->selectRaw('store_payment_methods.id as store_payment_method_id')
@@ -160,7 +161,10 @@ class CashSessionService
             'cash_income' => (float) $totals->where('code', 'cash')->sum('total'),
             'total_collected' => (float) $totals->sum('total'),
             'payment_count' => (int) $totals->sum('payment_count'),
-            'operation_count' => $session->payments()->distinct()->count('operation_id'),
+            'operation_count' => $session->payments()
+                ->where('status', 'active')
+                ->distinct()
+                ->count('operation_id'),
             'totals_by_payment_method' => $totals,
         ];
     }
@@ -171,6 +175,7 @@ class CashSessionService
         int $perPage
     ): LengthAwarePaginator {
         return $session->payments()
+            ->where('status', 'active')
             ->where('store_payment_method_id', $storePaymentMethod->id)
             ->with([
                 'operation:id,operation_number,type',

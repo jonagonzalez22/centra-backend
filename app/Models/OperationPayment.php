@@ -20,6 +20,9 @@ class OperationPayment extends Model
         'store_payment_method_id',
         'cash_session_id',
         'registered_by',
+        'status',
+        'reversed_at',
+        'reversed_by',
         'amount',
         'reference',
         'payment_details',
@@ -27,6 +30,7 @@ class OperationPayment extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'reversed_at' => 'datetime',
         'payment_details' => 'array',
     ];
 
@@ -48,5 +52,10 @@ class OperationPayment extends Model
     public function registeredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'registered_by');
+    }
+
+    public function reversedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reversed_by');
     }
 }

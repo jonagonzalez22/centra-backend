@@ -493,7 +493,10 @@ class CashSessionController extends Controller
             ->with('paymentMethod')
             ->first();
 
-        if (! $method || ! $session->payments()->where('store_payment_method_id', $method->id)->exists()) {
+        if (! $method || ! $session->payments()
+            ->where('status', 'active')
+            ->where('store_payment_method_id', $method->id)
+            ->exists()) {
             return $this->notFound();
         }
 

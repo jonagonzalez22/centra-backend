@@ -186,6 +186,9 @@ Route::prefix('v1')->group(function () {
                 Route::get('sales/{id}/receipt', [SaleHistoryController::class, 'receipt'])
                     ->middleware('permission:sales_history.print')
                     ->name('store.sales.receipt');
+                Route::put('sales/{id}/cancel', [SaleHistoryController::class, 'cancel'])
+                    ->middleware('permission:sales.cancel')
+                    ->name('store.sales.cancel');
                 Route::get('operations/products/search', CommercialProductCatalogController::class)
                     ->name('store.operations.products.search');
                 Route::get('operations/products/{id}', CommercialProductDetailController::class)
