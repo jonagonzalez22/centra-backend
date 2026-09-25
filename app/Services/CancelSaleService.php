@@ -9,6 +9,7 @@ use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\QuantityMath;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -108,7 +109,7 @@ class CancelSaleService
     }
 
     /**
-     * @return array<int, array{product_id: string, quantity: int}>
+     * @return array<int, array{product_id: string, quantity: string}>
      */
     private function restoreStock(CommercialOperation $sale, string $storeId): array
     {
@@ -118,7 +119,10 @@ class CancelSaleService
             ->orderBy('id')
             ->get()
             ->groupBy('product_id')
-            ->map(fn (Collection $items) => (int) $items->sum('quantity'));
+            ->map(fn (Collection $items): string => $items->reduce(
+                fn (string $total, OperationItem $item): string => QuantityMath::add($total, $item->quantity),
+                '0.0000'
+            ));
 
         $products = Product::forStore($storeId)
             ->whereIn('id', $quantities->keys())
@@ -131,10 +135,10 @@ class CancelSaleService
             throw new \RuntimeException('No se pudieron encontrar todos los productos de la venta para restaurar el stock.');
         }
 
-        return $quantities->map(function (int $quantity, string $productId) use ($products): array {
+        return $quantities->map(function (string $quantity, string $productId) use ($products): array {
             /** @var Product $product */
             $product = $products->get($productId);
-            $product->stock += $quantity;
+            $product->stock = QuantityMath::add($product->stock, $quantity);
 
             if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
                 throw new \RuntimeException("Stock integrity violation on product {$product->id}.");

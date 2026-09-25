@@ -153,7 +153,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
         ])->assertOk()->assertJsonPath('data.requested_delivery_date', $newDate);
 
         expect($order->fresh()->requested_delivery_date->format('Y-m-d'))->toBe($newDate)
-            ->and($this->productA->fresh()->stock_reserved)->toBe(10)
+            ->and($this->productA->fresh()->stock_reserved)->toBe('10.0000')
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(10);
         $event = CommercialOperationEvent::where('operation_id', $order->id)->sole();
         expect($event->event_type)->toBe('order_edited')
@@ -238,10 +238,10 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
             ->and($response->json('data.items.0.quantity'))->toBe(12)
             ->and((float) $response->json('data.items.0.subtotal'))->toBe(1440.0);
 
-        expect($this->productA->fresh()->stock_reserved)->toBe(12);
+        expect($this->productA->fresh()->stock_reserved)->toBe('12.0000');
         $lines = OperationItem::where('operation_id', $order->id)->orderBy('created_at')->get();
         expect($lines)->toHaveCount(2)
-            ->and($lines->last()->quantity)->toBe(2)
+            ->and($lines->last()->quantity)->toBe('2.0000')
             ->and((float) $lines->last()->price)->toBe(120.0)
             ->and((float) $lines->last()->tax_amount)->toBe(2.0)
             ->and((float) $lines->last()->discount_amount)->toBe(1.0);
@@ -254,7 +254,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         $response = updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 6)])->assertOk();
 
-        expect($this->productA->fresh()->stock_reserved)->toBe(6)
+        expect($this->productA->fresh()->stock_reserved)->toBe('6.0000')
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(6)
             ->and((float) $order->fresh()->total)->toBe(600.0);
         expect($response->json('data.items'))->toHaveCount(1)
@@ -268,7 +268,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 11)])->assertOk();
 
-        expect($this->productA->fresh()->stock_reserved)->toBe(11)
+        expect($this->productA->fresh()->stock_reserved)->toBe('11.0000')
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(11);
     });
 
@@ -281,9 +281,9 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 7)])->assertOk();
 
-        expect($first->fresh()->quantity)->toBe(4)
-            ->and($second->fresh()->quantity)->toBe(3)
-            ->and($this->productA->fresh()->stock_reserved)->toBe(7);
+        expect($first->fresh()->quantity)->toBe('4.0000')
+            ->and($second->fresh()->quantity)->toBe('3.0000')
+            ->and($this->productA->fresh()->stock_reserved)->toBe('7.0000');
     });
 
     test('allows the exact minimum and rejects quantities below active commitments', function () {
@@ -293,7 +293,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
         editableOrderRouteItem($this->store, $this->user, $order, $this->productA, 'dispatched', 'pending', 6, 3, 3);
 
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 7)])->assertOk();
-        expect($this->productA->fresh()->stock_reserved)->toBe(7);
+        expect($this->productA->fresh()->stock_reserved)->toBe('7.0000');
 
         updateEditableOrder($this->user, $order->fresh(), [orderPayloadItem($this->productA, 6)])
             ->assertStatus(422)
@@ -309,7 +309,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productB, 2)])->assertOk();
 
-        expect($this->productA->fresh()->stock_reserved)->toBe(0)
+        expect($this->productA->fresh()->stock_reserved)->toBe('0.0000')
             ->and((int) OperationItem::where('operation_id', $order->id)->where('product_id', $this->productA->id)->sum('quantity'))->toBe(0)
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(2);
     });
@@ -339,9 +339,9 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
         ])->assertOk();
 
         $newLine = OperationItem::where('operation_id', $order->id)->where('product_id', $this->productB->id)->firstOrFail();
-        expect($newLine->quantity)->toBe(2)
+        expect($newLine->quantity)->toBe('2.0000')
             ->and((float) $newLine->price)->toBe(250.0)
-            ->and($this->productB->fresh()->stock_reserved)->toBe(2);
+            ->and($this->productB->fresh()->stock_reserved)->toBe('2.0000');
     });
 
     test('rolls back every change when stock is insufficient or one product is invalid', function () {
@@ -354,7 +354,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
             orderPayloadItem($this->productB, 3),
         ])->assertStatus(422)->assertJsonValidationErrors('items');
 
-        expect($this->productA->fresh()->stock_reserved)->toBe(10)
+        expect($this->productA->fresh()->stock_reserved)->toBe('10.0000')
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(10);
     });
 
@@ -375,7 +375,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 5)])
             ->assertStatus(422)
             ->assertJsonValidationErrors('items');
-        expect($this->productA->fresh()->stock_reserved)->toBe(10)
+        expect($this->productA->fresh()->stock_reserved)->toBe('10.0000')
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(10);
 
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 6)])->assertOk();

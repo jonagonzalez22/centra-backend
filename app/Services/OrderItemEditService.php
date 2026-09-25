@@ -7,6 +7,8 @@ use App\Models\CommercialOperationEvent;
 use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\MoneyMath;
+use App\Support\QuantityMath;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -73,10 +75,10 @@ class OrderItemEditService
             $order->setRelation('items', $lockedItems);
 
             $requestedQuantities = collect($items)
-                ->mapWithKeys(fn (array $item): array => [$item['product_id'] => (int) $item['quantity']]);
+                ->mapWithKeys(fn (array $item): array => [$item['product_id'] => QuantityMath::normalize($item['quantity'])]);
             $currentQuantities = $lockedItems
                 ->groupBy('product_id')
-                ->map(fn (Collection $lines): int => (int) $lines->sum('quantity'));
+                ->map(fn (Collection $lines): string => $this->sumQuantities($lines->pluck('quantity')->all()));
             $productIds = $currentQuantities->keys()
                 ->merge($requestedQuantities->keys())
                 ->unique()
@@ -106,21 +108,21 @@ class OrderItemEditService
             }
 
             $minimumQuantities = collect($editability['items'])
-                ->mapWithKeys(fn (array $item): array => [$item['product_id'] => (int) $item['minimum_quantity']]);
+                ->mapWithKeys(fn (array $item): array => [$item['product_id'] => QuantityMath::normalize($item['minimum_quantity'])]);
             $changes = [];
 
             foreach ($productIds as $productId) {
-                $currentQuantity = (int) $currentQuantities->get($productId, 0);
-                $requestedQuantity = (int) $requestedQuantities->get($productId, 0);
-                $minimumQuantity = (int) $minimumQuantities->get($productId, 0);
+                $currentQuantity = QuantityMath::normalize($currentQuantities->get($productId, '0'));
+                $requestedQuantity = QuantityMath::normalize($requestedQuantities->get($productId, '0'));
+                $minimumQuantity = QuantityMath::normalize($minimumQuantities->get($productId, '0'));
 
-                if ($requestedQuantity < $minimumQuantity) {
+                if (QuantityMath::compare($requestedQuantity, $minimumQuantity) < 0) {
                     throw ValidationException::withMessages([
                         'items' => ["La cantidad solicitada para {$products[$productId]->name} no puede ser menor al mínimo editable de {$minimumQuantity}."],
                     ]);
                 }
 
-                if ($requestedQuantity !== $currentQuantity) {
+                if (QuantityMath::compare($requestedQuantity, $currentQuantity) !== 0) {
                     $changes[$productId] = [
                         'product_id' => $productId,
                         'product_name' => $products[$productId]->name,
@@ -143,27 +145,31 @@ class OrderItemEditService
             $previousTotal = (float) $order->total;
 
             foreach ($changes as $productId => $change) {
-                $delta = $change['new_quantity'] - $change['previous_quantity'];
+                $delta = QuantityMath::subtract($change['new_quantity'], $change['previous_quantity']);
                 $product = $products[$productId];
 
-                if ($delta > 0) {
-                    $availableStock = (int) $product->stock - (int) $product->stock_reserved;
+                if (QuantityMath::isPositive($delta)) {
+                    $availableStock = QuantityMath::subtract($product->stock, $product->stock_reserved);
 
-                    if ($availableStock < $delta) {
+                    if (QuantityMath::compare($availableStock, $delta) < 0) {
                         throw ValidationException::withMessages([
                             'items' => ["No hay stock disponible suficiente para aumentar {$product->name}."],
                         ]);
                     }
 
                     $this->addCommercialObligation($order, $product, $delta);
-                    $product->update(['stock_reserved' => (int) $product->stock_reserved + $delta]);
+                    $product->update([
+                        'stock_reserved' => QuantityMath::add($product->stock_reserved, $delta),
+                    ]);
 
                     continue;
                 }
 
-                $quantityToRelease = abs($delta);
+                $quantityToRelease = QuantityMath::isNegative($delta)
+                    ? QuantityMath::subtract('0', $delta)
+                    : '0.0000';
 
-                if ((int) $product->stock_reserved < $quantityToRelease) {
+                if (QuantityMath::compare($product->stock_reserved, $quantityToRelease) < 0) {
                     throw ValidationException::withMessages([
                         'stock_reserved' => ["La reserva de {$product->name} es inconsistente para la reducción solicitada."],
                     ]);
@@ -174,7 +180,9 @@ class OrderItemEditService
                     $productId,
                     $quantityToRelease
                 );
-                $product->update(['stock_reserved' => (int) $product->stock_reserved - $quantityToRelease]);
+                $product->update([
+                    'stock_reserved' => QuantityMath::subtract($product->stock_reserved, $quantityToRelease),
+                ]);
             }
 
             $this->commercialOperationService->recalculateTotals($order);
@@ -228,7 +236,7 @@ class OrderItemEditService
         return $this->orderDeliveryDateService->change($order, $requestedDeliveryDate);
     }
 
-    private function addCommercialObligation(CommercialOperation $order, Product $product, int $quantity): void
+    private function addCommercialObligation(CommercialOperation $order, Product $product, int|string $quantity): void
     {
         $sourceItem = $order->items()
             ->where('product_id', $product->id)
@@ -238,13 +246,9 @@ class OrderItemEditService
             ->lockForUpdate()
             ->first();
 
-        $price = $sourceItem ? (float) $sourceItem->price : (float) $product->price;
-        $taxPerUnit = $sourceItem && $sourceItem->quantity > 0
-            ? (float) $sourceItem->tax_amount / (int) $sourceItem->quantity
-            : 0;
-        $discountPerUnit = $sourceItem && $sourceItem->quantity > 0
-            ? (float) $sourceItem->discount_amount / (int) $sourceItem->quantity
-            : 0;
+        $quantity = QuantityMath::normalize($quantity);
+        $sourceQuantity = $sourceItem ? QuantityMath::normalize($sourceItem->quantity) : null;
+        $price = $sourceItem?->price ?? $product->price;
 
         OperationItem::create([
             'operation_id' => $order->id,
@@ -252,10 +256,26 @@ class OrderItemEditService
             'product_name' => $sourceItem?->product_name ?? $product->name,
             'quantity' => $quantity,
             'price' => $price,
-            'subtotal' => round($quantity * $price, 2),
-            'tax_amount' => round($quantity * $taxPerUnit, 2),
-            'discount_amount' => round($quantity * $discountPerUnit, 2),
+            'subtotal' => MoneyMath::multiplyQuantityByPrice($quantity, $price),
+            'tax_amount' => $sourceItem && $sourceQuantity && QuantityMath::isPositive($sourceQuantity)
+                ? MoneyMath::proportional($sourceItem->tax_amount, $quantity, $sourceQuantity)
+                : '0.00',
+            'discount_amount' => $sourceItem && $sourceQuantity && QuantityMath::isPositive($sourceQuantity)
+                ? MoneyMath::proportional($sourceItem->discount_amount, $quantity, $sourceQuantity)
+                : '0.00',
         ]);
+    }
+
+    /**
+     * @param  array<int, int|string>  $quantities
+     */
+    private function sumQuantities(array $quantities): string
+    {
+        return array_reduce(
+            $quantities,
+            fn (string $total, int|string $quantity): string => QuantityMath::add($total, $quantity),
+            '0.0000'
+        );
     }
 
     private function editabilityMessage(?string $blockReason): string

@@ -157,7 +157,7 @@ class InventoryController extends Controller
                 product: $product,
                 user: $request->user(),
                 type: $request->type,
-                quantity: (int) $request->quantity,
+                quantity: (string) $request->quantity,
                 concept: $request->concept
             );
 

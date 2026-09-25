@@ -134,11 +134,11 @@ describe('Cancelar pendiente', function () {
 
         cancelPendingDelivery($user, $order->id)->assertOk();
 
-        expect($item->fresh()->quantity)->toBe(1)
+        expect($item->fresh()->quantity)->toBe('1.0000')
             ->and($order->fresh()->status)->toBe('delivered')
             ->and((float) $order->fresh()->total)->toBe(100.0)
-            ->and($this->product->fresh()->stock)->toBe(10)
-            ->and($this->product->fresh()->stock_reserved)->toBe(0);
+            ->and($this->product->fresh()->stock)->toBe('10.0000')
+            ->and($this->product->fresh()->stock_reserved)->toBe('0.0000');
         $this->assertDatabaseHas('commercial_operation_events', [
             'operation_id' => $order->id,
             'event_type' => 'remaining_delivery_cancelled',
@@ -252,7 +252,7 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
 
         // Verify stock_reserved released (5 - 2 = 3)
         $product->refresh();
-        expect($product->stock_reserved)->toBe(3);
+        expect($product->stock_reserved)->toBe('3.0000');
 
         // Verify event created
         $this->assertDatabaseHas('commercial_operation_events', [
@@ -296,7 +296,7 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
 
         // Stock reserved must NOT change for same-day delivery
         $product->refresh();
-        expect($product->stock_reserved)->toBe(5);
+        expect($product->stock_reserved)->toBe('5.0000');
     });
 
     it('returns 403 when user lacks orders.edit permission', function () {
@@ -535,8 +535,8 @@ describe('CANCEL-005: Stock release — multiple items', function () {
         $productA->refresh();
         $productB->refresh();
 
-        expect($productA->stock_reserved)->toBe(2);  // 5 - 3
-        expect($productB->stock_reserved)->toBe(6);  // 8 - 2
+        expect($productA->stock_reserved)->toBe('2.0000');  // 5 - 3
+        expect($productB->stock_reserved)->toBe('6.0000');  // 8 - 2
     });
 });
 

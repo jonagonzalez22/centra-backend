@@ -21,7 +21,7 @@ beforeEach(function () {
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->customer = Customer::factory()->create(['store_id' => $this->store->id]);
     $this->category = Category::factory()->create(['store_id' => $this->store->id]);
-    $this->service = new CommercialOperationService();
+    $this->service = app(CommercialOperationService::class);
 });
 
 function makeOrderForCancelUnit(Store $store, array $attributes = []): CommercialOperation
@@ -109,7 +109,7 @@ describe('cancel() — happy path with stock release', function () {
         expect($result->status)->toBe('cancelled');
 
         $product->refresh();
-        expect($product->stock_reserved)->toBe(3); // 5 - 2
+        expect($product->stock_reserved)->toBe('3.0000'); // 5 - 2
 
         $this->assertDatabaseHas('commercial_operation_events', [
             'operation_id' => $operation->id,
@@ -157,7 +157,7 @@ describe('cancel() — happy path with stock release', function () {
         expect($result->status)->toBe('cancelled');
 
         $product->refresh();
-        expect($product->stock_reserved)->toBe(5); // unchanged — same-day delivery
+        expect($product->stock_reserved)->toBe('5.0000'); // unchanged — same-day delivery
     });
 });
 
@@ -194,7 +194,7 @@ describe('cancel() — stock underflow guard', function () {
         expect($result->status)->toBe('cancelled');
 
         $product->refresh();
-        expect($product->stock_reserved)->toBe(0); // max(0, 2-5) = 0
+        expect($product->stock_reserved)->toBe('0.0000'); // max(0, 2-5) = 0
     });
 });
 

@@ -9,6 +9,8 @@ use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
+use App\Support\MoneyMath;
+use App\Support\QuantityMath;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -23,9 +25,11 @@ class CommercialOperationService
      * Reduce quantities that are no longer commercially owed while preserving
      * item price history and existing payments.
      */
-    public function reduceCommercialObligation(string $orderId, string $productId, int $quantity): void
+    public function reduceCommercialObligation(string $orderId, string $productId, int|string $quantity): void
     {
-        if ($quantity <= 0) {
+        $quantity = QuantityMath::normalize($quantity);
+
+        if (! QuantityMath::isPositive($quantity)) {
             return;
         }
 
@@ -47,27 +51,25 @@ class CommercialOperationService
         $remaining = $quantity;
 
         foreach ($items as $operationItem) {
-            if ($remaining <= 0) {
+            if (QuantityMath::isZero($remaining)) {
                 break;
             }
 
-            $oldQuantity = (int) $operationItem->quantity;
-            $decrement = min($remaining, $oldQuantity);
-            $newQuantity = $oldQuantity - $decrement;
-            $taxPerUnit = $oldQuantity > 0 ? (float) $operationItem->tax_amount / $oldQuantity : 0;
-            $discountPerUnit = $oldQuantity > 0 ? (float) $operationItem->discount_amount / $oldQuantity : 0;
+            $oldQuantity = QuantityMath::normalize($operationItem->quantity);
+            $decrement = QuantityMath::min($remaining, $oldQuantity);
+            $newQuantity = QuantityMath::subtract($oldQuantity, $decrement);
 
             $operationItem->update([
                 'quantity' => $newQuantity,
-                'subtotal' => round($newQuantity * (float) $operationItem->price, 2),
-                'tax_amount' => round($newQuantity * $taxPerUnit, 2),
-                'discount_amount' => round($newQuantity * $discountPerUnit, 2),
+                'subtotal' => MoneyMath::multiplyQuantityByPrice($newQuantity, $operationItem->price),
+                'tax_amount' => MoneyMath::proportional($operationItem->tax_amount, $newQuantity, $oldQuantity),
+                'discount_amount' => MoneyMath::proportional($operationItem->discount_amount, $newQuantity, $oldQuantity),
             ]);
 
-            $remaining -= $decrement;
+            $remaining = QuantityMath::subtract($remaining, $decrement);
         }
 
-        if ($remaining > 0) {
+        if (QuantityMath::isPositive($remaining)) {
             throw ValidationException::withMessages([
                 'quantity' => 'La cantidad supera la obligación comercial pendiente del producto.',
             ]);
@@ -79,15 +81,25 @@ class CommercialOperationService
     public function recalculateTotals(CommercialOperation $operation): void
     {
         $operation = CommercialOperation::where('id', $operation->id)->lockForUpdate()->firstOrFail();
-        $subtotal = (float) $operation->items()->sum('subtotal');
-        $tax = (float) $operation->items()->sum('tax_amount');
-        $discount = (float) $operation->items()->sum('discount_amount');
+        $items = $operation->items()->lockForUpdate()->get();
+        $subtotal = $items->reduce(
+            fn (string $total, OperationItem $item): string => MoneyMath::add($total, $item->subtotal),
+            '0.00'
+        );
+        $tax = $items->reduce(
+            fn (string $total, OperationItem $item): string => MoneyMath::add($total, $item->tax_amount),
+            '0.00'
+        );
+        $discount = $items->reduce(
+            fn (string $total, OperationItem $item): string => MoneyMath::add($total, $item->discount_amount),
+            '0.00'
+        );
 
         $operation->update([
             'subtotal' => $subtotal,
             'tax' => $tax,
             'discount' => $discount,
-            'total' => $subtotal + $tax - $discount,
+            'total' => MoneyMath::subtract(MoneyMath::add($subtotal, $tax), $discount),
         ]);
     }
 
@@ -122,27 +134,23 @@ class CommercialOperationService
 
             $products = $this->lockAndValidateProducts($items, $storeId);
 
-            $subtotal = 0;
-            $tax = 0;
-            $discount = 0;
-            $total = 0;
+            $subtotal = '0.00';
+            $tax = '0.00';
+            $discount = '0.00';
+            $total = '0.00';
 
             foreach ($items as $index => $item) {
-                $itemSubtotal = round($item['quantity'] * $item['price'], 2);
-                $itemTax = round($item['tax_amount'] ?? 0, 2);
-                $itemDiscount = round($item['discount_amount'] ?? 0, 2);
-                $itemTotal = round($itemSubtotal + $itemTax - $itemDiscount, 2);
+                $quantity = QuantityMath::normalize($item['quantity']);
+                $itemSubtotal = MoneyMath::multiplyQuantityByPrice($quantity, (string) $item['price']);
+                $itemTax = MoneyMath::normalize((string) ($item['tax_amount'] ?? 0));
+                $itemDiscount = MoneyMath::normalize((string) ($item['discount_amount'] ?? 0));
+                $itemTotal = MoneyMath::subtract(MoneyMath::add($itemSubtotal, $itemTax), $itemDiscount);
 
-                $subtotal += $itemSubtotal;
-                $tax += $itemTax;
-                $discount += $itemDiscount;
-                $total += $itemTotal;
+                $subtotal = MoneyMath::add($subtotal, $itemSubtotal);
+                $tax = MoneyMath::add($tax, $itemTax);
+                $discount = MoneyMath::add($discount, $itemDiscount);
+                $total = MoneyMath::add($total, $itemTotal);
             }
-
-            $subtotal = round($subtotal, 2);
-            $tax = round($tax, 2);
-            $discount = round($discount, 2);
-            $total = round($total, 2);
 
             $totalPaid = $this->calculateTotalPaid($payments);
             $totalPaid = round($totalPaid, 2);
@@ -190,7 +198,10 @@ class CommercialOperationService
 
             foreach ($items as $index => $item) {
                 $product = $products[$index];
-                $itemSubtotal = round($item['quantity'] * $item['price'], 2);
+                $itemSubtotal = MoneyMath::multiplyQuantityByPrice(
+                    QuantityMath::normalize($item['quantity']),
+                    (string) $item['price']
+                );
 
                 OperationItem::create([
                     'operation_id' => $operation->id,
@@ -199,8 +210,8 @@ class CommercialOperationService
                     'quantity' => $item['quantity'],
                     'price' => $item['price'],
                     'subtotal' => $itemSubtotal,
-                    'tax_amount' => round($item['tax_amount'] ?? 0, 2),
-                    'discount_amount' => round($item['discount_amount'] ?? 0, 2),
+                    'tax_amount' => MoneyMath::normalize((string) ($item['tax_amount'] ?? 0)),
+                    'discount_amount' => MoneyMath::normalize((string) ($item['discount_amount'] ?? 0)),
                 ]);
             }
 
@@ -295,7 +306,10 @@ class CommercialOperationService
                         ->find($item->product_id);
 
                     if ($product) {
-                        $product->stock_reserved = max(0, $product->stock_reserved - $item->quantity);
+                        $product->stock_reserved = QuantityMath::max(
+                            '0',
+                            QuantityMath::subtract($product->stock_reserved, $item->quantity)
+                        );
                         $product->save();
 
                         if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
@@ -349,9 +363,9 @@ class CommercialOperationService
                 ]);
             }
 
-            $available = $product->stock - $product->stock_reserved;
+            $available = QuantityMath::subtract($product->stock, $product->stock_reserved);
 
-            if ($item['quantity'] > $available) {
+            if (QuantityMath::compare(QuantityMath::normalize($item['quantity']), $available) > 0) {
                 throw ValidationException::withMessages([
                     "items.{$index}.quantity" => 'Stock insuficiente. Disponible: '.$available.' unidades.',
                 ]);
@@ -369,9 +383,13 @@ class CommercialOperationService
             $product = $products[$index];
 
             if ($isSale) {
-                $product->stock = $product->stock - $item['quantity'];
+                $product->stock = QuantityMath::subtract($product->stock, $item['quantity']);
             } else {
-                $product->stock_reserved = $product->stock_reserved + $item['quantity'];
+                $product->stock_reserved = QuantityMath::add($product->stock_reserved, $item['quantity']);
+            }
+
+            if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
+                throw new \RuntimeException("Stock integrity violation on product {$product->id}: stock={$product->stock}, reserved={$product->stock_reserved}");
             }
 
             $product->save();

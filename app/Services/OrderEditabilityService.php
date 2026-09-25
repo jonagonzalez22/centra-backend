@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CommercialOperation;
 use App\Models\ExtraSaleAllocation;
 use App\Models\RouteStopItem;
+use App\Support\QuantityMath;
 use Illuminate\Support\Collection;
 
 class OrderEditabilityService
@@ -34,7 +35,7 @@ class OrderEditabilityService
 
         $currentQuantities = $order->items
             ->groupBy('product_id')
-            ->map(fn (Collection $lines): int => (int) $lines->sum('quantity'));
+            ->map(fn (Collection $lines): string => $this->sumQuantities($lines->pluck('quantity')->all()));
 
         $deliveredQuantities = $this->completedDeliveredQuantities($order);
         $activeCommittedQuantities = $this->activeCommittedQuantities($order);
@@ -46,7 +47,8 @@ class OrderEditabilityService
             : ($hasActiveExtraSale ? 'active_extra_sale' : null);
 
         $editable = $blockReason === null;
-        $hasActiveRouteCommitment = $activeCommittedQuantities->sum() > 0;
+        $hasActiveRouteCommitment = $activeCommittedQuantities
+            ->contains(fn (string $quantity): bool => QuantityMath::isPositive($quantity));
         $deliveryDateBlockReason = $blockReason ?? ($hasActiveRouteCommitment ? 'active_route_commitment' : null);
 
         return [
@@ -60,21 +62,26 @@ class OrderEditabilityService
             'delivery_date_block_reason' => $deliveryDateBlockReason,
             'delivery_date_block_message' => $this->deliveryDateBlockMessage($deliveryDateBlockReason),
             'items' => $currentQuantities
-                ->map(function (int $currentQuantity, string $productId) use ($order, $deliveredQuantities, $activeCommittedQuantities): array {
+                ->map(function (string $currentQuantity, string $productId) use ($order, $deliveredQuantities, $activeCommittedQuantities): array {
                     $lines = $order->items->where('product_id', $productId);
                     $line = $lines->first();
-                    $deliveredQuantity = (int) $deliveredQuantities->get($productId, 0);
-                    $activeCommittedQuantity = (int) $activeCommittedQuantities->get($productId, 0);
-                    $minimumQuantity = $deliveredQuantity + $activeCommittedQuantity;
+                    $deliveredQuantity = QuantityMath::normalize($deliveredQuantities->get($productId, '0'));
+                    $activeCommittedQuantity = QuantityMath::normalize($activeCommittedQuantities->get($productId, '0'));
+                    $minimumQuantity = QuantityMath::add($deliveredQuantity, $activeCommittedQuantity);
+                    $editableQuantity = QuantityMath::max(
+                        '0',
+                        QuantityMath::subtract($currentQuantity, $minimumQuantity)
+                    );
 
                     return [
                         'product_id' => $productId,
                         'product_name' => $line?->product_name ?? $line?->product?->name,
-                        'current_quantity' => $currentQuantity,
-                        'delivered_quantity' => $deliveredQuantity,
-                        'active_committed_quantity' => $activeCommittedQuantity,
-                        'minimum_quantity' => $minimumQuantity,
-                        'editable_quantity' => max(0, $currentQuantity - $minimumQuantity),
+                        // A1.1 intentionally preserves this whole-unit response contract.
+                        'current_quantity' => (int) $currentQuantity,
+                        'delivered_quantity' => (int) $deliveredQuantity,
+                        'active_committed_quantity' => (int) $activeCommittedQuantity,
+                        'minimum_quantity' => (int) $minimumQuantity,
+                        'editable_quantity' => (int) $editableQuantity,
                     ];
                 })
                 ->sortBy('product_name')
@@ -94,7 +101,7 @@ class OrderEditabilityService
             ->groupBy('route_stop_items.product_id')
             ->selectRaw('route_stop_items.product_id, SUM(route_stop_items.quantity_delivered) as quantity')
             ->pluck('quantity', 'product_id')
-            ->map(fn ($quantity): int => (int) $quantity);
+            ->map(fn ($quantity): string => QuantityMath::normalize($quantity));
     }
 
     private function activeCommittedQuantities(CommercialOperation $order): Collection
@@ -111,7 +118,7 @@ class OrderEditabilityService
                 ['draft', 'planned']
             )
             ->pluck('quantity', 'product_id')
-            ->map(fn ($quantity): int => (int) $quantity);
+            ->map(fn ($quantity): string => QuantityMath::normalize($quantity));
     }
 
     private function hasActiveExtraSaleAllocation(CommercialOperation $order): bool
@@ -125,6 +132,18 @@ class OrderEditabilityService
                     ->orWhereHas('destinationStopItem.routeStop', fn ($stopQuery) => $stopQuery->where('order_id', $order->id));
             })
             ->exists();
+    }
+
+    /**
+     * @param  array<int, int|string>  $quantities
+     */
+    private function sumQuantities(array $quantities): string
+    {
+        return array_reduce(
+            $quantities,
+            fn (string $total, int|string $quantity): string => QuantityMath::add($total, $quantity),
+            '0.0000'
+        );
     }
 
     private function blockMessage(?string $blockReason): ?string

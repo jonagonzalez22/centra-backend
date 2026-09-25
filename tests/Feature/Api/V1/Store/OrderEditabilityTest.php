@@ -137,7 +137,7 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertJsonPath('data.items.0.minimum_quantity', 0)
             ->assertJsonPath('data.items.0.editable_quantity', 10);
 
-        expect($this->product->fresh()->stock_reserved)->toBe(10);
+        expect($this->product->fresh()->stock_reserved)->toBe('10.0000');
     });
 
     test('aggregates multiple order lines and separates completed delivery from active commitments', function () {

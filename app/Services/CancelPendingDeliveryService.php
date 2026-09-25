@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
 use App\Models\User;
+use App\Support\QuantityMath;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -73,8 +74,15 @@ class CancelPendingDeliveryService
                 $product = Product::forStore($operation->store_id)
                     ->whereKey($item['product_id'])->lockForUpdate()->firstOrFail();
                 $product->update([
-                    'stock_reserved' => max(0, $product->stock_reserved - $item['pending_quantity']),
+                    'stock_reserved' => QuantityMath::max(
+                        '0',
+                        QuantityMath::subtract($product->stock_reserved, $item['pending_quantity'])
+                    ),
                 ]);
+
+                if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
+                    throw new \RuntimeException("Stock integrity violation on product {$product->id}.");
+                }
             }
 
             $operation->update(['status' => 'delivered']);

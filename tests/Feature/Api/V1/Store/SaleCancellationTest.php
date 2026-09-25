@@ -112,8 +112,8 @@ test('cancels a confirmed sale, restores stock, reverses payments and adjusts ca
         ->assertOk()
         ->assertJsonPath('data.status', 'cancelled');
 
-    expect($product->fresh()->stock)->toBe(10)
-        ->and($product->fresh()->stock_reserved)->toBe(1)
+    expect($product->fresh()->stock)->toBe('10.0000')
+        ->and($product->fresh()->stock_reserved)->toBe('1.0000')
         ->and((float) $session->fresh()->expected_amount)->toBe(1000.0)
         ->and($payment->fresh()->status)->toBe('reversed')
         ->and($payment->fresh()->reversed_at)->not->toBeNull()
@@ -128,7 +128,7 @@ test('cancels a confirmed sale, restores stock, reverses payments and adjusts ca
         ->and($event->previous_date)->toBeNull()
         ->and($event->metadata['payment_ids_reversed'])->toBe([$payment->id])
         ->and($event->metadata['cash_session_ids'])->toBe([$session->id])
-        ->and($event->metadata['restored_stock'])->toBe([['product_id' => $product->id, 'quantity' => 2]]);
+        ->and($event->metadata['restored_stock'])->toBe([['product_id' => $product->id, 'quantity' => '2.0000']]);
 });
 
 test('reverses every payment while changing expected amount only for cash and excluding reversed payments from reconciliation', function () {
@@ -169,7 +169,7 @@ test('allows cancelling a confirmed sale without payments', function () {
         ->assertOk();
 
     expect($sale->fresh()->status)->toBe('cancelled')
-        ->and($product->fresh()->stock)->toBe(10);
+        ->and($product->fresh()->stock)->toBe('10.0000');
 });
 
 test('rolls back stock and payment changes when cash expected amount is inconsistent', function () {
@@ -183,7 +183,7 @@ test('rolls back stock and payment changes when cash expected amount is inconsis
         ->assertJsonValidationErrors('cash');
 
     expect($sale->fresh()->status)->toBe('confirmed')
-        ->and($product->fresh()->stock)->toBe(8)
+        ->and($product->fresh()->stock)->toBe('8.0000')
         ->and((float) $session->fresh()->expected_amount)->toBe(25.0)
         ->and($payment->fresh()->status)->toBe('active')
         ->and(CommercialOperationEvent::count())->toBe(0);
@@ -207,7 +207,7 @@ test('rejects cancellation when a linked cash session is pending or closed and r
         ->assertJsonValidationErrors('cash');
 
     expect($sale->fresh()->status)->toBe('confirmed')
-        ->and($product->fresh()->stock)->toBe(8)
+        ->and($product->fresh()->stock)->toBe('8.0000')
         ->and((float) $openSession->fresh()->expected_amount)->toBe(1050.0)
         ->and($activePayment->fresh()->status)->toBe('active')
         ->and($blockedPayment->fresh()->status)->toBe('active')
