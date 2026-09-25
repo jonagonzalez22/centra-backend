@@ -42,7 +42,9 @@ class CommercialOperationListResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $deliverySummary = app(\App\Services\DeliverySummaryService::class)->summarize($this->resource);
+        $deliverySummary = $this->legacyDeliverySummary(
+            app(\App\Services\DeliverySummaryService::class)->summarize($this->resource)
+        );
 
         return [
             'id' => $this->id,
@@ -99,5 +101,25 @@ class CommercialOperationListResource extends JsonResource
             'street' => $address->street,
             'full_address' => $fullAddress ?: null,
         ];
+    }
+
+    private function legacyDeliverySummary(array $summary): array
+    {
+        $summary['pending_delivery_quantity'] = (int) $summary['pending_delivery_quantity'];
+        $summary['items'] = array_map(function (array $item): array {
+            foreach ([
+                'ordered_quantity',
+                'delivered_quantity',
+                'pending_quantity',
+                'planned_active_quantity',
+                'unassigned_pending_quantity',
+            ] as $field) {
+                $item[$field] = (int) $item[$field];
+            }
+
+            return $item;
+        }, $summary['items']);
+
+        return $summary;
     }
 }

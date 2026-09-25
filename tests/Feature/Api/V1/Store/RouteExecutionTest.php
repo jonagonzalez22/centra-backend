@@ -1,21 +1,16 @@
 <?php
 
-use App\Models\Customer;
-use App\Models\CustomerAddress;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
-use App\Models\Locality;
 use App\Models\OperationItem;
 use App\Models\Plan;
 use App\Models\Product;
-use App\Models\Province;
 use App\Models\RouteLoadAdjustment;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
-use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -161,7 +156,7 @@ test('assigns items to a stop in draft route', function () {
     $item = RouteStopItem::first();
     expect($item->route_stop_id)->toBe($stop->id);
     expect($item->product_id)->toBe($product->id);
-    expect($item->quantity_planned)->toBe(5);
+    expect($item->quantity_planned)->toBe('5.0000');
 
     expect(DeliveryRouteEvent::where('event_type', 'items_assigned')->count())->toBe(1);
 });
@@ -296,7 +291,7 @@ test('updates existing item quantity on reassignment', function () {
     $response->assertStatus(200);
 
     expect(RouteStopItem::count())->toBe(1);
-    expect(RouteStopItem::first()->quantity_planned)->toBe(7);
+    expect(RouteStopItem::first()->quantity_planned)->toBe('7.0000');
 });
 
 // ── Load Sheet Tests ─────────────────────────────────────────────────
@@ -341,7 +336,7 @@ test('confirms load with matching quantities and transitions to loaded', functio
     expect($route->fresh()->status)->toBe('loaded');
     expect($route->fresh()->loaded_at)->not->toBeNull();
     expect($route->fresh()->loaded_by)->toBe($this->user->id);
-    expect($item->fresh()->quantity_loaded)->toBe(5);
+    expect($item->fresh()->quantity_loaded)->toBe('5.0000');
     expect(DeliveryRouteEvent::where('event_type', 'route_loaded')->count())->toBe(1);
 });
 
@@ -363,13 +358,13 @@ test('confirms load with differences and creates adjustment records', function (
     $response->assertStatus(200)
         ->assertJsonPath('data.status', 'loaded');
 
-    expect($item->fresh()->quantity_loaded)->toBe(3);
+    expect($item->fresh()->quantity_loaded)->toBe('3.0000');
 
     $adjustment = RouteLoadAdjustment::first();
     expect($adjustment)->not->toBeNull();
     expect($adjustment->route_stop_item_id)->toBe($item->id);
-    expect($adjustment->old_quantity)->toBe(0);
-    expect($adjustment->new_quantity)->toBe(3);
+    expect($adjustment->old_quantity)->toBe('0.0000');
+    expect($adjustment->new_quantity)->toBe('3.0000');
     expect($adjustment->reason)->toBe('no_stock');
     expect($adjustment->user_id)->toBe($this->user->id);
 });

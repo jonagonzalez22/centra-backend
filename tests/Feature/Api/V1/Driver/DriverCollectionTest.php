@@ -425,7 +425,7 @@ test('collection preview values proposed quantities without persisting them', fu
     expect((float) $response->json('data.delivered_value_current_stop'))->toBe(300.0)
         ->and((float) $response->json('data.delivered_value_cumulative'))->toBe(300.0)
         ->and((float) $response->json('data.amount_to_collect_now'))->toBe(300.0)
-        ->and($data['stopItems'][0]->fresh()->quantity_delivered)->toBe(0);
+        ->and($data['stopItems'][0]->fresh()->quantity_delivered)->toBe('0.0000');
 });
 
 test('collection preview rejects duplicated foreign and excessive stop items', function () {

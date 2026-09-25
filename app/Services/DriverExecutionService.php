@@ -14,6 +14,8 @@ use App\Models\RouteStopCollection;
 use App\Models\RouteStopItem;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
+use App\Support\MoneyMath;
+use App\Support\QuantityMath;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 
@@ -52,8 +54,8 @@ class DriverExecutionService
                 throw $this->validationError('Uno o más items no pertenecen a esta parada.');
             }
 
-            $quantity = (int) $itemData['quantity_delivered'];
-            if ($quantity > (int) $stopItem->quantity_loaded) {
+            $quantity = QuantityMath::normalize($itemData['quantity_delivered']);
+            if (QuantityMath::compare($quantity, $stopItem->quantity_loaded) > 0) {
                 throw $this->validationError(
                     "La cantidad entregada ({$quantity}) no puede superar la cargada ({$stopItem->quantity_loaded})."
                 );
@@ -125,12 +127,15 @@ class DriverExecutionService
         $surplusByProduct = [];
         foreach ($sourceItems as $item) {
             $productId = $item->product_id;
-            $availableOnItem = max(
-                0,
-                (int) $item->quantity_released_for_extra_sale - (int) ($allocations[$item->id] ?? 0)
+            $availableOnItem = QuantityMath::max(
+                '0',
+                QuantityMath::subtract(
+                    $item->quantity_released_for_extra_sale,
+                    $allocations[$item->id] ?? '0'
+                )
             );
 
-            if ($availableOnItem <= 0) {
+            if (! QuantityMath::isPositive($availableOnItem)) {
                 continue;
             }
 
@@ -140,14 +145,22 @@ class DriverExecutionService
                     'product_name' => $item->product?->name,
                     'sku' => $item->product?->sku,
                     'unit_price' => (float) ($item->product?->price ?? 0),
-                    'available_quantity' => 0,
+                    'available_quantity' => '0.0000',
                 ];
             }
 
-            $surplusByProduct[$productId]['available_quantity'] += $availableOnItem;
+            $surplusByProduct[$productId]['available_quantity'] = QuantityMath::add(
+                $surplusByProduct[$productId]['available_quantity'],
+                $availableOnItem
+            );
         }
 
-        return array_values($surplusByProduct);
+        return array_map(function (array $surplus): array {
+            // A1.2 keeps the driver API's whole-unit contract at this boundary.
+            $surplus['available_quantity'] = (int) $surplus['available_quantity'];
+
+            return $surplus;
+        }, array_values($surplusByProduct));
     }
 
     /**
@@ -212,29 +225,29 @@ class DriverExecutionService
             $allocationPlan = [];
             foreach ($items as $itemData) {
                 $productId = $itemData['product_id'];
-                $quantity = (int) $itemData['quantity'];
+                $quantity = QuantityMath::normalize($itemData['quantity']);
                 $remainingToAllocate = $quantity;
 
                 foreach ($sourceItems->where('product_id', $productId) as $sourceItem) {
-                    if ($remainingToAllocate <= 0) {
+                    if (QuantityMath::isZero($remainingToAllocate)) {
                         break;
                     }
 
                     $itemSurplus = $sourceItem->quantity_released_for_extra_sale;
-                    $alreadyAllocated = (int) ($allocatedBySource[$sourceItem->id] ?? 0);
-                    $availableOnThisItem = $itemSurplus - $alreadyAllocated;
+                    $alreadyAllocated = QuantityMath::normalize($allocatedBySource[$sourceItem->id] ?? '0');
+                    $availableOnThisItem = QuantityMath::subtract($itemSurplus, $alreadyAllocated);
 
-                    if ($availableOnThisItem <= 0) {
+                    if (! QuantityMath::isPositive($availableOnThisItem)) {
                         continue;
                     }
 
-                    $toAllocate = min($remainingToAllocate, $availableOnThisItem);
+                    $toAllocate = QuantityMath::min($remainingToAllocate, $availableOnThisItem);
                     $allocationPlan[] = [$sourceItem, $toAllocate];
-                    $allocatedBySource[$sourceItem->id] = $alreadyAllocated + $toAllocate;
-                    $remainingToAllocate -= $toAllocate;
+                    $allocatedBySource[$sourceItem->id] = QuantityMath::add($alreadyAllocated, $toAllocate);
+                    $remainingToAllocate = QuantityMath::subtract($remainingToAllocate, $toAllocate);
                 }
 
-                if ($remainingToAllocate > 0) {
+                if (QuantityMath::isPositive($remainingToAllocate)) {
                     throw $this->validationError(
                         "No se pudo asignar toda la cantidad solicitada para el producto {$productId}."
                     );
@@ -265,7 +278,7 @@ class DriverExecutionService
 
             foreach ($items as $itemData) {
                 $productId = $itemData['product_id'];
-                $quantity = (int) $itemData['quantity'];
+                $quantity = QuantityMath::normalize($itemData['quantity']);
                 $product = $products[$productId];
                 $destinationItem = RouteStopItem::where('route_stop_id', $stop->id)
                     ->where('product_id', $productId)
@@ -273,9 +286,10 @@ class DriverExecutionService
                     ->first();
 
                 if ($destinationItem) {
-                    $destinationItem->increment('quantity_planned', $quantity);
-                    $destinationItem->increment('quantity_loaded', $quantity);
-                    $destinationItem->refresh();
+                    $destinationItem->update([
+                        'quantity_planned' => QuantityMath::add($destinationItem->quantity_planned, $quantity),
+                        'quantity_loaded' => QuantityMath::add($destinationItem->quantity_loaded, $quantity),
+                    ]);
                 } else {
                     $destinationItem = RouteStopItem::create([
                         'route_stop_id' => $stop->id,
@@ -313,8 +327,8 @@ class DriverExecutionService
                     'product_id' => $productId,
                     'product_name' => $product->name,
                     'quantity' => $quantity,
-                    'price' => (float) $product->price,
-                    'subtotal' => round($quantity * (float) $product->price, 2),
+                    'price' => $product->price,
+                    'subtotal' => MoneyMath::multiplyQuantityByPrice($quantity, $product->price),
                     'tax_amount' => 0,
                     'discount_amount' => 0,
                 ]);
@@ -336,17 +350,20 @@ class DriverExecutionService
         $discrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $sourceItem->id)
             ->lockForUpdate()
             ->first();
-        $totalAllocated = (int) ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)
+        $totalAllocated = QuantityMath::normalize(ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)
             ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
-            ->sum('quantity');
-        $difference = $sourceItem->quantity_loaded - $sourceItem->quantity_delivered - $totalAllocated;
+            ->sum('quantity'));
+        $difference = QuantityMath::subtract(
+            QuantityMath::subtract($sourceItem->quantity_loaded, $sourceItem->quantity_delivered),
+            $totalAllocated
+        );
         $notes = "Venta extra a parada {$destinationStop->id}";
         $attributes = [
             'quantity_delivered' => $sourceItem->quantity_delivered,
             'difference_quantity' => $difference,
-            'resolution_type' => $difference === 0 ? 'extra_sale' : null,
+            'resolution_type' => QuantityMath::isZero($difference) ? 'extra_sale' : null,
             'notes' => $discrepancy?->notes ? $discrepancy->notes."; {$notes}" : $notes,
-            'resolved_at' => $difference === 0 ? now() : null,
+            'resolved_at' => QuantityMath::isZero($difference) ? now() : null,
         ];
 
         if ($discrepancy) {
@@ -419,25 +436,26 @@ class DriverExecutionService
                     throw $this->validationError("El item {$itemData['route_stop_item_id']} no pertenece a este stop.");
                 }
 
-                $qtyDelivered = (int) $itemData['quantity_delivered'];
-                $qtyReleased = (int) ($itemData['quantity_released_for_extra_sale'] ?? 0);
+                $qtyDelivered = QuantityMath::normalize($itemData['quantity_delivered']);
+                $qtyReleased = QuantityMath::normalize($itemData['quantity_released_for_extra_sale'] ?? '0');
 
-                if ($qtyDelivered > $routeStopItem->quantity_loaded) {
+                if (QuantityMath::compare($qtyDelivered, $routeStopItem->quantity_loaded) > 0) {
                     throw $this->validationError(
                         "La cantidad entregada ({$qtyDelivered}) no puede superar la cargada ({$routeStopItem->quantity_loaded})."
                     );
                 }
 
-                $remaining = $routeStopItem->quantity_loaded - $qtyDelivered;
+                $remaining = QuantityMath::subtract($routeStopItem->quantity_loaded, $qtyDelivered);
 
-                if ($qtyReleased > $remaining) {
+                if (QuantityMath::compare($qtyReleased, $remaining) > 0) {
                     throw $this->validationError(
                         "La cantidad liberada para Venta Extra ({$qtyReleased}) no puede superar el remanente no entregado ({$remaining})."
                     );
                 }
 
                 // Partial delivery (some delivered, some not) requires a per-item rejection reason
-                if ($qtyDelivered > 0 && $qtyDelivered < $routeStopItem->quantity_loaded) {
+                if (QuantityMath::isPositive($qtyDelivered)
+                    && QuantityMath::compare($qtyDelivered, $routeStopItem->quantity_loaded) < 0) {
                     if (empty($itemData['rejection_reason_id'])) {
                         throw $this->validationError(
                             'Se requiere un motivo de rechazo cuando la cantidad entregada es menor a la cargada.'
@@ -445,7 +463,7 @@ class DriverExecutionService
                     }
                 }
 
-                if ($qtyDelivered > 0) {
+                if (QuantityMath::isPositive($qtyDelivered)) {
                     $allZero = false;
                 }
 
@@ -489,7 +507,7 @@ class DriverExecutionService
                 $order->loadMissing(['items', 'payments']);
 
                 $proposedQuantities = collect($items)->mapWithKeys(fn (array $item) => [
-                    $item['route_stop_item_id'] => (int) $item['quantity_delivered'],
+                    $item['route_stop_item_id'] => QuantityMath::normalize($item['quantity_delivered']),
                 ])->all();
                 $collectionAmounts = $this->deliveryCollectionAmountService->calculate(
                     $stop,
@@ -497,13 +515,17 @@ class DriverExecutionService
                     true
                 );
 
-                if ($collectionAmounts['amount_to_collect_now'] <= 0) {
+                if (MoneyMath::compare((string) $collectionAmounts['amount_to_collect_now'], '0') <= 0) {
                     throw $this->validationError('El pedido no tiene saldo habilitado para cobrar en esta entrega.');
                 }
 
-                $declaredTotal = array_sum(array_map(fn ($p) => (float) $p['amount'], $payments));
+                $declaredTotal = array_reduce(
+                    $payments,
+                    fn (string $total, array $payment): string => MoneyMath::add($total, $payment['amount']),
+                    '0.00'
+                );
 
-                if (round($declaredTotal, 2) > $collectionAmounts['amount_to_collect_now']) {
+                if (MoneyMath::compare($declaredTotal, (string) $collectionAmounts['amount_to_collect_now']) > 0) {
                     throw $this->validationError('El total declarado supera el monto habilitado para cobrar en esta entrega.');
                 }
 

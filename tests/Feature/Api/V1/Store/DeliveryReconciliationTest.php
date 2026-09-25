@@ -164,13 +164,13 @@ test('full delivery: all stops completed with full quantities', function () {
     $movement = InventoryMovement::first();
     expect($movement)->not->toBeNull();
     expect($movement->type)->toBe('output');
-    expect($movement->quantity)->toBe(-10);
+    expect($movement->quantity)->toBe('-10.0000');
     expect($movement->product_id)->toBe($product->id);
 
     // Stock decreased
     $product->refresh();
-    expect($product->stock)->toBe(90);   // 100 - 10
-    expect($product->stock_reserved)->toBe(40); // 50 - 10
+    expect($product->stock)->toBe('90.0000');   // 100 - 10
+    expect($product->stock_reserved)->toBe('40.0000'); // 50 - 10
 
     // Order status updated
     $order->refresh();
@@ -197,8 +197,8 @@ test('partial delivery: some items partially delivered', function () {
 
     // Stock partially decreased
     $product->refresh();
-    expect($product->stock)->toBe(97);   // 100 - 3
-    expect($product->stock_reserved)->toBe(47); // 50 - 3
+    expect($product->stock)->toBe('97.0000');   // 100 - 3
+    expect($product->stock_reserved)->toBe('47.0000'); // 50 - 3
 });
 
 test('process deliveries accumulates quantities delivered by previous routes', function () {
@@ -238,8 +238,8 @@ test('process deliveries accumulates quantities delivered by previous routes', f
         ->assertOk();
 
     expect($order->fresh()->status)->toBe('delivered')
-        ->and($product->fresh()->stock)->toBe(100)
-        ->and($product->fresh()->stock_reserved)->toBe(0);
+        ->and($product->fresh()->stock)->toBe('100.0000')
+        ->and($product->fresh()->stock_reserved)->toBe('0.0000');
 });
 
 test('failed stop: no stock changes and order status unchanged', function () {
@@ -291,8 +291,8 @@ test('failed stop: no stock changes and order status unchanged', function () {
     $response->assertStatus(200);
 
     $product->refresh();
-    expect($product->stock)->toBe(100);
-    expect($product->stock_reserved)->toBe(50);
+    expect($product->stock)->toBe('100.0000');
+    expect($product->stock_reserved)->toBe('50.0000');
 
     $order->refresh();
     expect($order->status)->toBe('confirmed');
@@ -553,10 +553,10 @@ test('full delivery with multiple stops processes all correctly', function () {
 
     $product1->refresh();
     $product2->refresh();
-    expect($product1->stock)->toBe(90);   // 100 - 10
-    expect($product1->stock_reserved)->toBe(50); // 60 - 10
-    expect($product2->stock)->toBe(42);   // 50 - 8
-    expect($product2->stock_reserved)->toBe(12); // 20 - 8
+    expect($product1->stock)->toBe('90.0000');   // 100 - 10
+    expect($product1->stock_reserved)->toBe('50.0000'); // 60 - 10
+    expect($product2->stock)->toBe('42.0000');   // 50 - 8
+    expect($product2->stock_reserved)->toBe('12.0000'); // 20 - 8
 
     $order1->refresh();
     $order2->refresh();

@@ -163,8 +163,8 @@ test('fully delivered order decreases stock and releases its reservation', funct
     routeInventoryFinalize($this, $route);
 
     $product->refresh();
-    expect($product->stock)->toBe(5)
-        ->and($product->stock_reserved)->toBe(0);
+    expect($product->stock)->toBe('5.0000')
+        ->and($product->stock_reserved)->toBe('0.0000');
 });
 
 test('fully failed and returned order does not create stock', function () {
@@ -178,8 +178,8 @@ test('fully failed and returned order does not create stock', function () {
 
     $product->refresh();
     $order->refresh();
-    expect($product->stock)->toBe(10)
-        ->and($product->stock_reserved)->toBe(0)
+    expect($product->stock)->toBe('10.0000')
+        ->and($product->stock_reserved)->toBe('0.0000')
         ->and($order->items()->sum('quantity'))->toBe(0)
         ->and($order->status)->toBe('closed')
         ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(0);
@@ -196,8 +196,8 @@ test('returned and rejected quantities only release reservations', function (str
 
     $product->refresh();
     $order->refresh();
-    expect($product->stock)->toBe(8)
-        ->and($product->stock_reserved)->toBe(0)
+    expect($product->stock)->toBe('8.0000')
+        ->and($product->stock_reserved)->toBe('0.0000')
         ->and($order->items()->sum('quantity'))->toBe(2)
         ->and($order->status)->toBe('delivered')
         ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(0);
@@ -233,7 +233,7 @@ test('returned and rejected recalculate totals without modifying existing paymen
     $order->refresh();
     $operationItem = $order->items()->sole();
 
-    expect($operationItem->quantity)->toBe(5)
+    expect($operationItem->quantity)->toBe('5.0000')
         ->and((float) $operationItem->subtotal)->toBe(50.0)
         ->and((float) $order->subtotal)->toBe(50.0)
         ->and((float) $order->total)->toBe(50.0)
@@ -254,7 +254,7 @@ test('returned and rejected recalculate totals without modifying existing paymen
     expect((float) $response->json('data.subtotal'))->toBe(50.0)
         ->and((float) $response->json('data.total'))->toBe(50.0)
         ->and((float) $response->json('data.paid_amount'))->toBe($paidAmount)
-        ->and((float) $response->json('data.pending_amount'))->toBe($expectedPending);
+        ->and((float) $response->json('data.pending_amount'))->toBe(max(0.0, $expectedPending));
 })->with([
     'returned without payments' => ['returned', 0.0, 50.0],
     'rejected without payments' => ['rejected_by_customer', 0.0, 50.0],
@@ -325,10 +325,10 @@ test('missing and damaged quantities decrease stock exactly once', function (str
 
     $product->refresh();
     $movement = InventoryMovement::where('product_id', $product->id)->sole();
-    expect($product->stock)->toBe(5)
-        ->and($product->stock_reserved)->toBe(5)
+    expect($product->stock)->toBe('5.0000')
+        ->and($product->stock_reserved)->toBe('5.0000')
         ->and($movement->type)->toBe('output')
-        ->and($movement->quantity)->toBe(-5);
+        ->and($movement->quantity)->toBe('-5.0000');
 })->with(['missing', 'damaged']);
 
 test('pending redelivery preserves stock and reservation', function () {
@@ -341,8 +341,8 @@ test('pending redelivery preserves stock and reservation', function () {
     routeInventoryFinalize($this, $route);
 
     $product->refresh();
-    expect($product->stock)->toBe(10)
-        ->and($product->stock_reserved)->toBe(5)
+    expect($product->stock)->toBe('10.0000')
+        ->and($product->stock_reserved)->toBe('5.0000')
         ->and($order->fresh()->items()->sum('quantity'))->toBe(5)
         ->and($order->fresh()->status)->toBe('open');
 });
@@ -356,7 +356,7 @@ test('delivery accumulated across two routes marks a single-product order delive
     routeInventoryFinalize($this, $routeOne);
 
     expect($order->fresh()->status)->toBe('partially_delivered')
-        ->and($product->fresh()->stock_reserved)->toBe(30);
+        ->and($product->fresh()->stock_reserved)->toBe('30.0000');
 
     $partialHistory = collect($this->flushHeaders()
         ->withHeader('Authorization', "Bearer {$this->adminToken}")
@@ -371,8 +371,8 @@ test('delivery accumulated across two routes marks a single-product order delive
     routeInventoryFinalize($this, $routeTwo);
 
     expect($order->fresh()->status)->toBe('delivered')
-        ->and($product->fresh()->stock)->toBe(100)
-        ->and($product->fresh()->stock_reserved)->toBe(0);
+        ->and($product->fresh()->stock)->toBe('100.0000')
+        ->and($product->fresh()->stock_reserved)->toBe('0.0000');
 
     $finalHistory = collect($this->flushHeaders()
         ->withHeader('Authorization', "Bearer {$this->adminToken}")
@@ -420,8 +420,8 @@ test('delivery status is calculated per product across routes', function () {
     routeInventoryFinalize($this, $routeTwo);
 
     expect($order->fresh()->status)->toBe('delivered')
-        ->and($productA->fresh()->stock_reserved)->toBe(0)
-        ->and($productB->fresh()->stock_reserved)->toBe(0);
+        ->and($productA->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($productB->fresh()->stock_reserved)->toBe('0.0000');
 });
 
 test('delivery status aggregates multiple operation items of the same product', function () {
@@ -462,8 +462,8 @@ test('finalizing one route preserves reservation planned for another route', fun
     routeInventoryFinalize($this, $completedRoute);
 
     $product->refresh();
-    expect($product->stock)->toBe(16)
-        ->and($product->stock_reserved)->toBe(6);
+    expect($product->stock)->toBe('16.0000')
+        ->and($product->stock_reserved)->toBe('6.0000');
 });
 
 test('assignItems ignores planning history from completed routes', function () {
@@ -487,7 +487,7 @@ test('assignItems ignores planning history from completed routes', function () {
         ])
         ->assertOk();
 
-    expect($newStop->items()->where('product_id', $product->id)->value('quantity_planned'))->toBe(20);
+    expect($newStop->items()->where('product_id', $product->id)->value('quantity_planned'))->toBe('20.0000');
 });
 
 test('assignItems prevents exceeding the balance after completed and active routes', function () {
@@ -531,7 +531,7 @@ test('failed stop does not cancel an order with previous deliveries', function (
     routeInventoryFinalize($this, $failedRoute);
 
     expect($order->fresh()->status)->toBe('partially_delivered')
-        ->and($product->fresh()->stock_reserved)->toBe(30);
+        ->and($product->fresh()->stock_reserved)->toBe('30.0000');
 });
 
 test('first failed delivery attempt does not cancel the commercial order', function () {
@@ -544,7 +544,7 @@ test('first failed delivery attempt does not cancel the commercial order', funct
     routeInventoryFinalize($this, $route);
 
     expect($order->fresh()->status)->toBe('open')
-        ->and($product->fresh()->stock_reserved)->toBe(100);
+        ->and($product->fresh()->stock_reserved)->toBe('100.0000');
 });
 
 test('pending redelivery and missing remain reserved while rejected ends the obligation', function () {
@@ -559,8 +559,8 @@ test('pending redelivery and missing remain reserved while rejected ends the obl
 
     routeInventoryFinalize($this, $route);
 
-    expect($product->fresh()->stock)->toBe(90)
-        ->and($product->fresh()->stock_reserved)->toBe(20)
+    expect($product->fresh()->stock)->toBe('90.0000')
+        ->and($product->fresh()->stock_reserved)->toBe('20.0000')
         ->and($order->fresh()->items()->sum('quantity'))->toBe(20)
         ->and($order->fresh()->status)->toBe('open')
         ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(1);
@@ -679,10 +679,10 @@ test('A B C D route with failed source and extra sale reconciles exact inventory
     routeInventoryResolve($this, $route, $itemDSource, 'returned', 2);
     routeInventoryFinalize($this, $route);
 
-    expect([$productA->fresh()->stock, $productA->fresh()->stock_reserved])->toBe([9, 0])
-        ->and([$productB->fresh()->stock, $productB->fresh()->stock_reserved])->toBe([14, 0])
-        ->and([$productC->fresh()->stock, $productC->fresh()->stock_reserved])->toBe([100, 0])
-        ->and([$productD->fresh()->stock, $productD->fresh()->stock_reserved])->toBe([19, 0]);
+    expect([$productA->fresh()->stock, $productA->fresh()->stock_reserved])->toBe(['9.0000', '0.0000'])
+        ->and([$productB->fresh()->stock, $productB->fresh()->stock_reserved])->toBe(['14.0000', '0.0000'])
+        ->and([$productC->fresh()->stock, $productC->fresh()->stock_reserved])->toBe(['100.0000', '0.0000'])
+        ->and([$productD->fresh()->stock, $productD->fresh()->stock_reserved])->toBe(['19.0000', '0.0000']);
 });
 
 test('extra sale definitively transfers the commercial obligation without changing stock or reservation', function () {
@@ -722,10 +722,10 @@ test('extra sale definitively transfers the commercial obligation without changi
         ->and((float) OperationPayment::find($payment->id)->amount)->toBe(300.0)
         ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(1)
         ->and((float) $destinationOrder->fresh()->items()->where('product_id', $product->id)->sole()->price)->toBe(100.0)
-        ->and($destinationItem->quantity_planned)->toBe(1)
-        ->and($destinationItem->quantity_loaded)->toBe(1)
-        ->and($destinationItem->quantity_delivered)->toBe(0)
-        ->and($sourceItem->fresh()->quantity_delivered)->toBe(2)
+        ->and($destinationItem->quantity_planned)->toBe('1.0000')
+        ->and($destinationItem->quantity_loaded)->toBe('1.0000')
+        ->and($destinationItem->quantity_delivered)->toBe('0.0000')
+        ->and($sourceItem->fresh()->quantity_delivered)->toBe('2.0000')
         ->and($product->fresh()->stock)->toBe($stockBefore)
         ->and($product->fresh()->stock_reserved)->toBe($reservedBefore);
 });
@@ -751,9 +751,9 @@ test('extra sale combines multiple sources into one destination stop item', func
         ->where('product_id', $product->id)
         ->sole();
 
-    expect($destinationItem->quantity_planned)->toBe(3)
-        ->and($destinationItem->quantity_loaded)->toBe(3)
-        ->and($destinationItem->quantity_delivered)->toBe(0)
+    expect($destinationItem->quantity_planned)->toBe('3.0000')
+        ->and($destinationItem->quantity_loaded)->toBe('3.0000')
+        ->and($destinationItem->quantity_delivered)->toBe('0.0000')
         ->and(ExtraSaleAllocation::where('destination_stop_item_id', $destinationItem->id)->count())->toBe(2)
         ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceA->id)->sum('quantity'))->toBe(1)
         ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceB->id)->sum('quantity'))->toBe(2)
@@ -786,9 +786,9 @@ test('successive extra sales reuse an original destination item and preserve sal
         ->get();
 
     expect(RouteStopItem::where('route_stop_id', $destinationStop->id)->where('product_id', $product->id)->count())->toBe(1)
-        ->and($destinationItem->fresh()->quantity_planned)->toBe(3)
-        ->and($destinationItem->fresh()->quantity_loaded)->toBe(3)
-        ->and($destinationItem->fresh()->quantity_delivered)->toBe(0)
+        ->and($destinationItem->fresh()->quantity_planned)->toBe('3.0000')
+        ->and($destinationItem->fresh()->quantity_loaded)->toBe('3.0000')
+        ->and($destinationItem->fresh()->quantity_delivered)->toBe('0.0000')
         ->and($destinationItem->fresh()->is_extra)->toBeFalse()
         ->and($extraLines)->toHaveCount(3)
         ->and((float) $extraLines->where('price', '100.00')->sum('quantity'))->toBe(2.0)
@@ -815,7 +815,7 @@ test('extra sale over availability rolls back every commercial and logistic chan
         ->and(RouteStopItem::where('route_stop_id', $destinationStop->id)->where('product_id', $product->id)->exists())->toBeFalse()
         ->and($sourceOrder->fresh()->items()->sum('quantity'))->toBe(1)
         ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->exists())->toBeFalse()
-        ->and($product->fresh()->stock_reserved)->toBe(1);
+        ->and($product->fresh()->stock_reserved)->toBe('1.0000');
 });
 
 test('a driver cannot inspect or consume surplus from another driver route', function () {
@@ -908,10 +908,10 @@ test('extra sale destination discrepancy keeps the transferred obligation with d
 
     expect($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(0)
         ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe($expectedDestinationQuantity)
-        ->and($sourceItem->fresh()->quantity_loaded)->toBe(1)
-        ->and($sourceItem->fresh()->quantity_delivered)->toBe(0)
-        ->and($product->fresh()->stock)->toBe($expectedStock)
-        ->and($product->fresh()->stock_reserved)->toBe($expectedReserved)
+        ->and($sourceItem->fresh()->quantity_loaded)->toBe('1.0000')
+        ->and($sourceItem->fresh()->quantity_delivered)->toBe('0.0000')
+        ->and($product->fresh()->stock)->toBe(sprintf('%d.0000', $expectedStock))
+        ->and($product->fresh()->stock_reserved)->toBe(sprintf('%d.0000', $expectedReserved))
         ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(in_array($resolution, ['missing', 'damaged'], true) ? 1 : 0);
 })->with([
     'pending redelivery' => ['pending_redelivery', 10, 1, 1],
@@ -942,8 +942,8 @@ test('extra sale reduces newest source operation items first', function () {
         ])
         ->assertOk();
 
-    expect($sourceItems[0]->fresh()->quantity)->toBe(2)
-        ->and($sourceItems[1]->fresh()->quantity)->toBe(0)
+    expect($sourceItems[0]->fresh()->quantity)->toBe('2.0000')
+        ->and($sourceItems[1]->fresh()->quantity)->toBe('0.0000')
         ->and($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(2)
         ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(2);
 });
@@ -995,11 +995,11 @@ test('extra sale from a multi route order does not leave a future commercial obl
 
     expect($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(3)
         ->and($sourceOrder->fresh()->status)->toBe('delivered')
-        ->and($sourceItem->fresh()->quantity_planned)->toBe(2)
-        ->and($sourceItem->fresh()->quantity_loaded)->toBe(2)
-        ->and($sourceItem->fresh()->quantity_delivered)->toBe(1)
-        ->and($product->fresh()->stock)->toBe(6)
-        ->and($product->fresh()->stock_reserved)->toBe(0);
+        ->and($sourceItem->fresh()->quantity_planned)->toBe('2.0000')
+        ->and($sourceItem->fresh()->quantity_loaded)->toBe('2.0000')
+        ->and($sourceItem->fresh()->quantity_delivered)->toBe('1.0000')
+        ->and($product->fresh()->stock)->toBe('6.0000')
+        ->and($product->fresh()->stock_reserved)->toBe('0.0000');
 });
 
 test('available surplus uses released quantity instead of the full undelivered remainder', function () {
@@ -1043,7 +1043,7 @@ test('allocations subtract from released quantity without changing its historica
         ->assertOk()
         ->assertJsonPath('data.surplus.0.available_quantity', 1);
 
-    expect($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe(2)
+    expect($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe('2.0000')
         ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)->sum('quantity'))->toBe(1);
 
     $sourceItem->update(['quantity_released_for_extra_sale' => 0]);
@@ -1090,5 +1090,5 @@ test('unreleased remainder remains conciliable after an extra sale allocation', 
 
     expect($source['difference'])->toBe(2)
         ->and($source['extra_sale_allocated'])->toBe(1)
-        ->and($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe(1);
+        ->and($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe('1.0000');
 });

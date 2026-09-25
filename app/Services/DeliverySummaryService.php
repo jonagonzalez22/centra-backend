@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CommercialOperation;
+use App\Support\QuantityMath;
 use Illuminate\Support\Collection;
 
 /**
@@ -26,14 +27,16 @@ class DeliverySummaryService
         $items = $operation->items;
         $stops = $operation->routeStops;
 
-        $ordered = $items->groupBy('product_id')->map(fn (Collection $lines) => (int) $lines->sum('quantity'));
+        $ordered = $items->groupBy('product_id')->map(
+            fn (Collection $lines): string => $this->sumQuantities($lines->pluck('quantity')->all())
+        );
         $delivered = $this->quantitiesByProduct($stops, 'delivered');
         $planned = $this->quantitiesByProduct($stops, 'planned');
 
-        $summaryItems = $ordered->map(function (int $orderedQuantity, string $productId) use ($items, $delivered, $planned) {
-            $deliveredQuantity = $delivered->get($productId, 0);
-            $pendingQuantity = max(0, $orderedQuantity - $deliveredQuantity);
-            $plannedActiveQuantity = $planned->get($productId, 0);
+        $summaryItems = $ordered->map(function (string $orderedQuantity, string $productId) use ($items, $delivered, $planned) {
+            $deliveredQuantity = QuantityMath::normalize($delivered->get($productId, '0'));
+            $pendingQuantity = QuantityMath::max('0', QuantityMath::subtract($orderedQuantity, $deliveredQuantity));
+            $plannedActiveQuantity = QuantityMath::normalize($planned->get($productId, '0'));
 
             $line = $items->firstWhere('product_id', $productId);
             $product = $line?->relationLoaded('product') ? $line->product : null;
@@ -46,14 +49,19 @@ class DeliverySummaryService
                 'delivered_quantity' => $deliveredQuantity,
                 'pending_quantity' => $pendingQuantity,
                 'planned_active_quantity' => $plannedActiveQuantity,
-                'unassigned_pending_quantity' => max(0, $pendingQuantity - $plannedActiveQuantity),
+                'unassigned_pending_quantity' => QuantityMath::max(
+                    '0',
+                    QuantityMath::subtract($pendingQuantity, $plannedActiveQuantity)
+                ),
             ];
         })->values();
 
         return [
-            'has_pending_delivery' => $summaryItems->contains(fn (array $item) => $item['pending_quantity'] > 0),
+            'has_pending_delivery' => $summaryItems->contains(
+                fn (array $item): bool => QuantityMath::isPositive($item['pending_quantity'])
+            ),
             'items' => $summaryItems->all(),
-            'pending_delivery_quantity' => (int) $summaryItems->sum('pending_quantity'),
+            'pending_delivery_quantity' => $this->sumQuantities($summaryItems->pluck('pending_quantity')->all()),
         ];
     }
 
@@ -71,10 +79,22 @@ class DeliverySummaryService
                     ? []
                     : $stop->items->map(fn ($item) => [
                         'product_id' => $item->product_id,
-                        'quantity' => (int) ($item->{$quantity === 'planned' ? 'quantity_planned' : 'quantity_delivered'} ?? 0),
+                        'quantity' => QuantityMath::normalize(
+                            $item->{$quantity === 'planned' ? 'quantity_planned' : 'quantity_delivered'} ?? '0'
+                        ),
                     ]);
             })
             ->groupBy('product_id')
-            ->map(fn (Collection $rows) => (int) $rows->sum('quantity'));
+            ->map(fn (Collection $rows): string => $this->sumQuantities($rows->pluck('quantity')->all()));
+    }
+
+    /** @param array<int, int|string> $quantities */
+    private function sumQuantities(array $quantities): string
+    {
+        return array_reduce(
+            $quantities,
+            fn (string $total, int|string $quantity): string => QuantityMath::add($total, $quantity),
+            '0.0000'
+        );
     }
 }

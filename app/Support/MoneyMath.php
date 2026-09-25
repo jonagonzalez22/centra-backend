@@ -38,6 +38,21 @@ final class MoneyMath
         return bcsub(self::normalize($left), self::normalize($right), self::SCALE);
     }
 
+    public static function compare(int|string $left, int|string $right): int
+    {
+        return bccomp(self::normalize($left), self::normalize($right), self::SCALE);
+    }
+
+    public static function min(int|string $left, int|string $right): string
+    {
+        return self::compare($left, $right) <= 0 ? self::normalize($left) : self::normalize($right);
+    }
+
+    public static function max(int|string $left, int|string $right): string
+    {
+        return self::compare($left, $right) >= 0 ? self::normalize($left) : self::normalize($right);
+    }
+
     public static function multiplyQuantityByPrice(int|string $quantity, int|string $price): string
     {
         $product = bcmul(QuantityMath::normalize($quantity), self::normalize($price), 8);

@@ -596,8 +596,8 @@ test('complete stop persists released quantities and records them in the event',
         ->where('event_type', 'stop_completed')
         ->sole();
 
-    expect($event->metadata['items'][0]['quantity_released_for_extra_sale'])->toBe(1)
-        ->and($event->metadata['items'][1]['quantity_released_for_extra_sale'])->toBe(2);
+    expect($event->metadata['items'][0]['quantity_released_for_extra_sale'])->toBe('1.0000')
+        ->and($event->metadata['items'][1]['quantity_released_for_extra_sale'])->toBe('2.0000');
 });
 
 test('complete stop defaults omitted released quantity to zero', function () {

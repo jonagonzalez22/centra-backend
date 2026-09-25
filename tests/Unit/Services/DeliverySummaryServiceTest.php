@@ -50,13 +50,13 @@ it('derives pending delivery by product and active route assignment', function (
     $summary = app(DeliverySummaryService::class)->summarize($operation);
 
     expect($summary['has_pending_delivery'])->toBeTrue()
-        ->and($summary['pending_delivery_quantity'])->toBe(1)
+        ->and($summary['pending_delivery_quantity'])->toBe('1.0000')
         ->and($summary['items'][0])->toMatchArray([
-            'ordered_quantity' => 2,
-            'delivered_quantity' => 1,
-            'pending_quantity' => 1,
-            'planned_active_quantity' => 1,
-            'unassigned_pending_quantity' => 0,
+            'ordered_quantity' => '2.0000',
+            'delivered_quantity' => '1.0000',
+            'pending_quantity' => '1.0000',
+            'planned_active_quantity' => '1.0000',
+            'unassigned_pending_quantity' => '0.0000',
         ]);
 });
 
@@ -80,7 +80,7 @@ it('excludes completed routes from active planning and clamps pending at zero', 
 
     $item = app(DeliverySummaryService::class)->summarize($operation)['items'][0];
 
-    expect($item['pending_quantity'])->toBe(0)
-        ->and($item['planned_active_quantity'])->toBe(0)
-        ->and($item['unassigned_pending_quantity'])->toBe(0);
+    expect($item['pending_quantity'])->toBe('0.0000')
+        ->and($item['planned_active_quantity'])->toBe('0.0000')
+        ->and($item['unassigned_pending_quantity'])->toBe('0.0000');
 });

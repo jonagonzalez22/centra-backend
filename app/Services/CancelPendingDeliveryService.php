@@ -39,15 +39,20 @@ class CancelPendingDeliveryService
             $operation->payments()->lockForUpdate()->get();
             $operation->unsetRelation('items')->unsetRelation('routeStops');
             $summary = $this->summaryService->summarize($operation);
-            $pending = collect($summary['items'])->where('pending_quantity', '>', 0)->values();
+            $pending = collect($summary['items'])
+                ->filter(fn (array $item): bool => QuantityMath::isPositive($item['pending_quantity']))
+                ->values();
 
-            if ($pending->isEmpty() || collect($summary['items'])->sum('delivered_quantity') <= 0) {
+            $hasDeliveredQuantity = collect($summary['items'])
+                ->contains(fn (array $item): bool => QuantityMath::isPositive($item['delivered_quantity']));
+
+            if ($pending->isEmpty() || ! $hasDeliveredQuantity) {
                 throw ValidationException::withMessages([
                     'pending_delivery' => ['El pedido no tiene mercadería pendiente cancelable.'],
                 ]);
             }
 
-            if ($pending->contains(fn (array $item) => $item['planned_active_quantity'] > 0)) {
+            if ($pending->contains(fn (array $item): bool => QuantityMath::isPositive($item['planned_active_quantity']))) {
                 throw ValidationException::withMessages([
                     'pending_delivery' => ['No se puede cancelar el pendiente porque parte de la mercadería está asignada a una ruta activa. Retirala o replanificá la asignación desde Logística antes de continuar.'],
                 ]);

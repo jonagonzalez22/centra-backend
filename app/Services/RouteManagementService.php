@@ -18,6 +18,8 @@ use App\Models\Store;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\MoneyMath;
+use App\Support\QuantityMath;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
@@ -767,9 +769,9 @@ class RouteManagementService
 
             foreach ($items as $item) {
                 $productId = $item['product_id'];
-                $quantityPlanned = (int) $item['quantity_planned'];
+                $quantityPlanned = QuantityMath::normalize($item['quantity_planned']);
 
-                if ($quantityPlanned < 1) {
+                if (! QuantityMath::isPositive($quantityPlanned)) {
                     throw $this->validationError('La cantidad planificada debe ser al menos 1.');
                 }
 
@@ -779,7 +781,7 @@ class RouteManagementService
                     throw $this->validationError("El producto {$productId} no pertenece a este pedido.");
                 }
 
-                $orderedQuantity = (int) $orderItems->sum('quantity');
+                $orderedQuantity = $this->sumQuantities($orderItems->pluck('quantity')->all());
 
                 // Completed routes are delivery history, not active planning.
                 $alreadyAssigned = $this->getPlannedInActiveRoutes(
@@ -790,11 +792,11 @@ class RouteManagementService
 
                 // Calculate real remaining after deducting previous deliveries
                 $previouslyDelivered = $this->getPreviouslyDelivered($productId, $stop->order_id);
-                $remaining = max(0, $orderedQuantity - $previouslyDelivered);
+                $remaining = QuantityMath::max('0', QuantityMath::subtract($orderedQuantity, $previouslyDelivered));
 
-                $totalAfter = $alreadyAssigned + $quantityPlanned;
+                $totalAfter = QuantityMath::add($alreadyAssigned, $quantityPlanned);
 
-                if ($totalAfter > $remaining) {
+                if (QuantityMath::compare($totalAfter, $remaining) > 0) {
                     throw $this->validationError(
                         "La cantidad planificada ({$quantityPlanned}) más la ya asignada ({$alreadyAssigned}) "
                         ."supera el saldo pendiente del pedido ({$remaining}) para el producto. "
@@ -861,13 +863,19 @@ class RouteManagementService
                     $byProduct[$productId] = [
                         'product_id' => $productId,
                         'product_name' => $productName,
-                        'total_planned' => 0,
-                        'total_loaded' => 0,
+                        'total_planned' => '0.0000',
+                        'total_loaded' => '0.0000',
                     ];
                 }
 
-                $byProduct[$productId]['total_planned'] += $item->quantity_planned;
-                $byProduct[$productId]['total_loaded'] += $item->quantity_loaded;
+                $byProduct[$productId]['total_planned'] = QuantityMath::add(
+                    $byProduct[$productId]['total_planned'],
+                    $item->quantity_planned
+                );
+                $byProduct[$productId]['total_loaded'] = QuantityMath::add(
+                    $byProduct[$productId]['total_loaded'],
+                    $item->quantity_loaded
+                );
             }
 
             if (! empty($stopItems)) {
@@ -881,13 +889,30 @@ class RouteManagementService
             }
         }
 
+        $legacyByProduct = array_map(function (array $product): array {
+            $product['total_planned'] = (int) $product['total_planned'];
+            $product['total_loaded'] = (int) $product['total_loaded'];
+
+            return $product;
+        }, array_values($byProduct));
+        $legacyByStop = array_map(function (array $stop): array {
+            $stop['items'] = array_map(function (array $item): array {
+                $item['quantity_planned'] = (int) $item['quantity_planned'];
+                $item['quantity_loaded'] = (int) $item['quantity_loaded'];
+
+                return $item;
+            }, $stop['items']);
+
+            return $stop;
+        }, $byStop);
+
         return [
             'route_id' => $route->id,
             'status' => $route->status,
             'operational_date' => $route->operational_date?->format('Y-m-d'),
-            'by_product' => array_values($byProduct),
-            'by_stop' => $byStop,
-            'total_items' => array_sum(array_column($byProduct, 'total_planned')),
+            'by_product' => $legacyByProduct,
+            'by_stop' => $legacyByStop,
+            'total_items' => (int) $this->sumQuantities(array_column($byProduct, 'total_planned')),
         ];
     }
 
@@ -908,7 +933,7 @@ class RouteManagementService
 
             foreach ($loadedQuantities as $entry) {
                 $routeStopItemId = $entry['route_stop_item_id'];
-                $quantityLoaded = (int) $entry['quantity_loaded'];
+                $quantityLoaded = QuantityMath::normalize($entry['quantity_loaded']);
 
                 $stopItem = RouteStopItem::where('id', $routeStopItemId)
                     ->whereHas('routeStop', function (Builder $q) use ($route) {
@@ -922,13 +947,13 @@ class RouteManagementService
                     throw $this->validationError("El item {$routeStopItemId} no pertenece a esta ruta.");
                 }
 
-                if ($quantityLoaded > $stopItem->quantity_planned) {
+                if (QuantityMath::compare($quantityLoaded, $stopItem->quantity_planned) > 0) {
                     throw $this->validationError(
                         "La cantidad cargada ({$quantityLoaded}) no puede superar la planificada ({$stopItem->quantity_planned})."
                     );
                 }
 
-                if ($quantityLoaded < $stopItem->quantity_planned) {
+                if (QuantityMath::compare($quantityLoaded, $stopItem->quantity_planned) < 0) {
                     if (empty($entry['reason'])) {
                         throw $this->validationError(
                             'Se requiere un motivo cuando la cantidad cargada es menor a la planificada.'
@@ -938,7 +963,7 @@ class RouteManagementService
 
                 // Create adjustment if quantity changed
                 $oldQuantity = $stopItem->quantity_loaded;
-                if ($oldQuantity !== $quantityLoaded) {
+                if (QuantityMath::compare($oldQuantity, $quantityLoaded) !== 0) {
                     RouteLoadAdjustment::create([
                         'route_stop_item_id' => $stopItem->id,
                         'user_id' => $user->id,
@@ -951,7 +976,7 @@ class RouteManagementService
 
                 $stopItem->update(['quantity_loaded' => $quantityLoaded]);
 
-                if ($quantityLoaded > 0) {
+                if (QuantityMath::isPositive($quantityLoaded)) {
                     $hasLoaded = true;
                 }
             }
@@ -1083,7 +1108,7 @@ class RouteManagementService
 
             foreach ($completedStops as $stop) {
                 foreach ($stop->items as $item) {
-                    if ($item->quantity_delivered <= 0) {
+                    if (! QuantityMath::isPositive($item->quantity_delivered)) {
                         continue;
                     }
 
@@ -1098,7 +1123,10 @@ class RouteManagementService
 
                     // b. Release stock_reserved
                     $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
-                    $newReserved = max(0, $product->stock_reserved - $item->quantity_delivered);
+                    $newReserved = QuantityMath::max(
+                        '0',
+                        QuantityMath::subtract($product->stock_reserved, $item->quantity_delivered)
+                    );
                     $product->update(['stock_reserved' => $newReserved]);
 
                 }
@@ -1163,7 +1191,7 @@ class RouteManagementService
             ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
             ->get();
         $allocatedBySourceItem = $allocations->groupBy('source_stop_item_id')
-            ->map(fn ($group) => $group->sum('quantity'))
+            ->map(fn (Collection $group): string => $this->sumQuantities($group->pluck('quantity')->all()))
             ->toArray();
 
         $totalDeclaredAmount = 0;
@@ -1181,20 +1209,21 @@ class RouteManagementService
             $stopHasUnresolved = false;
 
             foreach ($stop->items as $item) {
-                $rawDiff = $item->quantity_loaded - $item->quantity_delivered;
+                $rawDiff = QuantityMath::subtract($item->quantity_loaded, $item->quantity_delivered);
                 // Subtract quantities already reallocated via extra_sale_allocations
-                $allocatedQty = $allocatedBySourceItem[$item->id] ?? 0;
-                $diff = $rawDiff - $allocatedQty;
+                $allocatedQty = QuantityMath::normalize($allocatedBySourceItem[$item->id] ?? '0');
+                $diff = QuantityMath::subtract($rawDiff, $allocatedQty);
                 $discrepancy = $item->discrepancy ?? null;
 
                 $stopItems[] = [
                     'route_stop_item_id' => $item->id,
                     'product_id' => $item->product_id,
                     'product_name' => $item->product?->name,
-                    'quantity_loaded' => $item->quantity_loaded,
-                    'quantity_delivered' => $item->quantity_delivered,
-                    'difference' => $diff,
-                    'extra_sale_allocated' => $allocatedQty,
+                    'quantity_loaded' => (int) $item->quantity_loaded,
+                    'quantity_delivered' => (int) $item->quantity_delivered,
+                    // A1.2 keeps this read model whole-unit until A1.3.
+                    'difference' => (int) $diff,
+                    'extra_sale_allocated' => (int) $allocatedQty,
                     'discrepancy' => $discrepancy ? [
                         'id' => $discrepancy->id,
                         'resolution_type' => $discrepancy->resolution_type,
@@ -1203,12 +1232,12 @@ class RouteManagementService
                     ] : null,
                 ];
 
-                if ($diff > 0 && ! $discrepancy?->resolution_type) {
+                if (QuantityMath::isPositive($diff) && ! $discrepancy?->resolution_type) {
                     $stopHasUnresolved = true;
                     $allDiscrepanciesResolved = false;
                 }
 
-                if ($diff < 0) {
+                if (QuantityMath::isNegative($diff)) {
                     $hasNegativeDifferences = true;
                 }
             }
@@ -1391,7 +1420,7 @@ class RouteManagementService
         $stop = RouteStop::with('route')->findOrFail($collection->route_stop_id);
         $proposedQuantities = RouteStopItem::where('route_stop_id', $stop->id)
             ->pluck('quantity_delivered', 'id')
-            ->map(fn ($quantity) => (int) $quantity)
+            ->map(fn ($quantity): string => QuantityMath::normalize($quantity))
             ->all();
         $collectionAmounts = $this->deliveryCollectionAmountService->calculate(
             $stop,
@@ -1400,7 +1429,7 @@ class RouteManagementService
             $collection->id
         );
 
-        if ((float) $collection->amount > $collectionAmounts['amount_to_collect_now']) {
+        if (MoneyMath::compare($collection->amount, (string) $collectionAmounts['amount_to_collect_now']) > 0) {
             throw $this->validationError('El monto supera el valor entregado pendiente de cobro.');
         }
 
@@ -1575,15 +1604,15 @@ class RouteManagementService
     /**
      * @param  array{resolution_type: string, quantity_to_resolve: int, notes?: string|null}  $data
      */
-    private function validateDiscrepancyResolution(RouteStopItem $item, array $data): int
+    private function validateDiscrepancyResolution(RouteStopItem $item, array $data): string
     {
         $diff = $this->getReconciliationDifference($item);
 
-        if ($diff <= 0) {
+        if (! QuantityMath::isPositive($diff)) {
             throw $this->validationError('No hay diferencia que resolver.');
         }
 
-        if ((int) $data['quantity_to_resolve'] !== $diff) {
+        if (QuantityMath::compare(QuantityMath::normalize($data['quantity_to_resolve']), $diff) !== 0) {
             throw $this->validationError('La cantidad a resolver debe coincidir con la diferencia pendiente.');
         }
 
@@ -1667,11 +1696,11 @@ class RouteManagementService
                 foreach ($stop->items as $item) {
                     $diff = $this->getReconciliationDifference($item);
 
-                    if ($diff < 0) {
+                    if (QuantityMath::isNegative($diff)) {
                         throw $this->validationError('Hay items con cantidad entregada mayor a la cargada.');
                     }
 
-                    if ($diff > 0) {
+                    if (QuantityMath::isPositive($diff)) {
                         $hasResolution = DeliveryDiscrepancy::where('route_stop_item_id', $item->id)
                             ->whereNotNull('resolution_type')
                             ->exists();
@@ -1689,7 +1718,7 @@ class RouteManagementService
                     continue;
                 }
                 foreach ($stop->items as $item) {
-                    if ($item->quantity_delivered <= 0) {
+                    if (! QuantityMath::isPositive($item->quantity_delivered)) {
                         continue;
                     }
                     $product = Product::forStore($route->store_id)
@@ -1702,13 +1731,19 @@ class RouteManagementService
 
                     // Decrement stock for sold/delivered items
                     $product->update([
-                        'stock' => max(0, $product->stock - $item->quantity_delivered),
+                        'stock' => QuantityMath::max(
+                            '0',
+                            QuantityMath::subtract($product->stock, $item->quantity_delivered)
+                        ),
                     ]);
 
                     // Every delivered unit consumes one reserved unit, including extra sales
                     // allocated from surplus on another stop.
                     $product->update([
-                        'stock_reserved' => max(0, $product->stock_reserved - $item->quantity_delivered),
+                        'stock_reserved' => QuantityMath::max(
+                            '0',
+                            QuantityMath::subtract($product->stock_reserved, $item->quantity_delivered)
+                        ),
                     ]);
                 }
             }
@@ -1884,14 +1919,14 @@ class RouteManagementService
 
             foreach ($products as $productEntry) {
                 $productId = $productEntry['product_id'];
-                $remainingToLoad = (int) $productEntry['quantity_loaded'];
+                $remainingToLoad = QuantityMath::normalize($productEntry['quantity_loaded']);
                 $reason = $productEntry['reason'] ?? null;
                 $notes = $productEntry['notes'] ?? null;
 
-                if ($remainingToLoad > 0) {
+                if (QuantityMath::isPositive($remainingToLoad)) {
                     // Prorrateo: distribuir greedy por secuencia
                     foreach ($stops as $stop) {
-                        if ($remainingToLoad <= 0) {
+                        if (QuantityMath::isZero($remainingToLoad)) {
                             break;
                         }
 
@@ -1900,15 +1935,15 @@ class RouteManagementService
                             continue;
                         }
 
-                        $planned = (int) $stopItem->quantity_planned;
-                        $assignQty = min($remainingToLoad, $planned);
+                        $planned = QuantityMath::normalize($stopItem->quantity_planned);
+                        $assignQty = QuantityMath::min($remainingToLoad, $planned);
 
-                        if ($assignQty <= 0) {
+                        if (! QuantityMath::isPositive($assignQty)) {
                             continue;
                         }
 
                         $stopItem->update(['quantity_loaded' => $assignQty]);
-                        $remainingToLoad -= $assignQty;
+                        $remainingToLoad = QuantityMath::subtract($remainingToLoad, $assignQty);
                         $hasLoaded = true;
                     }
 
@@ -1956,20 +1991,20 @@ class RouteManagementService
             $route = DeliveryRoute::where('id', $route->id)->lockForUpdate()->first();
 
             // Calculate current total for this product in this route
-            $currentTotal = RouteStopItem::where('product_id', $productId)
+            $currentTotal = QuantityMath::normalize(RouteStopItem::where('product_id', $productId)
                 ->whereHas('routeStop', function (Builder $q) use ($route) {
                     $q->where('route_id', $route->id)
                         ->where('status', '!=', 'cancelled');
                 })
-                ->sum('quantity_loaded');
+                ->sum('quantity_loaded'));
 
-            $newTotal = 0;
+            $newTotal = '0.0000';
             $validatedItems = [];
 
             foreach ($items as $entry) {
                 $routeStopItemId = $entry['route_stop_item_id'];
-                $quantityLoaded = (int) $entry['quantity_loaded'];
-                $newTotal += $quantityLoaded;
+                $quantityLoaded = QuantityMath::normalize($entry['quantity_loaded']);
+                $newTotal = QuantityMath::add($newTotal, $quantityLoaded);
 
                 $stopItem = RouteStopItem::where('id', $routeStopItemId)
                     ->where('product_id', $productId)
@@ -1986,7 +2021,7 @@ class RouteManagementService
                     );
                 }
 
-                if ($quantityLoaded > $stopItem->quantity_planned) {
+                if (QuantityMath::compare($quantityLoaded, $stopItem->quantity_planned) > 0) {
                     throw $this->validationError(
                         "La cantidad cargada ({$quantityLoaded}) no puede superar la planificada ({$stopItem->quantity_planned}) ".
                         "para el item {$routeStopItemId}."
@@ -2002,7 +2037,7 @@ class RouteManagementService
             }
 
             // Conservation rule: total must not change
-            if ($newTotal !== (int) $currentTotal) {
+            if (QuantityMath::compare($newTotal, $currentTotal) !== 0) {
                 throw $this->validationError(
                     "La suma de las cantidades cargadas ({$newTotal}) debe ser igual ".
                     "al total actual cargado ({$currentTotal}) para este producto. ".
@@ -2017,7 +2052,7 @@ class RouteManagementService
                 $oldQuantity = $stopItem->quantity_loaded;
                 $newQuantity = $entry['quantity_loaded'];
 
-                if ($oldQuantity !== $newQuantity) {
+                if (QuantityMath::compare($oldQuantity, $newQuantity) !== 0) {
                     // Create adjustment record
                     RouteLoadAdjustment::create([
                         'route_stop_item_id' => $stopItem->id,
@@ -2042,7 +2077,7 @@ class RouteManagementService
                 null,
                 [
                     'product_id' => $productId,
-                    'previous_total' => (int) $currentTotal,
+                    'previous_total' => QuantityMath::normalize($currentTotal),
                     'new_total' => $newTotal,
                     'item_count' => count($validatedItems),
                 ]
@@ -2074,10 +2109,10 @@ class RouteManagementService
             // Refresh from DB to get the updated quantity_loaded
             $stopItem->refresh();
 
-            $planned = (int) $stopItem->quantity_planned;
-            $loaded = (int) $stopItem->quantity_loaded;
+            $planned = QuantityMath::normalize($stopItem->quantity_planned);
+            $loaded = QuantityMath::normalize($stopItem->quantity_loaded);
 
-            if ($loaded < $planned) {
+            if (QuantityMath::compare($loaded, $planned) < 0) {
                 $needsReason = true;
 
                 RouteLoadAdjustment::create([
@@ -2096,6 +2131,16 @@ class RouteManagementService
                 'Se requiere un motivo cuando la cantidad cargada es menor a la planificada.'
             );
         }
+    }
+
+    /** @param array<int, int|string> $quantities */
+    private function sumQuantities(array $quantities): string
+    {
+        return array_reduce(
+            $quantities,
+            fn (string $total, int|string $quantity): string => QuantityMath::add($total, $quantity),
+            '0.0000'
+        );
     }
 
     /**
@@ -2239,7 +2284,10 @@ class RouteManagementService
                         // They are no longer owed: release their reservation and reduce
                         // the commercial obligation without changing route history.
                         $product->update([
-                            'stock_reserved' => max(0, $product->stock_reserved - $diff),
+                            'stock_reserved' => QuantityMath::max(
+                                '0',
+                                QuantityMath::subtract($product->stock_reserved, $diff)
+                            ),
                         ]);
                         $this->commercialOperationService->reduceCommercialObligation(
                             $stop->order_id,
@@ -2279,13 +2327,16 @@ class RouteManagementService
     /**
      * Quantity still requiring reconciliation after valid extra-sale allocations.
      */
-    private function getReconciliationDifference(RouteStopItem $item): int
+    private function getReconciliationDifference(RouteStopItem $item): string
     {
         $allocated = ExtraSaleAllocation::where('source_stop_item_id', $item->id)
             ->whereHas('destinationStop', fn ($query) => $query->where('status', '!=', 'cancelled'))
             ->sum('quantity');
 
-        return (int) $item->quantity_loaded - (int) $item->quantity_delivered - (int) $allocated;
+        return QuantityMath::subtract(
+            QuantityMath::subtract($item->quantity_loaded, $item->quantity_delivered),
+            QuantityMath::normalize($allocated)
+        );
     }
 
     /**
@@ -2304,9 +2355,9 @@ class RouteManagementService
             ->select('product_id', DB::raw('SUM(quantity) as total_quantity'))
             ->groupBy('product_id')
             ->pluck('total_quantity', 'product_id')
-            ->map(fn ($quantity) => (int) $quantity);
+            ->map(fn ($quantity): string => QuantityMath::normalize($quantity));
 
-        if ($orderedByProduct->sum() === 0) {
+        if (! $orderedByProduct->contains(fn (string $quantity): bool => QuantityMath::isPositive($quantity))) {
             $order->update(['status' => 'closed']);
 
             return;
@@ -2325,11 +2376,16 @@ class RouteManagementService
             })
             ->groupBy('product_id')
             ->pluck('total_quantity', 'product_id')
-            ->map(fn ($quantity) => (int) $quantity);
+            ->map(fn ($quantity): string => QuantityMath::normalize($quantity));
 
-        $hasDeliveries = $deliveredByProduct->sum() > 0;
+        $hasDeliveries = $deliveredByProduct->contains(
+            fn (string $quantity): bool => QuantityMath::isPositive($quantity)
+        );
         $fullyDelivered = $orderedByProduct->every(
-            fn (int $ordered, string $productId) => ($deliveredByProduct[$productId] ?? 0) >= $ordered
+            fn (string $ordered, string $productId): bool => QuantityMath::compare(
+                $deliveredByProduct[$productId] ?? '0',
+                $ordered
+            ) >= 0
         );
 
         if ($fullyDelivered) {
@@ -2342,9 +2398,9 @@ class RouteManagementService
     /**
      * Cantidad ya entregada de un producto en un pedido a través de rutas completadas.
      */
-    private function getPreviouslyDelivered(string $productId, string $orderId): int
+    private function getPreviouslyDelivered(string $productId, string $orderId): string
     {
-        return (int) RouteStopItem::where('product_id', $productId)
+        return QuantityMath::normalize(RouteStopItem::where('product_id', $productId)
             ->where('quantity_delivered', '>', 0)
             ->whereHas('routeStop', function (Builder $q) use ($orderId) {
                 $q->where('order_id', $orderId);
@@ -2352,15 +2408,15 @@ class RouteManagementService
             ->whereHas('routeStop.route', function (Builder $q) {
                 $q->where('status', 'completed');
             })
-            ->sum('quantity_delivered');
+            ->sum('quantity_delivered'));
     }
 
     /**
      * Quantities assigned to active routes other than the excluded route.
      */
-    private function getPlannedInActiveRoutes(string $productId, string $orderId, string $excludeRouteId): int
+    private function getPlannedInActiveRoutes(string $productId, string $orderId, string $excludeRouteId): string
     {
-        return (int) RouteStopItem::where('product_id', $productId)
+        return QuantityMath::normalize(RouteStopItem::where('product_id', $productId)
             ->whereHas('routeStop', function (Builder $q) use ($orderId, $excludeRouteId) {
                 $q->where('order_id', $orderId)
                     ->where('route_id', '!=', $excludeRouteId)
@@ -2369,7 +2425,7 @@ class RouteManagementService
             ->whereHas('routeStop.route', function (Builder $q) {
                 $q->whereIn('status', ['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']);
             })
-            ->sum('quantity_planned');
+            ->sum('quantity_planned'));
     }
 
     /**
@@ -2377,7 +2433,7 @@ class RouteManagementService
      * (draft, planned, loaded, dispatched, awaiting_reconciliation).
      * Excluye paradas canceladas y la ruta actual.
      */
-    private function getPlannedInOtherRoutes(string $productId, string $orderId, string $excludeRouteId): int
+    private function getPlannedInOtherRoutes(string $productId, string $orderId, string $excludeRouteId): string
     {
         return $this->getPlannedInActiveRoutes($productId, $orderId, $excludeRouteId);
     }
@@ -2404,7 +2460,7 @@ class RouteManagementService
             }
 
             foreach ($order->items->groupBy('product_id') as $productId => $orderItems) {
-                $orderedQuantity = (int) $orderItems->sum('quantity');
+                $orderedQuantity = $this->sumQuantities($orderItems->pluck('quantity')->all());
                 $previouslyDelivered = $this->getPreviouslyDelivered(
                     $productId,
                     $stop->order_id
@@ -2416,13 +2472,15 @@ class RouteManagementService
                     $routeId
                 );
 
-                $remaining = max(0,
-                    $orderedQuantity
-                    - $previouslyDelivered
-                    - $plannedElsewhere
+                $remaining = QuantityMath::max(
+                    '0',
+                    QuantityMath::subtract(
+                        QuantityMath::subtract($orderedQuantity, $previouslyDelivered),
+                        $plannedElsewhere
+                    )
                 );
 
-                if ($remaining > 0) {
+                if (QuantityMath::isPositive($remaining)) {
                     RouteStopItem::updateOrCreate(
                         [
                             'route_stop_id' => $stop->id,
