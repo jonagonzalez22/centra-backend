@@ -28,7 +28,7 @@ class OperationItemResource extends JsonResource
             'id' => $this->id,
             'product_id' => $this->product_id,
             'product_name' => $this->product_name,
-            'quantity' => $this->quantity,
+            'quantity' => (int) $this->quantity,
             'price' => (float) $this->price,
             'subtotal' => (float) $this->subtotal,
             'tax_amount' => (float) $this->tax_amount,

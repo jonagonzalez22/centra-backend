@@ -27,7 +27,7 @@ class OperationItem extends Model
     ];
 
     protected $casts = [
-        'quantity' => 'integer',
+        'quantity' => 'decimal:4',
         'price' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',

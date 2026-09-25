@@ -12,9 +12,9 @@ class InventoryMovementResource extends JsonResource
         return [
             'id' => $this->id,
             'type' => $this->type,
-            'quantity' => $this->quantity,
-            'previous_stock' => $this->previous_stock,
-            'current_stock' => $this->current_stock,
+            'quantity' => (int) $this->quantity,
+            'previous_stock' => (int) $this->previous_stock,
+            'current_stock' => (int) $this->current_stock,
             'concept' => $this->concept,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'product' => [

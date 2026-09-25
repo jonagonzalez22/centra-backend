@@ -29,8 +29,8 @@ class RouteLoadAdjustment extends Model
     protected function casts(): array
     {
         return [
-            'old_quantity' => 'integer',
-            'new_quantity' => 'integer',
+            'old_quantity' => 'decimal:4',
+            'new_quantity' => 'decimal:4',
         ];
     }
 

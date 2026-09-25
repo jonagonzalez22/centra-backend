@@ -499,8 +499,8 @@ describe('POST /api/v1/store/operations - Stock', function () {
         $response->assertStatus(201);
 
         $this->product->refresh();
-        expect($this->product->stock)->toBe(8);
-        expect($this->product->stock_reserved)->toBe(0);
+        expect($this->product->stock)->toBe('8.0000');
+        expect($this->product->stock_reserved)->toBe('0.0000');
     });
 
     test('order increases reserved only', function () {
@@ -517,8 +517,8 @@ describe('POST /api/v1/store/operations - Stock', function () {
         $response->assertStatus(201);
 
         $this->product->refresh();
-        expect($this->product->stock)->toBe(10);
-        expect($this->product->stock_reserved)->toBe(2);
+        expect($this->product->stock)->toBe('10.0000');
+        expect($this->product->stock_reserved)->toBe('2.0000');
     });
 
     test('insufficient stock returns 422 with items index', function () {

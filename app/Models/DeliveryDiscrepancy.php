@@ -32,9 +32,9 @@ class DeliveryDiscrepancy extends Model
     protected function casts(): array
     {
         return [
-            'quantity_loaded' => 'integer',
-            'quantity_delivered' => 'integer',
-            'difference_quantity' => 'integer',
+            'quantity_loaded' => 'decimal:4',
+            'quantity_delivered' => 'decimal:4',
+            'difference_quantity' => 'decimal:4',
             'resolved_at' => 'datetime',
             'processed_at' => 'datetime',
         ];

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\QuantityMath;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,9 +38,9 @@ class Product extends Model
     protected $casts = [
         'price' => 'decimal:2',
         'cost' => 'decimal:2',
-        'stock' => 'integer',
-        'stock_reserved' => 'integer',
-        'stock_min' => 'integer',
+        'stock' => 'decimal:4',
+        'stock_reserved' => 'decimal:4',
+        'stock_min' => 'decimal:4',
         'is_active' => 'boolean',
     ];
 
@@ -77,13 +78,13 @@ class Product extends Model
         return $query->where('store_id', $storeId);
     }
 
-    public function getAvailableStockAttribute(): int
+    public function getAvailableStockAttribute(): string
     {
-        return max(0, $this->stock - $this->stock_reserved);
+        return QuantityMath::max('0', QuantityMath::subtract($this->stock, $this->stock_reserved));
     }
 
-    public static function validateStockIntegrity(int $stock, int $stockReserved): bool
+    public static function validateStockIntegrity(int|string $stock, int|string $stockReserved): bool
     {
-        return $stockReserved <= $stock;
+        return QuantityMath::compare($stockReserved, $stock) <= 0;
     }
 }

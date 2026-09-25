@@ -5,6 +5,7 @@ use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\QuantityMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -57,10 +58,10 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->assertJsonPath('status', 'success');
 
         $product->refresh();
-        expect($product->stock)->toBe($previousStock + 5);
+        expect($product->stock)->toBe(QuantityMath::add($previousStock, 5));
 
         $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe(5)
+        expect($movement->quantity)->toBe('5.0000')
             ->and($movement->previous_stock)->toBe($previousStock)
             ->and($movement->current_stock)->toBe($product->stock)
             ->and($movement->type)->toBe('input');
@@ -109,10 +110,10 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->assertJsonPath('status', 'success');
 
         $product->refresh();
-        expect($product->stock)->toBe($previousStock - 3);
+        expect($product->stock)->toBe(QuantityMath::subtract($previousStock, 3));
 
         $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe(-3)
+        expect($movement->quantity)->toBe('-3.0000')
             ->and($movement->previous_stock)->toBe($previousStock)
             ->and($movement->current_stock)->toBe($product->stock)
             ->and($movement->type)->toBe('output');
@@ -132,10 +133,10 @@ describe('POST /api/v1/store/inventory/adjust', function () {
         $response->assertStatus(201);
 
         $product->refresh();
-        expect($product->stock)->toBe($previousStock - 3);
+        expect($product->stock)->toBe(QuantityMath::subtract($previousStock, 3));
 
         $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe(-3);
+        expect($movement->quantity)->toBe('-3.0000');
     });
 
     test('output type that would result in negative stock returns 422', function () {
@@ -152,7 +153,7 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->assertJsonPath('message', 'El stock resultante no puede ser negativo.');
 
         $product->refresh();
-        expect($product->stock)->toBe(5);
+        expect($product->stock)->toBe('5.0000');
     });
 
     test('adjustment type with positive quantity succeeds', function () {
@@ -169,10 +170,10 @@ describe('POST /api/v1/store/inventory/adjust', function () {
         $response->assertStatus(201);
 
         $product->refresh();
-        expect($product->stock)->toBe($previousStock + 5);
+        expect($product->stock)->toBe(QuantityMath::add($previousStock, 5));
 
         $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe(5)
+        expect($movement->quantity)->toBe('5.0000')
             ->and($movement->type)->toBe('adjustment');
     });
 
@@ -190,10 +191,10 @@ describe('POST /api/v1/store/inventory/adjust', function () {
         $response->assertStatus(201);
 
         $product->refresh();
-        expect($product->stock)->toBe($previousStock - 3);
+        expect($product->stock)->toBe(QuantityMath::subtract($previousStock, 3));
 
         $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe(-3)
+        expect($movement->quantity)->toBe('-3.0000')
             ->and($movement->type)->toBe('adjustment');
     });
 

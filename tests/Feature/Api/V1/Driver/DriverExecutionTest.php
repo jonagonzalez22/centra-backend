@@ -589,8 +589,8 @@ test('complete stop persists released quantities and records them in the event',
         ])
         ->assertOk();
 
-    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe(1)
-        ->and($item2->fresh()->quantity_released_for_extra_sale)->toBe(2);
+    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe('1.0000')
+        ->and($item2->fresh()->quantity_released_for_extra_sale)->toBe('2.0000');
 
     $event = DeliveryRouteEvent::where('route_id', $data['route']->id)
         ->where('event_type', 'stop_completed')
@@ -616,7 +616,7 @@ test('complete stop defaults omitted released quantity to zero', function () {
         ])
         ->assertOk();
 
-    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe(0);
+    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe('0.0000');
 });
 
 test('complete stop rejects released quantity above the locked item remainder', function () {
@@ -637,8 +637,8 @@ test('complete stop rejects released quantity above the locked item remainder', 
         ])
         ->assertStatus(422);
 
-    expect($item->fresh()->quantity_delivered)->toBe(0)
-        ->and($item->fresh()->quantity_released_for_extra_sale)->toBe(0);
+    expect($item->fresh()->quantity_delivered)->toBe('0.0000')
+        ->and($item->fresh()->quantity_released_for_extra_sale)->toBe('0.0000');
 });
 
 test('complete stop rejects a positive released quantity for a full delivery', function () {
@@ -675,8 +675,8 @@ test('failed stop persists independent released quantities per product', functio
         ])
         ->assertOk();
 
-    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe(6)
-        ->and($item2->fresh()->quantity_released_for_extra_sale)->toBe(0);
+    expect($item1->fresh()->quantity_released_for_extra_sale)->toBe('6.0000')
+        ->and($item2->fresh()->quantity_released_for_extra_sale)->toBe('0.0000');
 });
 
 test('complete stop rejects inactive and other-store rejection reasons', function (string $reasonKind) {

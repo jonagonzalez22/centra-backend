@@ -16,10 +16,10 @@ class RouteStopItemResource extends JsonResource
             'route_stop_id' => $this->route_stop_id,
             'product_id' => $this->product_id,
             'product_name' => $this->whenLoaded('product', fn () => $this->product->name),
-            'quantity_planned' => $this->quantity_planned,
-            'quantity_loaded' => $this->quantity_loaded,
-            'quantity_delivered' => $this->quantity_delivered,
-            'quantity_released_for_extra_sale' => $this->quantity_released_for_extra_sale,
+            'quantity_planned' => (int) $this->quantity_planned,
+            'quantity_loaded' => (int) $this->quantity_loaded,
+            'quantity_delivered' => (int) $this->quantity_delivered,
+            'quantity_released_for_extra_sale' => (int) $this->quantity_released_for_extra_sale,
         ];
     }
 }

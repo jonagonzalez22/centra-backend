@@ -15,7 +15,7 @@ class CommercialProductDetailResource extends JsonResource
             'sku' => $this->sku,
             'barcode' => $this->barcode,
             'price' => (float) $this->price,
-            'available_stock' => $this->available_stock,
+            'available_stock' => (int) $this->available_stock,
         ];
     }
 }

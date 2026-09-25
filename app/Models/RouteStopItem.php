@@ -29,10 +29,10 @@ class RouteStopItem extends Model
     protected function casts(): array
     {
         return [
-            'quantity_planned' => 'integer',
-            'quantity_loaded' => 'integer',
-            'quantity_delivered' => 'integer',
-            'quantity_released_for_extra_sale' => 'integer',
+            'quantity_planned' => 'decimal:4',
+            'quantity_loaded' => 'decimal:4',
+            'quantity_delivered' => 'decimal:4',
+            'quantity_released_for_extra_sale' => 'decimal:4',
             'is_extra' => 'boolean',
         ];
     }
