@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -9,6 +11,13 @@ use Illuminate\Validation\Rule;
 
 class AdjustInventoryRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['quantity']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -26,7 +35,7 @@ class AdjustInventoryRequest extends FormRequest
                     return $query->where('store_id', $storeId);
                 }),
             ],
-            'quantity' => ['required', 'integer'],
+            'quantity' => ['required', DecimalQuantity::positive()],
             'type' => ['required', 'string', Rule::in(['input', 'output', 'adjustment'])],
             'concept' => ['required', 'string', 'max:255'],
         ];
@@ -39,7 +48,6 @@ class AdjustInventoryRequest extends FormRequest
             'product_id.uuid' => 'El ID del producto debe ser un UUID válido.',
             'product_id.exists' => 'El producto no existe o no pertenece a tu tienda.',
             'quantity.required' => 'La cantidad es obligatoria.',
-            'quantity.integer' => 'La cantidad debe ser un número entero.',
             'type.required' => 'El tipo de ajuste es obligatorio.',
             'type.in' => 'El tipo de ajuste debe ser input, output o adjustment.',
             'concept.required' => 'El concepto es obligatorio.',

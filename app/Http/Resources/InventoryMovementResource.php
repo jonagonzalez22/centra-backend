@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -12,9 +13,9 @@ class InventoryMovementResource extends JsonResource
         return [
             'id' => $this->id,
             'type' => $this->type,
-            'quantity' => (int) $this->quantity,
-            'previous_stock' => (int) $this->previous_stock,
-            'current_stock' => (int) $this->current_stock,
+            'quantity' => QuantityMath::normalize($this->quantity),
+            'previous_stock' => QuantityMath::normalize($this->previous_stock),
+            'current_stock' => QuantityMath::normalize($this->current_stock),
             'concept' => $this->concept,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'product' => [

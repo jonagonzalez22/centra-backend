@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\OperationItem;
+use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection;
@@ -104,31 +105,9 @@ class CommercialOperationResource extends JsonResource
                 ->toArray(), []),
             'delivery_summary' => $this->when(
                 $this->type === 'order',
-                fn () => $this->legacyDeliverySummary(
-                    app(\App\Services\DeliverySummaryService::class)->summarize($this->resource)
-                )
+                fn () => app(\App\Services\DeliverySummaryService::class)->summarize($this->resource)
             ),
         ];
-    }
-
-    private function legacyDeliverySummary(array $summary): array
-    {
-        $summary['pending_delivery_quantity'] = (int) $summary['pending_delivery_quantity'];
-        $summary['items'] = array_map(function (array $item): array {
-            foreach ([
-                'ordered_quantity',
-                'delivered_quantity',
-                'pending_quantity',
-                'planned_active_quantity',
-                'unassigned_pending_quantity',
-            ] as $field) {
-                $item[$field] = (int) $item[$field];
-            }
-
-            return $item;
-        }, $summary['items']);
-
-        return $summary;
     }
 
     private function getDeliveryAddress(): ?array
@@ -166,7 +145,7 @@ class CommercialOperationResource extends JsonResource
     {
         /** @var Collection<int, OperationItem> $items */
         $items = $this->items
-            ->filter(fn (OperationItem $item): bool => (int) $item->quantity > 0)
+            ->filter(fn (OperationItem $item): bool => QuantityMath::isPositive($item->quantity))
             ->sortBy([
                 ['product_id', 'asc'],
                 ['created_at', 'asc'],
@@ -186,7 +165,7 @@ class CommercialOperationResource extends JsonResource
                     if ($groupIndex === false) {
                         $groups[] = [
                             'source' => $item,
-                            'quantity' => (int) $item->quantity,
+                            'quantity' => QuantityMath::normalize($item->quantity),
                             'subtotal' => (float) $item->subtotal,
                             'tax_amount' => (float) $item->tax_amount,
                             'discount_amount' => (float) $item->discount_amount,
@@ -195,7 +174,7 @@ class CommercialOperationResource extends JsonResource
                         continue;
                     }
 
-                    $groups[$groupIndex]['quantity'] += (int) $item->quantity;
+                    $groups[$groupIndex]['quantity'] = QuantityMath::add($groups[$groupIndex]['quantity'], $item->quantity);
                     $groups[$groupIndex]['subtotal'] += (float) $item->subtotal;
                     $groups[$groupIndex]['tax_amount'] += (float) $item->tax_amount;
                     $groups[$groupIndex]['discount_amount'] += (float) $item->discount_amount;
@@ -226,10 +205,16 @@ class CommercialOperationResource extends JsonResource
     private function hasSameCommercialTerms(OperationItem $first, OperationItem $second): bool
     {
         return $this->amountInCents($first->price) === $this->amountInCents($second->price)
-            && $this->amountInCents($first->tax_amount) * (int) $second->quantity
-                === $this->amountInCents($second->tax_amount) * (int) $first->quantity
-            && $this->amountInCents($first->discount_amount) * (int) $second->quantity
-                === $this->amountInCents($second->discount_amount) * (int) $first->quantity;
+            && bccomp(
+                bcmul((string) $this->amountInCents($first->tax_amount), QuantityMath::normalize($second->quantity), 8),
+                bcmul((string) $this->amountInCents($second->tax_amount), QuantityMath::normalize($first->quantity), 8),
+                8
+            ) === 0
+            && bccomp(
+                bcmul((string) $this->amountInCents($first->discount_amount), QuantityMath::normalize($second->quantity), 8),
+                bcmul((string) $this->amountInCents($second->discount_amount), QuantityMath::normalize($first->quantity), 8),
+                8
+            ) === 0;
     }
 
     private function amountInCents(mixed $amount): int

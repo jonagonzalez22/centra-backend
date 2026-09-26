@@ -1014,7 +1014,7 @@ test('available surplus uses released quantity instead of the full undelivered r
     $this->withHeader('Authorization', "Bearer {$this->driverToken}")
         ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
         ->assertOk()
-        ->assertJsonPath('data.surplus.0.available_quantity', 1);
+        ->assertJsonPath('data.surplus.0.available_quantity', '1.0000');
 
     $this->withHeader('Authorization', "Bearer {$this->driverToken}")
         ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
@@ -1041,7 +1041,7 @@ test('allocations subtract from released quantity without changing its historica
     $this->withHeader('Authorization', "Bearer {$this->driverToken}")
         ->getJson("/api/v1/driver/routes/{$route->id}/available-surplus")
         ->assertOk()
-        ->assertJsonPath('data.surplus.0.available_quantity', 1);
+        ->assertJsonPath('data.surplus.0.available_quantity', '1.0000');
 
     expect($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe('2.0000')
         ->and(ExtraSaleAllocation::where('source_stop_item_id', $sourceItem->id)->sum('quantity'))->toBe(1);
@@ -1088,7 +1088,7 @@ test('unreleased remainder remains conciliable after an extra sale allocation', 
         ->flatMap(fn (array $stop) => $stop['items'])
         ->firstWhere('route_stop_item_id', $sourceItem->id);
 
-    expect($source['difference'])->toBe(2)
-        ->and($source['extra_sale_allocated'])->toBe(1)
+    expect($source['difference'])->toBe('2.0000')
+        ->and($source['extra_sale_allocated'])->toBe('1.0000')
         ->and($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe('1.0000');
 });

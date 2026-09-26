@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1\Driver;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -9,6 +11,16 @@ use Illuminate\Validation\Rule;
 
 class CompleteStopRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities([
+            'items.*.quantity_delivered',
+            'items.*.quantity_released_for_extra_sale',
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -47,13 +59,11 @@ class CompleteStopRequest extends FormRequest
             ],
             'items.*.quantity_delivered' => [
                 'required',
-                'integer',
-                'min:0',
+                DecimalQuantity::nonNegative(),
             ],
             'items.*.quantity_released_for_extra_sale' => [
                 'sometimes',
-                'integer',
-                'min:0',
+                DecimalQuantity::nonNegative(),
             ],
             'items.*.rejection_reason_id' => [
                 'nullable',
@@ -94,10 +104,6 @@ class CompleteStopRequest extends FormRequest
             'items.*.route_stop_item_id.required' => 'El ID del item es obligatorio.',
             'items.*.route_stop_item_id.exists' => 'Uno o más items no existen.',
             'items.*.quantity_delivered.required' => 'La cantidad entregada es obligatoria.',
-            'items.*.quantity_delivered.integer' => 'La cantidad debe ser un número entero.',
-            'items.*.quantity_delivered.min' => 'La cantidad entregada no puede ser negativa.',
-            'items.*.quantity_released_for_extra_sale.integer' => 'La cantidad liberada para Venta Extra debe ser un número entero.',
-            'items.*.quantity_released_for_extra_sale.min' => 'La cantidad liberada para Venta Extra no puede ser negativa.',
             'items.*.rejection_reason_id.exists' => 'El motivo de rechazo no es válido.',
             'payments.*.store_payment_method_id.required' => 'El método de pago es obligatorio.',
             'payments.*.store_payment_method_id.exists' => 'El método de pago no es válido.',

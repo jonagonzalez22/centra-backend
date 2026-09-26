@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -9,8 +11,12 @@ use Illuminate\Validation\Rule;
 
 class StoreCommercialOperationRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
     protected function prepareForValidation(): void
     {
+        $this->normalizeDecimalQuantities(['items.*.quantity']);
+
         if (! $this->has('customer_display_name')) {
             return;
         }
@@ -66,7 +72,7 @@ class StoreCommercialOperationRequest extends FormRequest
                     return $query->where('store_id', $storeId);
                 }),
             ],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', DecimalQuantity::positive()],
             'items.*.price' => ['required', 'numeric', 'min:0'],
             'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
@@ -99,8 +105,6 @@ class StoreCommercialOperationRequest extends FormRequest
             'items.*.product_id.required' => 'El ID del producto es obligatorio.',
             'items.*.product_id.exists' => 'El producto no existe o no pertenece a tu tienda.',
             'items.*.quantity.required' => 'La cantidad es obligatoria.',
-            'items.*.quantity.integer' => 'La cantidad debe ser un número entero.',
-            'items.*.quantity.min' => 'La cantidad debe ser al menos 1.',
             'items.*.price.required' => 'El precio del producto es obligatorio.',
             'items.*.price.numeric' => 'El precio debe ser un número válido.',
             'items.*.price.min' => 'El precio no puede ser negativo.',

@@ -2,12 +2,21 @@
 
 namespace App\Http\Requests\Api\V1\Driver;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class AddExtraSaleRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['items.*.quantity']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -18,7 +27,7 @@ class AddExtraSaleRequest extends FormRequest
         return [
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'uuid', 'distinct', 'exists:products,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', DecimalQuantity::positive()],
         ];
     }
 
@@ -32,8 +41,6 @@ class AddExtraSaleRequest extends FormRequest
             'items.*.product_id.uuid' => 'El ID del producto debe ser un UUID válido.',
             'items.*.product_id.exists' => 'El producto no existe.',
             'items.*.quantity.required' => 'La cantidad es obligatoria.',
-            'items.*.quantity.integer' => 'La cantidad debe ser un número entero.',
-            'items.*.quantity.min' => 'La cantidad debe ser al menos 1.',
         ];
     }
 

@@ -4,12 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class BulkLoadRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['products.*.quantity_loaded']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -20,7 +29,7 @@ class BulkLoadRequest extends FormRequest
         return [
             'products' => ['required', 'array', 'min:1'],
             'products.*.product_id' => ['required', 'uuid', 'exists:products,id'],
-            'products.*.quantity_loaded' => ['required', 'integer', 'min:0'],
+            'products.*.quantity_loaded' => ['required', DecimalQuantity::nonNegative()],
             'products.*.reason' => ['nullable', 'string', 'max:255'],
             'products.*.notes' => ['nullable', 'string', 'max:1000'],
         ];
@@ -33,8 +42,6 @@ class BulkLoadRequest extends FormRequest
             'products.*.product_id.required' => 'El ID del producto es obligatorio.',
             'products.*.product_id.exists' => 'El producto seleccionado no existe.',
             'products.*.quantity_loaded.required' => 'La cantidad cargada es obligatoria.',
-            'products.*.quantity_loaded.integer' => 'La cantidad cargada debe ser un número entero.',
-            'products.*.quantity_loaded.min' => 'La cantidad cargada no puede ser negativa.',
             'products.*.reason.max' => 'El motivo no puede superar los 255 caracteres.',
             'products.*.notes.max' => 'Las notas no pueden superar los 1000 caracteres.',
         ];

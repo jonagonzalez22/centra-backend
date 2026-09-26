@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\OperationPayment;
+use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -36,7 +37,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   ),
  *   @OA\Property(property="items", type="array", @OA\Items(type="object",
  *     @OA\Property(property="product_name", type="string"),
- *     @OA\Property(property="quantity", type="integer"),
+ *     @OA\Property(property="quantity", type="string", pattern="^\\d+\\.\\d{4}$", example="1.2500"),
  *     @OA\Property(property="unit_price", type="number", format="float"),
  *     @OA\Property(property="subtotal", type="number", format="float"),
  *     @OA\Property(property="discount_amount", type="number", format="float"),
@@ -90,7 +91,7 @@ class CommercialOperationReceiptResource extends JsonResource
             ],
             'items' => $this->items->map(fn ($item) => [
                 'product_name' => $item->product_name,
-                'quantity' => (int) $item->quantity,
+                'quantity' => QuantityMath::normalize($item->quantity),
                 'unit_price' => (float) $item->price,
                 'subtotal' => (float) $item->subtotal,
                 'discount_amount' => (float) $item->discount_amount,

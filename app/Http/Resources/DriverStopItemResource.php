@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -20,7 +21,7 @@ class DriverStopItemResource extends JsonResource
             ->first();
 
         $unitPrice = 0;
-        if ($operationItem && $operationItem->quantity > 0) {
+        if ($operationItem && QuantityMath::isPositive($operationItem->quantity)) {
             $unitPrice = round((float) $operationItem->subtotal / $operationItem->quantity, 2);
         }
 
@@ -30,10 +31,10 @@ class DriverStopItemResource extends JsonResource
             'product_id' => $this->product_id,
             'product_name' => $this->product?->name ?? $this->product_name,
             'sku' => $this->product?->sku ?? null,
-            'quantity_planned' => (int) $this->quantity_planned,
-            'quantity_loaded' => (int) $this->quantity_loaded,
-            'quantity_delivered' => (int) $this->quantity_delivered,
-            'quantity_released_for_extra_sale' => (int) $this->quantity_released_for_extra_sale,
+            'quantity_planned' => QuantityMath::normalize($this->quantity_planned),
+            'quantity_loaded' => QuantityMath::normalize($this->quantity_loaded),
+            'quantity_delivered' => QuantityMath::normalize($this->quantity_delivered),
+            'quantity_released_for_extra_sale' => QuantityMath::normalize($this->quantity_released_for_extra_sale),
             'unit_price' => $unitPrice,
             'original_route_stop_id' => $this->original_route_stop_id,
             'is_extra' => false, // lectura-only: no se crean extras desde la app driver

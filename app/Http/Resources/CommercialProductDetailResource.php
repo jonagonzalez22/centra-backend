@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,7 +16,7 @@ class CommercialProductDetailResource extends JsonResource
             'sku' => $this->sku,
             'barcode' => $this->barcode,
             'price' => (float) $this->price,
-            'available_stock' => (int) $this->available_stock,
+            'available_stock' => QuantityMath::normalize($this->available_stock),
         ];
     }
 }

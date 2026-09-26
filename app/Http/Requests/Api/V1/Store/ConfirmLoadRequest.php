@@ -2,12 +2,21 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class ConfirmLoadRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['items.*.quantity_loaded']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -18,7 +27,7 @@ class ConfirmLoadRequest extends FormRequest
         return [
             'items' => ['required', 'array', 'min:1'],
             'items.*.route_stop_item_id' => ['required', 'uuid', 'exists:route_stop_items,id'],
-            'items.*.quantity_loaded' => ['required', 'integer', 'min:0'],
+            'items.*.quantity_loaded' => ['required', DecimalQuantity::nonNegative()],
             'items.*.reason' => ['nullable', 'string'],
             'items.*.notes' => ['nullable', 'string'],
         ];
@@ -31,7 +40,6 @@ class ConfirmLoadRequest extends FormRequest
             'items.*.route_stop_item_id.required' => 'El ID del item es obligatorio.',
             'items.*.route_stop_item_id.exists' => 'Uno o más items no existen.',
             'items.*.quantity_loaded.required' => 'La cantidad cargada es obligatoria.',
-            'items.*.quantity_loaded.min' => 'La cantidad cargada no puede ser negativa.',
         ];
     }
 

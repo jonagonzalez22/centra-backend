@@ -2,12 +2,21 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class ResolveDiscrepanciesBatchRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['items.*.quantity_to_resolve']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -19,7 +28,7 @@ class ResolveDiscrepanciesBatchRequest extends FormRequest
             'items' => ['required', 'array', 'min:1'],
             'items.*.route_stop_item_id' => ['required', 'uuid', 'distinct', 'exists:route_stop_items,id'],
             'items.*.resolution_type' => ['required', 'string', 'in:returned,pending_redelivery,missing,damaged,rejected_by_customer'],
-            'items.*.quantity_to_resolve' => ['required', 'integer', 'min:1'],
+            'items.*.quantity_to_resolve' => ['required', DecimalQuantity::positive()],
             'items.*.notes' => ['nullable', 'string'],
         ];
     }

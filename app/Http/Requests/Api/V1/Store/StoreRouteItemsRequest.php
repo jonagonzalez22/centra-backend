@@ -2,12 +2,21 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StoreRouteItemsRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['items.*.quantity_planned']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -18,7 +27,7 @@ class StoreRouteItemsRequest extends FormRequest
         return [
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'uuid', 'exists:products,id'],
-            'items.*.quantity_planned' => ['required', 'integer', 'min:1'],
+            'items.*.quantity_planned' => ['required', DecimalQuantity::positive()],
         ];
     }
 
@@ -29,7 +38,6 @@ class StoreRouteItemsRequest extends FormRequest
             'items.*.product_id.required' => 'El ID del producto es obligatorio.',
             'items.*.product_id.exists' => 'Uno o más productos no existen.',
             'items.*.quantity_planned.required' => 'La cantidad planificada es obligatoria.',
-            'items.*.quantity_planned.min' => 'La cantidad planificada debe ser al menos 1.',
         ];
     }
 

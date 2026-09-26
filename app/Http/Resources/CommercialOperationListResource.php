@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -35,16 +36,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true),
  *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido"),
  *   @OA\Property(property="has_pending_delivery", type="boolean"),
- *   @OA\Property(property="pending_delivery_quantity", type="integer")
+ *   @OA\Property(property="pending_delivery_quantity", type="string", pattern="^\\d+\\.\\d{4}$", example="2.0000")
  * )
  */
 class CommercialOperationListResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $deliverySummary = $this->legacyDeliverySummary(
-            app(\App\Services\DeliverySummaryService::class)->summarize($this->resource)
-        );
+        $deliverySummary = app(\App\Services\DeliverySummaryService::class)->summarize($this->resource);
 
         return [
             'id' => $this->id,
@@ -60,7 +59,7 @@ class CommercialOperationListResource extends JsonResource
             'items_count' => $this->whenLoaded(
                 'items',
                 fn () => $this->items
-                    ->filter(fn ($item): bool => (int) $item->quantity > 0)
+                    ->filter(fn ($item): bool => QuantityMath::isPositive($item->quantity))
                     ->pluck('product_id')
                     ->unique()
                     ->count(),
@@ -101,25 +100,5 @@ class CommercialOperationListResource extends JsonResource
             'street' => $address->street,
             'full_address' => $fullAddress ?: null,
         ];
-    }
-
-    private function legacyDeliverySummary(array $summary): array
-    {
-        $summary['pending_delivery_quantity'] = (int) $summary['pending_delivery_quantity'];
-        $summary['items'] = array_map(function (array $item): array {
-            foreach ([
-                'ordered_quantity',
-                'delivered_quantity',
-                'pending_quantity',
-                'planned_active_quantity',
-                'unassigned_pending_quantity',
-            ] as $field) {
-                $item[$field] = (int) $item[$field];
-            }
-
-            return $item;
-        }, $summary['items']);
-
-        return $summary;
     }
 }

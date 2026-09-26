@@ -155,12 +155,7 @@ class DriverExecutionService
             );
         }
 
-        return array_map(function (array $surplus): array {
-            // A1.2 keeps the driver API's whole-unit contract at this boundary.
-            $surplus['available_quantity'] = (int) $surplus['available_quantity'];
-
-            return $surplus;
-        }, array_values($surplusByProduct));
+        return array_values($surplusByProduct);
     }
 
     /**

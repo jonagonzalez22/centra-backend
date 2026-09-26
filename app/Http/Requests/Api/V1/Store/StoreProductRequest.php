@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
+use App\Http\Requests\Concerns\NormalizesDecimalQuantities;
+use App\Rules\DecimalQuantity;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -9,6 +11,13 @@ use Illuminate\Validation\Rule;
 
 class StoreProductRequest extends FormRequest
 {
+    use NormalizesDecimalQuantities;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeDecimalQuantities(['stock', 'stock_reserved', 'stock_min']);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -39,9 +48,9 @@ class StoreProductRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
             'cost' => ['nullable', 'numeric', 'min:0'],
-            'stock' => ['nullable', 'integer', 'min:0'],
-            'stock_reserved' => ['nullable', 'integer', 'min:0'],
-            'stock_min' => ['nullable', 'integer', 'min:0'],
+            'stock' => ['nullable', DecimalQuantity::nonNegative()],
+            'stock_reserved' => ['nullable', DecimalQuantity::nonNegative()],
+            'stock_min' => ['nullable', DecimalQuantity::nonNegative()],
             'is_active' => ['nullable', 'boolean'],
         ];
     }
@@ -63,12 +72,6 @@ class StoreProductRequest extends FormRequest
             'price.min' => 'El precio no puede ser negativo.',
             'cost.numeric' => 'El costo debe ser un número válido.',
             'cost.min' => 'El costo no puede ser negativo.',
-            'stock.integer' => 'El stock debe ser un número entero.',
-            'stock.min' => 'El stock no puede ser negativo.',
-            'stock_reserved.integer' => 'El stock reservado debe ser un número entero.',
-            'stock_reserved.min' => 'El stock reservado no puede ser negativo.',
-            'stock_min.integer' => 'El stock mínimo debe ser un número entero.',
-            'stock_min.min' => 'El stock mínimo no puede ser negativo.',
         ];
     }
 

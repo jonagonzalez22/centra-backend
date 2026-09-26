@@ -889,30 +889,13 @@ class RouteManagementService
             }
         }
 
-        $legacyByProduct = array_map(function (array $product): array {
-            $product['total_planned'] = (int) $product['total_planned'];
-            $product['total_loaded'] = (int) $product['total_loaded'];
-
-            return $product;
-        }, array_values($byProduct));
-        $legacyByStop = array_map(function (array $stop): array {
-            $stop['items'] = array_map(function (array $item): array {
-                $item['quantity_planned'] = (int) $item['quantity_planned'];
-                $item['quantity_loaded'] = (int) $item['quantity_loaded'];
-
-                return $item;
-            }, $stop['items']);
-
-            return $stop;
-        }, $byStop);
-
         return [
             'route_id' => $route->id,
             'status' => $route->status,
             'operational_date' => $route->operational_date?->format('Y-m-d'),
-            'by_product' => $legacyByProduct,
-            'by_stop' => $legacyByStop,
-            'total_items' => (int) $this->sumQuantities(array_column($byProduct, 'total_planned')),
+            'by_product' => array_values($byProduct),
+            'by_stop' => $byStop,
+            'total_items' => $this->sumQuantities(array_column($byProduct, 'total_planned')),
         ];
     }
 
@@ -1219,11 +1202,10 @@ class RouteManagementService
                     'route_stop_item_id' => $item->id,
                     'product_id' => $item->product_id,
                     'product_name' => $item->product?->name,
-                    'quantity_loaded' => (int) $item->quantity_loaded,
-                    'quantity_delivered' => (int) $item->quantity_delivered,
-                    // A1.2 keeps this read model whole-unit until A1.3.
-                    'difference' => (int) $diff,
-                    'extra_sale_allocated' => (int) $allocatedQty,
+                    'quantity_loaded' => QuantityMath::normalize($item->quantity_loaded),
+                    'quantity_delivered' => QuantityMath::normalize($item->quantity_delivered),
+                    'difference' => $diff,
+                    'extra_sale_allocated' => $allocatedQty,
                     'discrepancy' => $discrepancy ? [
                         'id' => $discrepancy->id,
                         'resolution_type' => $discrepancy->resolution_type,
