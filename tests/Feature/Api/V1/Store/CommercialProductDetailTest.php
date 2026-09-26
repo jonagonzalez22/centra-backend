@@ -49,7 +49,9 @@ describe('GET /api/v1/store/operations/products/{id}', function () {
             ->assertJsonPath('data.sku', 'CINTA-001')
             ->assertJsonPath('data.barcode', '7790000000005')
             ->assertJsonPath('data.price', 7500)
-            ->assertJsonPath('data.available_stock', 6);
+            ->assertJsonPath('data.available_stock', '6.0000')
+            ->assertJsonPath('data.stock_measurement_unit.code', 'unit')
+            ->assertJsonPath('data.sale_quantity_step', '1.0000');
 
         expect($response->json('data'))->toHaveKeys([
             'id',
@@ -58,6 +60,9 @@ describe('GET /api/v1/store/operations/products/{id}', function () {
             'barcode',
             'price',
             'available_stock',
+            'stock_measurement_unit_id',
+            'stock_measurement_unit',
+            'sale_quantity_step',
         ])->not->toHaveKeys([
             'cost',
             'stock',
@@ -77,7 +82,7 @@ describe('GET /api/v1/store/operations/products/{id}', function () {
 
         commercialProductDetail($this->user, $product->id)
             ->assertOk()
-            ->assertJsonPath('data.available_stock', 0);
+            ->assertJsonPath('data.available_stock', '0.0000');
     });
 
     test('does not expose inactive or products from another store', function () {

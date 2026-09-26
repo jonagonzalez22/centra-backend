@@ -36,7 +36,10 @@ class CommercialProductDetailController extends Controller
      *         @OA\Property(property="sku", type="string", nullable=true, example="CINTA-5M"),
      *         @OA\Property(property="barcode", type="string", nullable=true, example="7791234567890"),
      *         @OA\Property(property="price", type="number", format="float", example=7500),
-     *         @OA\Property(property="available_stock", type="integer", example=10)
+     *         @OA\Property(property="available_stock", type="string", example="10.0000"),
+     *         @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid"),
+     *         @OA\Property(property="stock_measurement_unit", ref="#/components/schemas/MeasurementUnitResource"),
+     *         @OA\Property(property="sale_quantity_step", type="string", example="1.0000")
      *       ),
      *       @OA\Property(property="errors", type="object", nullable=true)
      *     )

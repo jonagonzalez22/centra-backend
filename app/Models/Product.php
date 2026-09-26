@@ -31,6 +31,8 @@ class Product extends Model
         'stock',
         'stock_reserved',
         'stock_min',
+        'stock_measurement_unit_id',
+        'sale_quantity_step',
         'parent_product_id',
         'is_active',
     ];
@@ -41,6 +43,7 @@ class Product extends Model
         'stock' => 'decimal:4',
         'stock_reserved' => 'decimal:4',
         'stock_min' => 'decimal:4',
+        'sale_quantity_step' => 'decimal:4',
         'is_active' => 'boolean',
     ];
 
@@ -49,6 +52,21 @@ class Product extends Model
         static::creating(function ($model) {
             if (! $model->id) {
                 $model->id = (string) Str::uuid();
+            }
+
+            if (! $model->stock_measurement_unit_id) {
+                $model->stock_measurement_unit_id = MeasurementUnit::query()
+                    ->active()
+                    ->where('code', 'unit')
+                    ->value('id');
+            }
+
+            if (! $model->stock_measurement_unit_id) {
+                throw new \RuntimeException('No existe una unidad de medida predeterminada activa.');
+            }
+
+            if ($model->sale_quantity_step === null) {
+                $model->sale_quantity_step = '1.0000';
             }
         });
     }
@@ -61,6 +79,11 @@ class Product extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function stockMeasurementUnit(): BelongsTo
+    {
+        return $this->belongsTo(MeasurementUnit::class, 'stock_measurement_unit_id');
     }
 
     public function parentProduct(): BelongsTo

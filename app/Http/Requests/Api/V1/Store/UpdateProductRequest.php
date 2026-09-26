@@ -15,7 +15,7 @@ class UpdateProductRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->normalizeDecimalQuantities(['stock', 'stock_reserved', 'stock_min']);
+        $this->normalizeDecimalQuantities(['stock', 'stock_reserved', 'stock_min', 'sale_quantity_step']);
     }
 
     public function authorize(): bool
@@ -52,6 +52,12 @@ class UpdateProductRequest extends FormRequest
             'stock' => ['sometimes', DecimalQuantity::nonNegative()],
             'stock_reserved' => ['sometimes', DecimalQuantity::nonNegative()],
             'stock_min' => ['sometimes', DecimalQuantity::nonNegative()],
+            'stock_measurement_unit_id' => [
+                'sometimes',
+                'uuid',
+                Rule::exists('measurement_units', 'id')->where(fn ($query) => $query->where('is_active', true)),
+            ],
+            'sale_quantity_step' => ['sometimes', DecimalQuantity::positive()],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

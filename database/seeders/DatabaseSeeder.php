@@ -6,28 +6,28 @@ use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-  public function run(): void
-  {
-    $this->call([
-      \Database\Seeders\RoleSeeder::class,
-      \Database\Seeders\Admin\BusinessTypeSeeder::class,
-      \Database\Seeders\DocumentTypeSeeder::class,
-      \Database\Seeders\SuperAdminPermissionsSeeder::class,
-      \Database\Seeders\Geography\ProvinceSeeder::class,
-      \Database\Seeders\Geography\LocalitySeeder::class,
-      \Database\Seeders\DeliveryRejectionReasonSeeder::class,
-    ]);
+    public function run(): void
+    {
+        $this->call([
+            \Database\Seeders\RoleSeeder::class,
+            \Database\Seeders\Admin\BusinessTypeSeeder::class,
+            \Database\Seeders\DocumentTypeSeeder::class,
+            \Database\Seeders\MeasurementUnitSeeder::class,
+            \Database\Seeders\SuperAdminPermissionsSeeder::class,
+            \Database\Seeders\Geography\ProvinceSeeder::class,
+            \Database\Seeders\Geography\LocalitySeeder::class,
+            \Database\Seeders\DeliveryRejectionReasonSeeder::class,
+        ]);
 
-
-    if (app()->environment('local')) {
-      $this->call([
-        \Database\Seeders\RoleSeeder::class,
-        \Database\Seeders\Admin\StoreSeeder::class,
-        \Database\Seeders\UserSeeder::class,
-        \Database\Seeders\FeatureSeeder::class,
-        \Database\Seeders\PlanSeeder::class,
-        \Database\Seeders\PermissionSeeder::class,
-      ]);
+        if (app()->environment('local')) {
+            $this->call([
+                \Database\Seeders\RoleSeeder::class,
+                \Database\Seeders\Admin\StoreSeeder::class,
+                \Database\Seeders\UserSeeder::class,
+                \Database\Seeders\FeatureSeeder::class,
+                \Database\Seeders\PlanSeeder::class,
+                \Database\Seeders\PermissionSeeder::class,
+            ]);
+        }
     }
-  }
 }

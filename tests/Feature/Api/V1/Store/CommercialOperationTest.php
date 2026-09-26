@@ -341,7 +341,7 @@ describe('GET /api/v1/store/operations/{id}/receipt', function () {
             ->assertJsonPath('data.operation.cashier.name', 'Jonathan Caja')
             ->assertJsonPath('data.customer.display_name', 'Nombre al momento de cobrar')
             ->assertJsonPath('data.items.0.product_name', 'Martillo Stanley histórico')
-            ->assertJsonPath('data.items.0.quantity', 2)
+            ->assertJsonPath('data.items.0.quantity', '2.0000')
             ->assertJsonPath('data.items.0.unit_price', 15000)
             ->assertJsonPath('data.items.0.subtotal', 30000)
             ->assertJsonPath('data.items.0.discount_amount', 1000)

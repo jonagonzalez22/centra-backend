@@ -17,6 +17,9 @@ class CommercialProductDetailResource extends JsonResource
             'barcode' => $this->barcode,
             'price' => (float) $this->price,
             'available_stock' => QuantityMath::normalize($this->available_stock),
+            'stock_measurement_unit_id' => $this->stock_measurement_unit_id,
+            'stock_measurement_unit' => MeasurementUnitResource::make($this->whenLoaded('stockMeasurementUnit')),
+            'sale_quantity_step' => QuantityMath::normalize($this->sale_quantity_step),
         ];
     }
 }

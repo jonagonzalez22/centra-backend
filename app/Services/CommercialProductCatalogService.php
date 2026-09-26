@@ -11,6 +11,7 @@ class CommercialProductCatalogService
     {
         return Product::forStore($storeId)
             ->where('is_active', true)
+            ->with('stockMeasurementUnit')
             ->find($productId);
     }
 
@@ -21,6 +22,7 @@ class CommercialProductCatalogService
     {
         return Product::forStore($storeId)
             ->where('is_active', true)
+            ->with('stockMeasurementUnit')
             ->when($barcode !== null, fn ($products) => $products->where('barcode', $barcode))
             ->when($query !== null, function ($products) use ($query) {
                 $products->where(function ($search) use ($query) {
@@ -29,6 +31,13 @@ class CommercialProductCatalogService
                 });
             })
             ->limit(10)
-            ->get(['id', 'name', 'sku', 'barcode']);
+            ->get([
+                'id',
+                'name',
+                'sku',
+                'barcode',
+                'stock_measurement_unit_id',
+                'sale_quantity_step',
+            ]);
     }
 }

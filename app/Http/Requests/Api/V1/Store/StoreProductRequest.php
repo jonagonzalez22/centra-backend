@@ -15,7 +15,7 @@ class StoreProductRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->normalizeDecimalQuantities(['stock', 'stock_reserved', 'stock_min']);
+        $this->normalizeDecimalQuantities(['stock', 'stock_reserved', 'stock_min', 'sale_quantity_step']);
     }
 
     public function authorize(): bool
@@ -51,6 +51,12 @@ class StoreProductRequest extends FormRequest
             'stock' => ['nullable', DecimalQuantity::nonNegative()],
             'stock_reserved' => ['nullable', DecimalQuantity::nonNegative()],
             'stock_min' => ['nullable', DecimalQuantity::nonNegative()],
+            'stock_measurement_unit_id' => [
+                'sometimes',
+                'uuid',
+                Rule::exists('measurement_units', 'id')->where(fn ($query) => $query->where('is_active', true)),
+            ],
+            'sale_quantity_step' => ['sometimes', DecimalQuantity::positive()],
             'is_active' => ['nullable', 'boolean'],
         ];
     }

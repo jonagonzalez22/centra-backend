@@ -235,7 +235,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         expect((float) $response->json('data.total'))->toBe(1446.0);
         expect($response->json('data.items'))->toHaveCount(1)
-            ->and($response->json('data.items.0.quantity'))->toBe(12)
+            ->and($response->json('data.items.0.quantity'))->toBe('12.0000')
             ->and((float) $response->json('data.items.0.subtotal'))->toBe(1440.0);
 
         expect($this->productA->fresh()->stock_reserved)->toBe('12.0000');
@@ -258,7 +258,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
             ->and((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(6)
             ->and((float) $order->fresh()->total)->toBe(600.0);
         expect($response->json('data.items'))->toHaveCount(1)
-            ->and($response->json('data.items.0.quantity'))->toBe(6)
+            ->and($response->json('data.items.0.quantity'))->toBe('6.0000')
             ->and((int) $response->json('data.delivery_summary.items.0.ordered_quantity'))->toBe(6);
     });
 

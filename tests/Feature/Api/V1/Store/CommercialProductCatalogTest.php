@@ -41,7 +41,9 @@ describe('GET /api/v1/store/operations/products/search', function () {
         commercialCatalog($this->user, ['q' => 'Cinta'])
             ->assertOk()
             ->assertJsonPath('data.0.sku', 'CINTA-001')
-            ->assertJsonPath('data.0.barcode', '7790000000001');
+            ->assertJsonPath('data.0.barcode', '7790000000001')
+            ->assertJsonPath('data.0.stock_measurement_unit.code', 'unit')
+            ->assertJsonPath('data.0.sale_quantity_step', '1.0000');
 
         commercialCatalog($this->user, ['q' => '001'])
             ->assertOk()

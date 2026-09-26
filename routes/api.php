@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\DriverController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
+use App\Http\Controllers\Api\V1\Store\MeasurementUnitController;
 use App\Http\Controllers\Api\V1\Store\OrderController;
 use App\Http\Controllers\Api\V1\Store\OrderPaymentController;
 use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMethodController;
@@ -152,6 +153,8 @@ Route::prefix('v1')->group(function () {
             Route::post('inventory/adjust', [InventoryController::class, 'adjust'])->name('store.inventory.adjust');
 
             Route::get('products', [ProductController::class, 'index'])->name('store.products.index');
+            Route::get('measurement-units', [MeasurementUnitController::class, 'index'])
+                ->name('store.measurement-units.index');
             Route::get('products/search', [ProductSearchController::class, '__invoke'])
                 ->middleware('feature:inventory')
                 ->name('store.products.search');
