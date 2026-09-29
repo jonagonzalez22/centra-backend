@@ -305,9 +305,9 @@ test('returns consolidated load sheet with correct quantities', function () {
 
     $response->assertStatus(200)
         ->assertJsonPath('data.route_id', $route->id)
-        ->assertJsonPath('data.by_product.0.total_planned', 5)
-        ->assertJsonPath('data.by_stop.0.items.0.quantity_planned', 5)
-        ->assertJsonPath('data.total_items', 5);
+        ->assertJsonPath('data.by_product.0.total_planned', '5.0000')
+        ->assertJsonPath('data.by_stop.0.items.0.quantity_planned', '5.0000')
+        ->assertJsonPath('data.total_items', '5.0000');
 });
 
 test('returns 404 for load sheet of non-existent route', function () {

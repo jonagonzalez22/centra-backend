@@ -53,4 +53,31 @@ describe('QuantityMath', function () {
             ->and(QuantityMath::isPositive('0.0000'))->toBeFalse()
             ->and(QuantityMath::isNegative('0.0000'))->toBeFalse();
     });
+
+    it('validates exact multiples without floating point arithmetic', function () {
+        expect(QuantityMath::isMultipleOf('1.0000', '1.0000'))->toBeTrue()
+            ->and(QuantityMath::isMultipleOf('1.5000', '1.0000'))->toBeFalse()
+            ->and(QuantityMath::isMultipleOf('0.5000', '0.2500'))->toBeTrue()
+            ->and(QuantityMath::isMultipleOf('0.3000', '0.2500'))->toBeFalse()
+            ->and(QuantityMath::isMultipleOf('1.2500', '0.2500'))->toBeTrue()
+            ->and(QuantityMath::isMultipleOf('1.2300', '0.0100'))->toBeTrue()
+            ->and(QuantityMath::isMultipleOf('1.2340', '0.0010'))->toBeTrue()
+            ->and(QuantityMath::isMultipleOf('0.0000', '0.5000'))->toBeTrue();
+
+        expect(fn () => QuantityMath::isMultipleOf('1.0000', '0.0000'))
+            ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('floors quantities to exact multiples', function () {
+        expect(QuantityMath::floorToMultiple('7.5000', '1.0000'))->toBe('7.0000')
+            ->and(QuantityMath::floorToMultiple('7.5000', '0.5000'))->toBe('7.5000')
+            ->and(QuantityMath::floorToMultiple('7.6300', '0.2500'))->toBe('7.5000')
+            ->and(QuantityMath::floorToMultiple('0.2000', '0.5000'))->toBe('0.0000')
+            ->and(QuantityMath::floorToMultiple('10000.9999', '0.0010'))->toBe('10000.9990')
+            ->and(QuantityMath::floorToMultiple('0.0000', '0.0100'))->toBe('0.0000')
+            ->and(QuantityMath::floorToMultiple('-1.0000', '0.5000'))->toBe('0.0000');
+
+        expect(fn () => QuantityMath::floorToMultiple('1.0000', '0'))
+            ->toThrow(InvalidArgumentException::class);
+    });
 });

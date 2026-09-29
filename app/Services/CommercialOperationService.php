@@ -363,6 +363,12 @@ class CommercialOperationService
                 ]);
             }
 
+            if ($quantityError = $product->commercialQuantityError($item['quantity'])) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.quantity" => $quantityError,
+                ]);
+            }
+
             $available = QuantityMath::subtract($product->stock, $product->stock_reserved);
 
             if (QuantityMath::compare(QuantityMath::normalize($item['quantity']), $available) > 0) {

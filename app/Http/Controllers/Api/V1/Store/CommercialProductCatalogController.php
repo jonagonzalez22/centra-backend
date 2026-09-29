@@ -41,7 +41,8 @@ class CommercialProductCatalogController extends Controller
      *           @OA\Property(property="barcode", type="string", nullable=true, example="7791234567890"),
      *           @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid"),
      *           @OA\Property(property="stock_measurement_unit", ref="#/components/schemas/MeasurementUnitResource"),
-     *           @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+\\.\\d{4}$", example="1.0000")
+     *           @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+\\.\\d{4}$", example="1.0000"),
+     *           @OA\Property(property="commercial_available_quantity", type="string", pattern="^\\d+\\.\\d{4}$", example="10.0000")
      *         )
      *       ),
      *       @OA\Property(property="errors", type="object", nullable=true)

@@ -36,6 +36,8 @@ class CommercialProductCatalogService
                 'name',
                 'sku',
                 'barcode',
+                'stock',
+                'stock_reserved',
                 'stock_measurement_unit_id',
                 'sale_quantity_step',
             ]);

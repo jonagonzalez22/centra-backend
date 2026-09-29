@@ -10560,6 +10560,23 @@
                                                         "type": "string",
                                                         "example": "7791234567890",
                                                         "nullable": true
+                                                    },
+                                                    "stock_measurement_unit_id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "stock_measurement_unit": {
+                                                        "$ref": "#/components/schemas/MeasurementUnitResource"
+                                                    },
+                                                    "sale_quantity_step": {
+                                                        "type": "string",
+                                                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                                                        "example": "1.0000"
+                                                    },
+                                                    "commercial_available_quantity": {
+                                                        "type": "string",
+                                                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                                                        "example": "10.0000"
                                                     }
                                                 },
                                                 "type": "object"
@@ -10650,8 +10667,23 @@
                                                     "example": 7500
                                                 },
                                                 "available_stock": {
-                                                    "type": "integer",
-                                                    "example": 10
+                                                    "type": "string",
+                                                    "example": "10.0000"
+                                                },
+                                                "commercial_available_quantity": {
+                                                    "type": "string",
+                                                    "example": "10.0000"
+                                                },
+                                                "stock_measurement_unit_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "stock_measurement_unit": {
+                                                    "$ref": "#/components/schemas/MeasurementUnitResource"
+                                                },
+                                                "sale_quantity_step": {
+                                                    "type": "string",
+                                                    "example": "1.0000"
                                                 }
                                             },
                                             "type": "object"
@@ -13018,6 +13050,28 @@
                 ]
             }
         },
+        "/store/measurement-units": {
+            "get": {
+                "tags": [
+                    "Store - Productos"
+                ],
+                "summary": "Listar unidades de medida activas",
+                "operationId": "611a74647d98952678aad2cf11d88760",
+                "responses": {
+                    "200": {
+                        "description": "Unidades de medida obtenidas exitosamente"
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/orders": {
             "get": {
                 "tags": [
@@ -14077,18 +14131,32 @@
                                         "nullable": true
                                     },
                                     "stock": {
-                                        "type": "integer",
-                                        "example": 100,
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "100.0000",
                                         "nullable": true
                                     },
                                     "stock_reserved": {
-                                        "type": "integer",
-                                        "example": 0,
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "0.0000",
                                         "nullable": true
                                     },
                                     "stock_min": {
-                                        "type": "integer",
-                                        "example": 10,
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "10.0000",
+                                        "nullable": true
+                                    },
+                                    "stock_measurement_unit_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "nullable": true
+                                    },
+                                    "sale_quantity_step": {
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "1.0000",
                                         "nullable": true
                                     },
                                     "is_active": {
@@ -14262,18 +14330,32 @@
                                         "nullable": true
                                     },
                                     "stock": {
-                                        "type": "integer",
-                                        "example": 150,
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "150.0000",
                                         "nullable": true
                                     },
                                     "stock_reserved": {
-                                        "type": "integer",
-                                        "example": 10,
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "10.0000",
                                         "nullable": true
                                     },
                                     "stock_min": {
-                                        "type": "integer",
-                                        "example": 15,
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "15.0000",
+                                        "nullable": true
+                                    },
+                                    "stock_measurement_unit_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "nullable": true
+                                    },
+                                    "sale_quantity_step": {
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "1.0000",
                                         "nullable": true
                                     },
                                     "is_active": {
@@ -18538,7 +18620,9 @@
                         "type": "boolean"
                     },
                     "pending_delivery_quantity": {
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "2.0000"
                     }
                 },
                 "type": "object"
@@ -18629,7 +18713,9 @@
                                     "type": "string"
                                 },
                                 "quantity": {
-                                    "type": "integer"
+                                    "type": "string",
+                                    "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                                    "example": "1.2500"
                                 },
                                 "unit_price": {
                                     "type": "number",
@@ -18882,6 +18968,31 @@
                 },
                 "type": "object"
             },
+            "MeasurementUnitResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "code": {
+                        "type": "string",
+                        "example": "kg"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Kilogramo"
+                    },
+                    "symbol": {
+                        "type": "string",
+                        "example": "kg"
+                    },
+                    "category": {
+                        "type": "string",
+                        "example": "weight"
+                    }
+                },
+                "type": "object"
+            },
             "OperationItemResource": {
                 "title": "OperationItemResource",
                 "properties": {
@@ -18897,7 +19008,9 @@
                         "type": "string"
                     },
                     "quantity": {
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "3.0000"
                     },
                     "price": {
                         "type": "number",
@@ -19032,16 +19145,42 @@
                         "nullable": true
                     },
                     "stock": {
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "10.0000"
                     },
                     "stock_reserved": {
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "2.0000"
                     },
                     "available_stock": {
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "8.0000"
+                    },
+                    "commercial_available_quantity": {
+                        "description": "Maximum quantity sellable respecting sale_quantity_step",
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "8.0000"
                     },
                     "stock_min": {
-                        "type": "integer"
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "1.0000"
+                    },
+                    "stock_measurement_unit_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "stock_measurement_unit": {
+                        "$ref": "#/components/schemas/MeasurementUnitResource"
+                    },
+                    "sale_quantity_step": {
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "1.0000"
                     },
                     "is_active": {
                         "type": "boolean"

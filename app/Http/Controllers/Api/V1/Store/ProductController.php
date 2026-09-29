@@ -9,6 +9,7 @@ use App\Http\Resources\ProductResource;
 use App\Models\InventoryMovement;
 use App\Models\OperationItem;
 use App\Models\Product;
+use App\Models\RouteStopItem;
 use App\Support\QuantityMath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -315,6 +316,23 @@ class ProductController extends Controller
             ], 422);
         }
 
+        if (
+            array_key_exists('sale_quantity_step', $validated)
+            && QuantityMath::compare($validated['sale_quantity_step'], $product->sale_quantity_step) !== 0
+            && $this->hasActiveCommercialCommitments($product)
+        ) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se puede cambiar el paso de venta mientras existan compromisos comerciales activos.',
+                'data' => null,
+                'errors' => [
+                    'sale_quantity_step' => [
+                        'El paso de venta sólo puede cambiarse cuando no hay pedidos, reservas o rutas activas.',
+                    ],
+                ],
+            ], 422);
+        }
+
         $product->update($validated);
         $product->load(['category', 'stockMeasurementUnit']);
 
@@ -332,7 +350,25 @@ class ProductController extends Controller
           || ! QuantityMath::isZero($product->stock_reserved)
           || ! QuantityMath::isZero($product->stock_min)
           || OperationItem::query()->where('product_id', $product->id)->exists()
-          || InventoryMovement::query()->where('product_id', $product->id)->exists();
+            || InventoryMovement::query()->where('product_id', $product->id)->exists();
+    }
+
+    private function hasActiveCommercialCommitments(Product $product): bool
+    {
+        return QuantityMath::isPositive($product->stock_reserved)
+            || OperationItem::query()
+                ->where('product_id', $product->id)
+                ->whereHas('operation', fn ($query) => $query
+                    ->where('type', 'order')
+                    ->whereIn('status', ['open', 'confirmed', 'partially_delivered']))
+                ->exists()
+            || RouteStopItem::query()
+                ->where('product_id', $product->id)
+                ->whereHas('routeStop.route', fn ($query) => $query->whereIn(
+                    'status',
+                    ['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']
+                ))
+                ->exists();
     }
 
     /**

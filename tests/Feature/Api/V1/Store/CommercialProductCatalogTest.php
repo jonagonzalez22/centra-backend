@@ -36,6 +36,8 @@ describe('GET /api/v1/store/operations/products/search', function () {
             'name' => 'Cinta Métrica',
             'sku' => 'CINTA-001',
             'barcode' => '7790000000001',
+            'stock' => '10.0000',
+            'stock_reserved' => '2.0000',
         ]);
 
         commercialCatalog($this->user, ['q' => 'Cinta'])
@@ -43,7 +45,8 @@ describe('GET /api/v1/store/operations/products/search', function () {
             ->assertJsonPath('data.0.sku', 'CINTA-001')
             ->assertJsonPath('data.0.barcode', '7790000000001')
             ->assertJsonPath('data.0.stock_measurement_unit.code', 'unit')
-            ->assertJsonPath('data.0.sale_quantity_step', '1.0000');
+            ->assertJsonPath('data.0.sale_quantity_step', '1.0000')
+            ->assertJsonPath('data.0.commercial_available_quantity', '8.0000');
 
         commercialCatalog($this->user, ['q' => '001'])
             ->assertOk()

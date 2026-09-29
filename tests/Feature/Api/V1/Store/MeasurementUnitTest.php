@@ -135,6 +135,21 @@ test('a product UOM cannot reinterpret existing stock, reservations, or history'
         ->toBe(MeasurementUnit::query()->where('code', 'unit')->value('id'));
 });
 
+test('a product cannot change its sale step while it has an active reservation', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_reserved' => '1.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'sale_quantity_step' => '0.5000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['sale_quantity_step']);
+});
+
 test('product requests reject inactive UOMs and non-positive sale steps', function () {
     $inactiveUnit = MeasurementUnit::query()->where('code', 'm')->firstOrFail();
     $inactiveUnit->update(['is_active' => false]);

@@ -67,6 +67,20 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->and($movement->type)->toBe('input');
     });
 
+    test('physical adjustment is not restricted by the commercial sale step', function () {
+        $product = createProductForStore($this->store, $this->category, 10);
+        $product->update(['sale_quantity_step' => '0.5000']);
+
+        adjustInventory([
+            'product_id' => $product->id,
+            'quantity' => '0.1250',
+            'type' => 'input',
+            'concept' => 'Ajuste físico fraccionario',
+        ])->assertCreated();
+
+        expect($product->fresh()->stock)->toBe('10.1250');
+    });
+
     test('input type with zero quantity returns 422', function () {
         $product = createProductForStore($this->store, $this->category, 10);
 
@@ -78,7 +92,8 @@ describe('POST /api/v1/store/inventory/adjust', function () {
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonPath('message', 'Para entradas, la cantidad debe ser mayor a cero.');
+            ->assertJsonPath('message', 'Error de validación.')
+            ->assertJsonPath('errors.quantity.0', 'La cantidad debe ser mayor a cero.');
     });
 
     test('input type with negative quantity returns 422', function () {
@@ -92,7 +107,8 @@ describe('POST /api/v1/store/inventory/adjust', function () {
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonPath('message', 'Para entradas, la cantidad debe ser mayor a cero.');
+            ->assertJsonPath('message', 'Error de validación.')
+            ->assertJsonPath('errors.quantity.0', 'La cantidad debe ser mayor a cero.');
     });
 
     test('output type with positive quantity succeeds and stores negative value', function () {
@@ -119,7 +135,7 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->and($movement->type)->toBe('output');
     });
 
-    test('output type with already negative quantity stores correctly (double negative)', function () {
+    test('output type rejects a negative quantity at request validation', function () {
         $product = createProductForStore($this->store, $this->category, 10);
         $previousStock = $product->stock;
 
@@ -130,13 +146,12 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             'concept' => 'Venta',
         ]);
 
-        $response->assertStatus(201);
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Error de validación.')
+            ->assertJsonPath('errors.quantity.0', 'La cantidad debe ser mayor a cero.');
 
-        $product->refresh();
-        expect($product->stock)->toBe(QuantityMath::subtract($previousStock, 3));
-
-        $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe('-3.0000');
+        expect($product->fresh()->stock)->toBe($previousStock)
+            ->and(InventoryMovement::count())->toBe(0);
     });
 
     test('output type that would result in negative stock returns 422', function () {
@@ -177,7 +192,7 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->and($movement->type)->toBe('adjustment');
     });
 
-    test('adjustment type with negative quantity succeeds and decreases stock', function () {
+    test('adjustment type rejects a negative quantity at request validation', function () {
         $product = createProductForStore($this->store, $this->category, 10);
         $previousStock = $product->stock;
 
@@ -188,14 +203,12 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             'concept' => 'Ajuste negativo por merma',
         ]);
 
-        $response->assertStatus(201);
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Error de validación.')
+            ->assertJsonPath('errors.quantity.0', 'La cantidad debe ser mayor a cero.');
 
-        $product->refresh();
-        expect($product->stock)->toBe(QuantityMath::subtract($previousStock, 3));
-
-        $movement = InventoryMovement::latest()->first();
-        expect($movement->quantity)->toBe('-3.0000')
-            ->and($movement->type)->toBe('adjustment');
+        expect($product->fresh()->stock)->toBe($previousStock)
+            ->and(InventoryMovement::count())->toBe(0);
     });
 
     test('adjustment type that would result in negative stock returns 422', function () {
@@ -209,7 +222,8 @@ describe('POST /api/v1/store/inventory/adjust', function () {
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonPath('message', 'El stock resultante no puede ser negativo.');
+            ->assertJsonPath('message', 'Error de validación.')
+            ->assertJsonPath('errors.quantity.0', 'La cantidad debe ser mayor a cero.');
     });
 
     test('concept is required', function () {

@@ -106,6 +106,32 @@ class Product extends Model
         return QuantityMath::max('0', QuantityMath::subtract($this->stock, $this->stock_reserved));
     }
 
+    public function getCommercialAvailableQuantityAttribute(): string
+    {
+        return QuantityMath::floorToMultiple(
+            $this->available_stock,
+            $this->sale_quantity_step ?? '1.0000'
+        );
+    }
+
+    public function commercialQuantityError(int|string $quantity): ?string
+    {
+        $normalizedQuantity = QuantityMath::normalize($quantity);
+        $step = QuantityMath::normalize($this->sale_quantity_step ?? '1.0000');
+
+        if (! QuantityMath::isPositive($normalizedQuantity)) {
+            return 'La cantidad debe ser mayor a cero.';
+        }
+
+        if (! QuantityMath::isMultipleOf($normalizedQuantity, $step)) {
+            $displayStep = rtrim(rtrim($step, '0'), '.');
+
+            return 'La cantidad debe ser múltiplo de '.str_replace('.', ',', $displayStep).'.';
+        }
+
+        return null;
+    }
+
     public static function validateStockIntegrity(int|string $stock, int|string $stockReserved): bool
     {
         return QuantityMath::compare($stockReserved, $stock) <= 0;

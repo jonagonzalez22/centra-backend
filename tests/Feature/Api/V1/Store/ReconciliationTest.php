@@ -369,9 +369,9 @@ test('reconcile shows loaded vs delivered quantities', function () {
         ->getJson("/api/v1/store/routes/{$route->id}/reconciliation");
 
     $response->assertStatus(200)
-        ->assertJsonPath('data.stops.0.items.0.quantity_loaded', 10)
-        ->assertJsonPath('data.stops.0.items.0.quantity_delivered', 10)
-        ->assertJsonPath('data.stops.0.items.0.difference', 0);
+        ->assertJsonPath('data.stops.0.items.0.quantity_loaded', '10.0000')
+        ->assertJsonPath('data.stops.0.items.0.quantity_delivered', '10.0000')
+        ->assertJsonPath('data.stops.0.items.0.difference', '0.0000');
 });
 
 // 11. reconcile calculates correct differences
@@ -382,9 +382,9 @@ test('reconcile calculates correct differences', function () {
         ->getJson("/api/v1/store/routes/{$route->id}/reconciliation");
 
     $response->assertStatus(200)
-        ->assertJsonPath('data.stops.0.items.0.quantity_loaded', 10)
-        ->assertJsonPath('data.stops.0.items.0.quantity_delivered', 7)
-        ->assertJsonPath('data.stops.0.items.0.difference', 3)
+        ->assertJsonPath('data.stops.0.items.0.quantity_loaded', '10.0000')
+        ->assertJsonPath('data.stops.0.items.0.quantity_delivered', '7.0000')
+        ->assertJsonPath('data.stops.0.items.0.difference', '3.0000')
         ->assertJsonPath('data.can_close', false); // unresolved discrepancy
 });
 
@@ -403,7 +403,7 @@ test('resolve discrepancy for positive difference', function () {
         ->assertJsonPath('status', 'success')
         ->assertJsonPath('data.route_stop_item_id', $item->id)
         ->assertJsonPath('data.resolution_type', 'returned')
-        ->assertJsonPath('data.difference_quantity', 4); // 10 loaded - 6 delivered
+        ->assertJsonPath('data.difference_quantity', '4.0000'); // 10 loaded - 6 delivered
 
     $discrepancy = DeliveryDiscrepancy::where('route_stop_item_id', $item->id)->first();
     expect($discrepancy)->not->toBeNull();
@@ -572,7 +572,7 @@ test('batch resolutions retain their individual inventory effects at finalizatio
         ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
         ->assertOk();
 
-    expect($product->fresh()->stock)->toBe(80)
+    expect($product->fresh()->stock)->toBe('80.0000')
         ->and(InventoryMovement::where('product_id', $product->id)->count())->toBe(2)
         ->and(DeliveryDiscrepancy::whereIn('route_stop_item_id', [$firstItem->id, $secondItem->id])
             ->whereNotNull('processed_at')->count())->toBe(2);

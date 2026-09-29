@@ -91,4 +91,33 @@ final class QuantityMath
     {
         return self::compare($value, '0') < 0;
     }
+
+    public static function isMultipleOf(int|string $value, int|string $step): bool
+    {
+        $normalizedStep = self::normalize($step);
+
+        if (! self::isPositive($normalizedStep)) {
+            throw new InvalidArgumentException('El paso de cantidad debe ser mayor a cero.');
+        }
+
+        return self::isZero(bcmod(self::normalize($value), $normalizedStep, self::SCALE));
+    }
+
+    public static function floorToMultiple(int|string $value, int|string $step): string
+    {
+        $normalizedValue = self::normalize($value);
+        $normalizedStep = self::normalize($step);
+
+        if (! self::isPositive($normalizedStep)) {
+            throw new InvalidArgumentException('El paso de cantidad debe ser mayor a cero.');
+        }
+
+        if (self::isNegative($normalizedValue)) {
+            return '0.0000';
+        }
+
+        $quotient = bcdiv($normalizedValue, $normalizedStep, 0);
+
+        return self::normalize(bcmul($quotient, $normalizedStep, self::SCALE));
+    }
 }

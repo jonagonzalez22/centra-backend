@@ -781,6 +781,7 @@ class RouteManagementService
                     throw $this->validationError("El producto {$productId} no pertenece a este pedido.");
                 }
 
+                $this->assertCommercialQuantity($route->store_id, $productId, $quantityPlanned);
                 $orderedQuantity = $this->sumQuantities($orderItems->pluck('quantity')->all());
 
                 // Completed routes are delivery history, not active planning.
@@ -930,6 +931,7 @@ class RouteManagementService
                     throw $this->validationError("El item {$routeStopItemId} no pertenece a esta ruta.");
                 }
 
+                $this->assertCommercialQuantity($route->store_id, $stopItem->product_id, $quantityLoaded);
                 if (QuantityMath::compare($quantityLoaded, $stopItem->quantity_planned) > 0) {
                     throw $this->validationError(
                         "La cantidad cargada ({$quantityLoaded}) no puede superar la planificada ({$stopItem->quantity_planned})."
@@ -1598,11 +1600,34 @@ class RouteManagementService
             throw $this->validationError('La cantidad a resolver debe coincidir con la diferencia pendiente.');
         }
 
+        $this->assertCommercialQuantity(
+            $item->routeStop->route->store_id,
+            $item->product_id,
+            $data['quantity_to_resolve']
+        );
+
         if ($data['resolution_type'] === 'extra_sale') {
             throw $this->validationError('La venta extra debe estar respaldada por una asignación de mercadería en ruta.');
         }
 
         return $diff;
+    }
+
+    private function assertCommercialQuantity(string $storeId, string $productId, int|string $quantity): void
+    {
+        if (! QuantityMath::isPositive($quantity)) {
+            return;
+        }
+
+        $product = Product::forStore($storeId)->find($productId);
+
+        if (! $product) {
+            throw $this->validationError('El producto no existe o no pertenece a la tienda.');
+        }
+
+        if ($error = $product->commercialQuantityError($quantity)) {
+            throw $this->validationError($error);
+        }
     }
 
     /**
@@ -1902,6 +1927,7 @@ class RouteManagementService
             foreach ($products as $productEntry) {
                 $productId = $productEntry['product_id'];
                 $remainingToLoad = QuantityMath::normalize($productEntry['quantity_loaded']);
+                $this->assertCommercialQuantity($route->store_id, $productId, $remainingToLoad);
                 $reason = $productEntry['reason'] ?? null;
                 $notes = $productEntry['notes'] ?? null;
 
@@ -2003,6 +2029,7 @@ class RouteManagementService
                     );
                 }
 
+                $this->assertCommercialQuantity($route->store_id, $productId, $quantityLoaded);
                 if (QuantityMath::compare($quantityLoaded, $stopItem->quantity_planned) > 0) {
                     throw $this->validationError(
                         "La cantidad cargada ({$quantityLoaded}) no puede superar la planificada ({$stopItem->quantity_planned}) ".

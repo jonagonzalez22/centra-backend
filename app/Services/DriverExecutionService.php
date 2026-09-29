@@ -43,6 +43,7 @@ class DriverExecutionService
         $stop->setRelation('route', $route);
         $stopItems = RouteStopItem::where('route_stop_id', $stop->id)
             ->whereIn('id', collect($items)->pluck('route_stop_item_id'))
+            ->with('product')
             ->get()
             ->keyBy('id');
         $proposedQuantities = [];
@@ -55,6 +56,10 @@ class DriverExecutionService
             }
 
             $quantity = QuantityMath::normalize($itemData['quantity_delivered']);
+            if (QuantityMath::isPositive($quantity)
+                && ($quantityError = $stopItem->product?->commercialQuantityError($quantity))) {
+                throw $this->validationError($quantityError);
+            }
             if (QuantityMath::compare($quantity, $stopItem->quantity_loaded) > 0) {
                 throw $this->validationError(
                     "La cantidad entregada ({$quantity}) no puede superar la cargada ({$stopItem->quantity_loaded})."
@@ -221,6 +226,9 @@ class DriverExecutionService
             foreach ($items as $itemData) {
                 $productId = $itemData['product_id'];
                 $quantity = QuantityMath::normalize($itemData['quantity']);
+                if ($quantityError = $products[$productId]->commercialQuantityError($quantity)) {
+                    throw $this->validationError($quantityError);
+                }
                 $remainingToAllocate = $quantity;
 
                 foreach ($sourceItems->where('product_id', $productId) as $sourceItem) {
@@ -433,6 +441,15 @@ class DriverExecutionService
 
                 $qtyDelivered = QuantityMath::normalize($itemData['quantity_delivered']);
                 $qtyReleased = QuantityMath::normalize($itemData['quantity_released_for_extra_sale'] ?? '0');
+                $product = Product::forStore($driver->store_id)->find($routeStopItem->product_id);
+                if (QuantityMath::isPositive($qtyDelivered) && $product
+                    && ($quantityError = $product->commercialQuantityError($qtyDelivered))) {
+                    throw $this->validationError($quantityError);
+                }
+                if (QuantityMath::isPositive($qtyReleased) && $product
+                    && ($quantityError = $product->commercialQuantityError($qtyReleased))) {
+                    throw $this->validationError($quantityError);
+                }
 
                 if (QuantityMath::compare($qtyDelivered, $routeStopItem->quantity_loaded) > 0) {
                     throw $this->validationError(

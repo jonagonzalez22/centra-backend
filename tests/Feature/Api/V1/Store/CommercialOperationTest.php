@@ -486,6 +486,40 @@ describe('CommercialOperation::generateNumber()', function () {
 });
 
 describe('POST /api/v1/store/operations - Stock', function () {
+    test('rejects a quantity that is not a multiple of the product sale step', function () {
+        $this->product->update(['sale_quantity_step' => '0.2500']);
+
+        $response = createOperation([
+            'type' => 'order',
+            'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => '1.3000', 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.quantity']);
+
+        expect($response->json('errors')['items.0.quantity'][0])
+            ->toBe('La cantidad debe ser múltiplo de 0,25.');
+    });
+
+    test('accepts a quantity that is an exact multiple of the product sale step', function () {
+        $this->product->update(['sale_quantity_step' => '0.2500']);
+
+        createOperation([
+            'type' => 'order',
+            'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => '1.2500', 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertCreated();
+
+        expect($this->product->fresh()->stock_reserved)->toBe('1.2500');
+    });
+
     test('sale reduces stock only', function () {
         $response = createOperation([
             'type' => 'sale',

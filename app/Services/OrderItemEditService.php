@@ -98,6 +98,14 @@ class OrderItemEditService
                 ]);
             }
 
+            foreach ($requestedQuantities as $productId => $requestedQuantity) {
+                if ($quantityError = $products[$productId]->commercialQuantityError($requestedQuantity)) {
+                    throw ValidationException::withMessages([
+                        'items' => ["La cantidad solicitada para {$products[$productId]->name}: {$quantityError}"],
+                    ]);
+                }
+            }
+
             $order->loadMissing('items.product');
             $editability = $this->orderEditabilityService->describe($order);
 
