@@ -1,7 +1,10 @@
 <?php
 
 use App\Models\Category;
+use App\Models\CommercialOperation;
+use App\Models\InventoryMovement;
 use App\Models\MeasurementUnit;
+use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
@@ -100,7 +103,7 @@ test('product update persists UOM and sale step without applying step business r
         'category_id' => $this->category->id,
         'stock' => '0.0000',
         'stock_reserved' => '0.0000',
-        'stock_min' => '0.0000',
+        'stock_min' => '5.0000',
     ]);
     $unit = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
 
@@ -114,7 +117,7 @@ test('product update persists UOM and sale step without applying step business r
         ->assertJsonPath('data.sale_quantity_step', '0.1000')
         ->assertJsonPath('data.stock', '0.0000')
         ->assertJsonPath('data.stock_reserved', '0.0000')
-        ->assertJsonPath('data.stock_min', '0.0000');
+        ->assertJsonPath('data.stock_min', '5.0000');
 });
 
 test('a product UOM cannot reinterpret existing stock, reservations, or history', function () {
@@ -133,6 +136,58 @@ test('a product UOM cannot reinterpret existing stock, reservations, or history'
 
     expect($product->fresh()->stock_measurement_unit_id)
         ->toBe(MeasurementUnit::query()->where('code', 'unit')->value('id'));
+});
+
+test('a product UOM cannot change after an inventory movement even when current stock is zero', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_min' => '5.0000',
+    ]);
+    InventoryMovement::query()->create([
+        'store_id' => $this->store->id,
+        'product_id' => $product->id,
+        'user_id' => $this->user->id,
+        'type' => 'adjustment',
+        'quantity' => '1.0000',
+        'previous_stock' => '0.0000',
+        'current_stock' => '1.0000',
+        'concept' => 'Movimiento histórico',
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
+});
+
+test('a product UOM cannot change after commercial history even when current stock is zero', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_min' => '5.0000',
+    ]);
+    $operation = CommercialOperation::factory()->forStore($this->store)->create([
+        'user_id' => $this->user->id,
+        'type' => 'sale',
+        'status' => 'confirmed',
+    ]);
+    OperationItem::factory()->forOperation($operation)->forProduct($product)->create([
+        'quantity' => '1.0000',
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
 });
 
 test('a product cannot change its sale step while it has an active reservation', function () {

@@ -348,7 +348,6 @@ class ProductController extends Controller
     {
         return ! QuantityMath::isZero($product->stock)
           || ! QuantityMath::isZero($product->stock_reserved)
-          || ! QuantityMath::isZero($product->stock_min)
           || OperationItem::query()->where('product_id', $product->id)->exists()
             || InventoryMovement::query()->where('product_id', $product->id)->exists();
     }
