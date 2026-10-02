@@ -26,6 +26,10 @@ class OperationItemResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        // B4 uses the current product UOM for operational screens. B6 will
+        // snapshot this value on the operation item for historical display.
+        $product = $this->relationLoaded('product') ? $this->product : null;
+
         return [
             'id' => $this->id,
             'product_id' => $this->product_id,
@@ -35,6 +39,9 @@ class OperationItemResource extends JsonResource
             'subtotal' => (float) $this->subtotal,
             'tax_amount' => (float) $this->tax_amount,
             'discount_amount' => (float) $this->discount_amount,
+            'stock_measurement_unit' => $product?->relationLoaded('stockMeasurementUnit')
+                ? MeasurementUnitResource::make($product->stockMeasurementUnit)
+                : null,
         ];
     }
 }

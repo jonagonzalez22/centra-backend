@@ -31,7 +31,7 @@ class OrderEditabilityService
      */
     public function describe(CommercialOperation $order): array
     {
-        $order->loadMissing('items.product');
+        $order->loadMissing('items.product.stockMeasurementUnit');
 
         $currentQuantities = $order->items
             ->groupBy('product_id')
@@ -72,16 +72,28 @@ class OrderEditabilityService
                         '0',
                         QuantityMath::subtract($currentQuantity, $minimumQuantity)
                     );
+                    $product = $line?->product;
+                    $step = QuantityMath::normalize($product?->sale_quantity_step ?? '1');
+                    $commercialAvailable = QuantityMath::normalize($product?->commercial_available_quantity ?? '0');
 
                     return [
                         'product_id' => $productId,
                         'product_name' => $line?->product_name ?? $line?->product?->name,
-                        // A1.1 intentionally preserves this whole-unit response contract.
-                        'current_quantity' => (int) $currentQuantity,
-                        'delivered_quantity' => (int) $deliveredQuantity,
-                        'active_committed_quantity' => (int) $activeCommittedQuantity,
-                        'minimum_quantity' => (int) $minimumQuantity,
-                        'editable_quantity' => (int) $editableQuantity,
+                        'current_quantity' => QuantityMath::normalize($currentQuantity),
+                        'delivered_quantity' => $deliveredQuantity,
+                        'active_committed_quantity' => $activeCommittedQuantity,
+                        'minimum_quantity' => $minimumQuantity,
+                        'editable_quantity' => $editableQuantity,
+                        'sale_quantity_step' => $step,
+                        'commercial_available_quantity' => $commercialAvailable,
+                        // The order's own current reservation is releasable while editing,
+                        // so it is added back to the externally available commercial stock.
+                        'maximum_editable_quantity' => QuantityMath::add($commercialAvailable, $currentQuantity),
+                        'stock_measurement_unit' => $product?->stockMeasurementUnit ? [
+                            'code' => $product->stockMeasurementUnit->code,
+                            'name' => $product->stockMeasurementUnit->name,
+                            'symbol' => $product->stockMeasurementUnit->symbol,
+                        ] : null,
                     ];
                 })
                 ->sortBy('product_name')

@@ -63,6 +63,11 @@ class CommercialOperationResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        // currentCommercialItems() serializes grouped OperationItems directly,
+        // before DeliverySummaryService gets a chance to load relations.
+        // Load the current Product UOM here for B4 operational display.
+        $this->resource->loadMissing('items.product.stockMeasurementUnit');
+
         return [
             'id' => $this->id,
             'operation_number' => $this->operation_number,
@@ -195,6 +200,17 @@ class CommercialOperationResource extends JsonResource
                         'subtotal' => round($group['subtotal'], 2),
                         'tax_amount' => round($group['tax_amount'], 2),
                         'discount_amount' => round($group['discount_amount'], 2),
+                        // B4 operational display only; B6 will snapshot UOM on OperationItem.
+                        'stock_measurement_unit' => $source->relationLoaded('product')
+                            && $source->product?->relationLoaded('stockMeasurementUnit')
+                            ? [
+                                'id' => $source->product->stockMeasurementUnit->id,
+                                'code' => $source->product->stockMeasurementUnit->code,
+                                'name' => $source->product->stockMeasurementUnit->name,
+                                'symbol' => $source->product->stockMeasurementUnit->symbol,
+                                'category' => $source->product->stockMeasurementUnit->category,
+                            ]
+                            : null,
                     ];
                 })->all();
             })

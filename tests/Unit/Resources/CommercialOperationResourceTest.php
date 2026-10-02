@@ -6,6 +6,7 @@ use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
+use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\Store;
@@ -62,17 +63,21 @@ describe('CommercialOperationResource', function () {
             ['quantity' => 3, 'price' => 4800],
             ['quantity' => 0, 'price' => 4800],
         ], 38400);
+        $product->update([
+            'stock_measurement_unit_id' => MeasurementUnit::query()->where('code', 'kg')->value('id'),
+        ]);
 
-        $data = CommercialOperationResource::make($operation->load('items'))->toArray(new Request);
+        $data = CommercialOperationResource::make($operation->load('items.product.stockMeasurementUnit'))->toArray(new Request);
 
         expect($data['items'])->toHaveCount(1)
             ->and($data['items'][0]['id'])->toBe(OperationItem::where('operation_id', $operation->id)->orderBy('created_at')->firstOrFail()->id)
             ->and($data['items'][0]['product_id'])->toBe($product->id)
-            ->and($data['items'][0]['quantity'])->toBe(8)
+            ->and($data['items'][0]['quantity'])->toBe('8.0000')
+            ->and($data['items'][0]['stock_measurement_unit']['symbol'])->toBe('kg')
             ->and($data['items'][0]['price'])->toBe(4800.0)
             ->and($data['items'][0]['subtotal'])->toBe(38400.0)
             ->and($data['total'])->toBe(38400.0)
-            ->and($data['delivery_summary']['items'][0]['ordered_quantity'])->toBe(8);
+            ->and($data['delivery_summary']['items'][0]['ordered_quantity'])->toBe('8.0000');
 
         $listData = CommercialOperationListResource::make($operation->load('items'))->toArray(new Request);
         expect($listData['items_count'])->toBe(1);
@@ -84,10 +89,10 @@ describe('CommercialOperationResource', function () {
             ['quantity' => 3, 'price' => 5200],
         ], 39600);
 
-        $data = CommercialOperationResource::make($operation->load('items'))->toArray(new Request);
+        $data = CommercialOperationResource::make($operation->load('items.product.stockMeasurementUnit'))->toArray(new Request);
 
         expect($data['items'])->toHaveCount(2)
-            ->and(collect($data['items'])->pluck('quantity')->all())->toBe([5, 3])
+            ->and(collect($data['items'])->pluck('quantity')->all())->toBe(['5.0000', '3.0000'])
             ->and(collect($data['items'])->pluck('price')->all())->toBe([4800.0, 5200.0])
             ->and(collect($data['items'])->pluck('subtotal')->all())->toBe([24000.0, 15600.0])
             ->and($data['total'])->toBe(39600.0);

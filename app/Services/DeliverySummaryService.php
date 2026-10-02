@@ -23,7 +23,7 @@ class DeliverySummaryService
 
     public function summarize(CommercialOperation $operation): array
     {
-        $operation->loadMissing(['items.product', 'routeStops.items', 'routeStops.route']);
+        $operation->loadMissing(['items.product.stockMeasurementUnit', 'routeStops.items', 'routeStops.route']);
         $items = $operation->items;
         $stops = $operation->routeStops;
 
@@ -45,6 +45,14 @@ class DeliverySummaryService
                 'product_id' => $productId,
                 'product_name' => $line?->product_name ?? $product?->name,
                 'sku' => $product?->sku,
+                // B4 operational display only; B6 will provide item snapshots.
+                'stock_measurement_unit' => $product?->stockMeasurementUnit ? [
+                    'id' => $product->stockMeasurementUnit->id,
+                    'code' => $product->stockMeasurementUnit->code,
+                    'name' => $product->stockMeasurementUnit->name,
+                    'symbol' => $product->stockMeasurementUnit->symbol,
+                    'category' => $product->stockMeasurementUnit->category,
+                ] : null,
                 'ordered_quantity' => $orderedQuantity,
                 'delivered_quantity' => $deliveredQuantity,
                 'pending_quantity' => $pendingQuantity,
@@ -62,6 +70,9 @@ class DeliverySummaryService
             ),
             'items' => $summaryItems->all(),
             'pending_delivery_quantity' => $this->sumQuantities($summaryItems->pluck('pending_quantity')->all()),
+            'pending_delivery_items_count' => $summaryItems->filter(
+                fn (array $item): bool => QuantityMath::isPositive($item['pending_quantity'])
+            )->count(),
         ];
     }
 

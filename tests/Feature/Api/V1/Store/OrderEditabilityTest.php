@@ -131,11 +131,14 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertJsonPath('data.delivery_date_block_reason', null)
             ->assertJsonPath('data.delivery_date_block_message', null)
             ->assertJsonPath('data.items.0.product_id', $this->product->id)
-            ->assertJsonPath('data.items.0.current_quantity', 10)
-            ->assertJsonPath('data.items.0.delivered_quantity', 0)
-            ->assertJsonPath('data.items.0.active_committed_quantity', 0)
-            ->assertJsonPath('data.items.0.minimum_quantity', 0)
-            ->assertJsonPath('data.items.0.editable_quantity', 10);
+            ->assertJsonPath('data.items.0.current_quantity', '10.0000')
+            ->assertJsonPath('data.items.0.delivered_quantity', '0.0000')
+            ->assertJsonPath('data.items.0.active_committed_quantity', '0.0000')
+            ->assertJsonPath('data.items.0.minimum_quantity', '0.0000')
+            ->assertJsonPath('data.items.0.editable_quantity', '10.0000')
+            ->assertJsonPath('data.items.0.sale_quantity_step', '1.0000')
+            ->assertJsonPath('data.items.0.commercial_available_quantity', '90.0000')
+            ->assertJsonPath('data.items.0.maximum_editable_quantity', '100.0000');
 
         expect($this->product->fresh()->stock_reserved)->toBe('10.0000');
     });
@@ -157,11 +160,11 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertJsonPath('data.delivery_date_editable', false)
             ->assertJsonPath('data.delivery_date_block_reason', 'active_route_commitment')
             ->assertJsonPath('data.delivery_date_block_message', 'La fecha de entrega no puede modificarse porque el pedido tiene mercadería comprometida en una ruta activa.')
-            ->assertJsonPath('data.items.0.current_quantity', 10)
-            ->assertJsonPath('data.items.0.delivered_quantity', 4)
-            ->assertJsonPath('data.items.0.active_committed_quantity', 5)
-            ->assertJsonPath('data.items.0.minimum_quantity', 9)
-            ->assertJsonPath('data.items.0.editable_quantity', 1);
+            ->assertJsonPath('data.items.0.current_quantity', '10.0000')
+            ->assertJsonPath('data.items.0.delivered_quantity', '4.0000')
+            ->assertJsonPath('data.items.0.active_committed_quantity', '5.0000')
+            ->assertJsonPath('data.items.0.minimum_quantity', '9.0000')
+            ->assertJsonPath('data.items.0.editable_quantity', '1.0000');
     });
 
     test('uses the route lifecycle to calculate active committed quantity', function (string $routeStatus, int $planned, int $loaded, int $delivered, int $expectedCommitted) {
@@ -181,9 +184,9 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
 
         getOrderEditability($this->user, $order->id)
             ->assertOk()
-            ->assertJsonPath('data.items.0.delivered_quantity', 0)
-            ->assertJsonPath('data.items.0.active_committed_quantity', $expectedCommitted)
-            ->assertJsonPath('data.items.0.minimum_quantity', $expectedCommitted);
+            ->assertJsonPath('data.items.0.delivered_quantity', '0.0000')
+            ->assertJsonPath('data.items.0.active_committed_quantity', number_format($expectedCommitted, 4, '.', ''))
+            ->assertJsonPath('data.items.0.minimum_quantity', number_format($expectedCommitted, 4, '.', ''));
     })->with([
         'draft uses planned quantity' => ['draft', 6, 3, 0, 6],
         'planned uses planned quantity' => ['planned', 6, 3, 0, 6],
@@ -199,10 +202,10 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
 
         getOrderEditability($this->user, $order->id)
             ->assertOk()
-            ->assertJsonPath('data.items.0.delivered_quantity', 4)
-            ->assertJsonPath('data.items.0.active_committed_quantity', 0)
-            ->assertJsonPath('data.items.0.minimum_quantity', 4)
-            ->assertJsonPath('data.items.0.editable_quantity', 6);
+            ->assertJsonPath('data.items.0.delivered_quantity', '4.0000')
+            ->assertJsonPath('data.items.0.active_committed_quantity', '0.0000')
+            ->assertJsonPath('data.items.0.minimum_quantity', '4.0000')
+            ->assertJsonPath('data.items.0.editable_quantity', '6.0000');
     });
 
     test('calculates the editable minimum for completed and partially loaded routes', function () {
@@ -213,10 +216,10 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
 
         getOrderEditability($this->user, $order->id)
             ->assertOk()
-            ->assertJsonPath('data.items.0.delivered_quantity', 4)
-            ->assertJsonPath('data.items.0.active_committed_quantity', 3)
-            ->assertJsonPath('data.items.0.minimum_quantity', 7)
-            ->assertJsonPath('data.items.0.editable_quantity', 3);
+            ->assertJsonPath('data.items.0.delivered_quantity', '4.0000')
+            ->assertJsonPath('data.items.0.active_committed_quantity', '3.0000')
+            ->assertJsonPath('data.items.0.minimum_quantity', '7.0000')
+            ->assertJsonPath('data.items.0.editable_quantity', '3.0000');
     });
 
     test('allows a partially delivered order without active commitments and keeps its historical minimum', function () {
@@ -228,8 +231,8 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertOk()
             ->assertJsonPath('data.editable', true)
             ->assertJsonPath('data.delivery_date_editable', true)
-            ->assertJsonPath('data.items.0.minimum_quantity', 4)
-            ->assertJsonPath('data.items.0.editable_quantity', 6);
+            ->assertJsonPath('data.items.0.minimum_quantity', '4.0000')
+            ->assertJsonPath('data.items.0.editable_quantity', '6.0000');
     });
 
     test('treats confirmed orders as editable', function () {

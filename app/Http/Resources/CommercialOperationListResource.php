@@ -36,7 +36,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="branch_id", type="string", format="uuid", nullable=true),
  *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido"),
  *   @OA\Property(property="has_pending_delivery", type="boolean"),
- *   @OA\Property(property="pending_delivery_quantity", type="string", pattern="^\\d+\\.\\d{4}$", example="2.0000")
+ *   @OA\Property(property="pending_delivery_items_count", type="integer", example=2)
  * )
  */
 class CommercialOperationListResource extends JsonResource
@@ -79,7 +79,7 @@ class CommercialOperationListResource extends JsonResource
                 ->values()
                 ->toArray(), []),
             'has_pending_delivery' => $deliverySummary['has_pending_delivery'],
-            'pending_delivery_quantity' => $deliverySummary['pending_delivery_quantity'],
+            'pending_delivery_items_count' => $deliverySummary['pending_delivery_items_count'],
         ];
     }
 

@@ -282,7 +282,7 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
         expect($items)->toHaveCount(1);
         expect($items[0]['product_id'])->toBe($this->product->id);
         expect($items[0]['product_name'])->toBe($this->product->name);
-        expect($items[0]['quantity'])->toBe(3);
+        expect($items[0]['quantity'])->toBe('3.0000');
     });
 
     test('includes payments with payment method', function () {
