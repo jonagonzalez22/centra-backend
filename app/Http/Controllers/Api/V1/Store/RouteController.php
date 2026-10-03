@@ -51,7 +51,7 @@ class RouteController extends Controller
     {
         return [
             'stops' => fn ($query) => $query->orderBy('sequence'),
-            'stops.items.product',
+            'stops.items.product.stockMeasurementUnit',
             'stops.order.customer.addresses.locality',
             'stops.order.customer.contacts',
             'events' => fn ($query) => $query->orderBy('created_at'),
@@ -1003,7 +1003,7 @@ class RouteController extends Controller
      *           required={"product_id", "quantity_planned"},
      *
      *           @OA\Property(property="product_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
-     *           @OA\Property(property="quantity_planned", type="integer", example=5)
+     *           @OA\Property(property="quantity_planned", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="1.2500")
      *         )
      *       )
      *     )
@@ -1054,7 +1054,7 @@ class RouteController extends Controller
 
         $this->routeService->assignItems($route, $stop, $request->input('items'), $request->user());
 
-        $stop->load(['items.product']);
+        $stop->load(['items.product.stockMeasurementUnit']);
 
         return response()->json([
             'status' => 'success',
@@ -1726,7 +1726,7 @@ class RouteController extends Controller
      *
      *       @OA\Property(property="route_stop_item_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000", description="ID del item de parada con discrepancia"),
      *       @OA\Property(property="resolution_type", type="string", enum={"returned", "pending_redelivery", "missing", "damaged", "rejected_by_customer", "other"}, example="returned"),
-     *       @OA\Property(property="quantity_to_resolve", type="integer", example=2),
+     *       @OA\Property(property="quantity_to_resolve", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="0.2500"),
      *       @OA\Property(property="notes", type="string", example="Cliente rechazó 2 unidades por vencimiento", nullable=true)
      *     )
      *   ),
@@ -1824,7 +1824,7 @@ class RouteController extends Controller
      *
      *   @OA\Parameter(name="route", in="path", required=true, @OA\Schema(type="string", format="uuid")),
      *
-     *   @OA\RequestBody(required=true, @OA\JsonContent(required={"items"}, @OA\Property(property="items", type="array", @OA\Items(required={"route_stop_item_id", "resolution_type", "quantity_to_resolve"}, @OA\Property(property="route_stop_item_id", type="string", format="uuid"), @OA\Property(property="resolution_type", type="string", enum={"returned", "rejected_by_customer", "missing", "damaged", "pending_redelivery"}), @OA\Property(property="quantity_to_resolve", type="integer", minimum=1), @OA\Property(property="notes", type="string", nullable=true))))),
+     *   @OA\RequestBody(required=true, @OA\JsonContent(required={"items"}, @OA\Property(property="items", type="array", @OA\Items(required={"route_stop_item_id", "resolution_type", "quantity_to_resolve"}, @OA\Property(property="route_stop_item_id", type="string", format="uuid"), @OA\Property(property="resolution_type", type="string", enum={"returned", "rejected_by_customer", "missing", "damaged", "pending_redelivery"}), @OA\Property(property="quantity_to_resolve", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="0.2500"), @OA\Property(property="notes", type="string", nullable=true))))),
      *
      *   @OA\Response(response=200, description="Discrepancias resueltas exitosamente"),
      *   @OA\Response(response=422, description="Batch inválido; no se aplicó ninguna resolución")

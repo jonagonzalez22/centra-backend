@@ -39,6 +39,10 @@ class DriverStopItemResource extends JsonResource
             'original_route_stop_id' => $this->original_route_stop_id,
             'is_extra' => false, // lectura-only: no se crean extras desde la app driver
             'notes' => $this->notes,
+            'sale_quantity_step' => QuantityMath::normalize($this->product?->sale_quantity_step ?? '1'),
+            'stock_measurement_unit' => $this->product?->relationLoaded('stockMeasurementUnit')
+                ? MeasurementUnitResource::make($this->product->stockMeasurementUnit)
+                : null,
         ];
     }
 }

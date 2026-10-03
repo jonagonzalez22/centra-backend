@@ -150,7 +150,10 @@ test('assigns items to a stop in draft route', function () {
             ],
         ]);
 
-    $response->assertStatus(200);
+    $response->assertStatus(200)
+        ->assertJsonPath('data.items.0.quantity_planned', '5.0000')
+        ->assertJsonPath('data.items.0.sale_quantity_step', '1.0000')
+        ->assertJsonStructure(['data' => ['items' => [['stock_measurement_unit' => ['symbol']]]]]);
 
     expect(RouteStopItem::count())->toBe(1);
     $item = RouteStopItem::first();

@@ -838,7 +838,7 @@ class RouteManagementService
     public function getLoadSheet(DeliveryRoute $route): array
     {
         $stops = $route->stops()
-            ->with(['items.product', 'order'])
+            ->with(['items.product.stockMeasurementUnit', 'order'])
             ->where('status', '!=', 'cancelled')
             ->orderBy('sequence')
             ->get();
@@ -858,6 +858,8 @@ class RouteManagementService
                     'product_name' => $productName,
                     'quantity_planned' => $item->quantity_planned,
                     'quantity_loaded' => $item->quantity_loaded,
+                    'sale_quantity_step' => QuantityMath::normalize($item->product?->sale_quantity_step ?? '1'),
+                    'stock_measurement_unit' => $this->measurementUnitData($item->product?->stockMeasurementUnit),
                 ];
 
                 if (! isset($byProduct[$productId])) {
@@ -866,6 +868,8 @@ class RouteManagementService
                         'product_name' => $productName,
                         'total_planned' => '0.0000',
                         'total_loaded' => '0.0000',
+                        'sale_quantity_step' => QuantityMath::normalize($item->product?->sale_quantity_step ?? '1'),
+                        'stock_measurement_unit' => $this->measurementUnitData($item->product?->stockMeasurementUnit),
                     ];
                 }
 
@@ -1162,7 +1166,7 @@ class RouteManagementService
 
         $route->load([
             'stops' => fn ($q) => $q->where('status', '!=', 'cancelled')->orderBy('sequence'),
-            'stops.items.product',
+            'stops.items.product.stockMeasurementUnit',
             'stops.items.discrepancy',
             'stops.order' => fn ($q) => $q->with(['customer', 'payments.storePaymentMethod.paymentMethod']),
             'stops.collections' => fn ($q) => $q->with(['storePaymentMethod.paymentMethod', 'declaredBy', 'verifiedBy']),
@@ -1208,6 +1212,8 @@ class RouteManagementService
                     'quantity_delivered' => QuantityMath::normalize($item->quantity_delivered),
                     'difference' => $diff,
                     'extra_sale_allocated' => $allocatedQty,
+                    'sale_quantity_step' => QuantityMath::normalize($item->product?->sale_quantity_step ?? '1'),
+                    'stock_measurement_unit' => $this->measurementUnitData($item->product?->stockMeasurementUnit),
                     'discrepancy' => $discrepancy ? [
                         'id' => $discrepancy->id,
                         'resolution_type' => $discrepancy->resolution_type,
@@ -2509,5 +2515,16 @@ class RouteManagementService
                 }
             }
         }
+    }
+
+    private function measurementUnitData($unit): ?array
+    {
+        return $unit ? [
+            'id' => $unit->id,
+            'code' => $unit->code,
+            'name' => $unit->name,
+            'symbol' => $unit->symbol,
+            'category' => $unit->category,
+        ] : null;
     }
 }

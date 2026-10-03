@@ -89,7 +89,7 @@ class DriverStopController extends Controller
             'order.customer.contacts',
             'order.payments',
             'order.items',
-            'items.product',
+            'items.product.stockMeasurementUnit',
             'collections.storePaymentMethod.paymentMethod',
             'route',
         ])->find($stopId);

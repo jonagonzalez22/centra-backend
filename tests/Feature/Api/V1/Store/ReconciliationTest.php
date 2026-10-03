@@ -195,6 +195,8 @@ test('reconciliation summary for awaiting_reconciliation route', function () {
         ->assertJsonPath('data.route_id', $route->id)
         ->assertJsonPath('data.status', 'awaiting_reconciliation')
         ->assertJsonPath('data.totals.declared_amount', 0)
+        ->assertJsonPath('data.stops.0.items.0.sale_quantity_step', '1.0000')
+        ->assertJsonStructure(['data' => ['stops' => [['items' => [['stock_measurement_unit' => ['symbol']]]]]]])
         ->assertJsonPath('data.can_close', true); // all delivered, no discrepancies, no collections
 });
 

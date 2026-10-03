@@ -43,7 +43,7 @@ class DriverExecutionService
         $stop->setRelation('route', $route);
         $stopItems = RouteStopItem::where('route_stop_id', $stop->id)
             ->whereIn('id', collect($items)->pluck('route_stop_item_id'))
-            ->with('product')
+            ->with('product.stockMeasurementUnit')
             ->get()
             ->keyBy('id');
         $proposedQuantities = [];
@@ -151,6 +151,14 @@ class DriverExecutionService
                     'sku' => $item->product?->sku,
                     'unit_price' => (float) ($item->product?->price ?? 0),
                     'available_quantity' => '0.0000',
+                    'sale_quantity_step' => QuantityMath::normalize($item->product?->sale_quantity_step ?? '1'),
+                    'stock_measurement_unit' => $item->product?->stockMeasurementUnit ? [
+                        'id' => $item->product->stockMeasurementUnit->id,
+                        'code' => $item->product->stockMeasurementUnit->code,
+                        'name' => $item->product->stockMeasurementUnit->name,
+                        'symbol' => $item->product->stockMeasurementUnit->symbol,
+                        'category' => $item->product->stockMeasurementUnit->category,
+                    ] : null,
                 ];
             }
 
