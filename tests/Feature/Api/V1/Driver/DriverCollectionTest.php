@@ -220,6 +220,31 @@ test('rejection reasons returns global plus store-specific reasons', function ()
         ->assertJsonCount($globalCount + 1, 'data'); // global + 1 active store-specific
 });
 
+test('rejection reasons excludes inactive and other-store reasons', function () {
+    $inactiveReason = DeliveryRejectionReason::create([
+        'store_id' => $this->store->id,
+        'code' => 'inactive_reason',
+        'label' => 'Motivo inactivo',
+        'is_active' => false,
+    ]);
+    $otherStoreReason = DeliveryRejectionReason::create([
+        'store_id' => Store::factory()->create()->id,
+        'code' => 'other_store_reason',
+        'label' => 'Motivo de otra tienda',
+        'is_active' => true,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->storeUserToken}")
+        ->getJson('/api/v1/store/logistics/rejection-reasons');
+
+    $reasonIds = collect($response->json('data'))->pluck('id');
+
+    $response->assertStatus(200);
+    expect($reasonIds)
+        ->not->toContain($inactiveReason->id)
+        ->not->toContain($otherStoreReason->id);
+});
+
 test('rejection reasons returns 401 for unauthenticated', function () {
     $response = $this->getJson('/api/v1/store/logistics/rejection-reasons');
     $response->assertStatus(401);
