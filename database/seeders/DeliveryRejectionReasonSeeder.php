@@ -19,14 +19,19 @@ class DeliveryRejectionReasonSeeder extends Seeder
         ];
 
         foreach ($reasons as $reason) {
-            DeliveryRejectionReason::updateOrCreate(
-                ['code' => $reason['code'], 'store_id' => null],
-                [
-                    'label' => $reason['label'],
-                    'is_active' => true,
-                    'suggest_extra_sale' => $reason['suggest_extra_sale'],
-                ],
-            );
+            $rejectionReason = DeliveryRejectionReason::firstOrNew([
+                'code' => $reason['code'],
+                'store_id' => null,
+            ]);
+
+            $rejectionReason->label = $reason['label'];
+            $rejectionReason->suggest_extra_sale = $reason['suggest_extra_sale'];
+
+            if (! $rejectionReason->exists) {
+                $rejectionReason->is_active = true;
+            }
+
+            $rejectionReason->save();
         }
     }
 }
