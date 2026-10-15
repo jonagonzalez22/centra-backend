@@ -6,13 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\StoreProductRequest;
 use App\Http\Requests\Api\V1\Store\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
-use App\Models\InventoryMovement;
 use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\RouteStopItem;
 use App\Support\QuantityMath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -128,7 +128,6 @@ class ProductController extends Controller
      *       @OA\Property(property="price", type="number", example=259.99),
      *       @OA\Property(property="cost", type="number", example=150.00, nullable=true),
      *       @OA\Property(property="stock", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="100.0000", nullable=true),
-     *       @OA\Property(property="stock_reserved", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="0.0000", nullable=true),
      *       @OA\Property(property="stock_min", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="10.0000", nullable=true),
      *       @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid", nullable=true),
      *       @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="1.0000", nullable=true),
@@ -166,7 +165,7 @@ class ProductController extends Controller
             'price' => $request->price,
             'cost' => $request->cost,
             'stock' => $request->stock ?? 0,
-            'stock_reserved' => $request->stock_reserved ?? 0,
+            'stock_reserved' => 0,
             'stock_min' => $request->stock_min ?? 0,
             'stock_measurement_unit_id' => $request->stock_measurement_unit_id,
             'sale_quantity_step' => $request->sale_quantity_step,
@@ -257,7 +256,6 @@ class ProductController extends Controller
      *       @OA\Property(property="price", type="number", example=279.99, nullable=true),
      *       @OA\Property(property="cost", type="number", example=160.00, nullable=true),
      *       @OA\Property(property="stock", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="150.0000", nullable=true),
-     *       @OA\Property(property="stock_reserved", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="10.0000", nullable=true),
      *       @OA\Property(property="stock_min", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="15.0000", nullable=true),
      *       @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid", nullable=true),
      *       @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="1.0000", nullable=true),
@@ -285,71 +283,82 @@ class ProductController extends Controller
     public function update(UpdateProductRequest $request, string $id): JsonResponse
     {
         $storeId = $request->user()->store_id;
-
-        $product = Product::forStore($storeId)->find($id);
-
-        if (! $product) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Producto no encontrado.',
-                'data' => null,
-                'errors' => ['id' => ['El producto no existe o no pertenece a tu tienda.']],
-            ], 404);
-        }
-
         $validated = $request->validated();
 
-        if (
-            array_key_exists('stock_measurement_unit_id', $validated)
-            && $validated['stock_measurement_unit_id'] !== $product->stock_measurement_unit_id
-            && $this->cannotChangeStockMeasurementUnit($product)
-        ) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No se puede cambiar la unidad de medida de un producto con stock, reservas o historial de inventario.',
-                'data' => null,
-                'errors' => [
-                    'stock_measurement_unit_id' => [
-                        'La unidad de medida sólo puede cambiarse antes de registrar stock, reservas o movimientos.',
+        return DB::transaction(function () use ($storeId, $id, $validated): JsonResponse {
+            $product = Product::forStore($storeId)->whereKey($id)->lockForUpdate()->first();
+
+            if (! $product) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Producto no encontrado.',
+                    'data' => null,
+                    'errors' => ['id' => ['El producto no existe o no pertenece a tu tienda.']],
+                ], 404);
+            }
+
+            $measurementUnitChanged = array_key_exists('stock_measurement_unit_id', $validated)
+                && $validated['stock_measurement_unit_id'] !== $product->stock_measurement_unit_id;
+
+            if ($measurementUnitChanged && ! array_key_exists('sale_quantity_step', $validated)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Error de validación.',
+                    'data' => null,
+                    'errors' => [
+                        'sale_quantity_step' => [
+                            'Al cambiar la unidad de medida se debe informar también la cantidad mínima de venta.',
+                        ],
                     ],
-                ],
-            ], 422);
-        }
+                ], 422);
+            }
 
-        if (
-            array_key_exists('sale_quantity_step', $validated)
-            && QuantityMath::compare($validated['sale_quantity_step'], $product->sale_quantity_step) !== 0
-            && $this->hasActiveCommercialCommitments($product)
-        ) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No se puede cambiar el paso de venta mientras existan compromisos comerciales activos.',
-                'data' => null,
-                'errors' => [
-                    'sale_quantity_step' => [
-                        'El paso de venta sólo puede cambiarse cuando no hay pedidos, reservas o rutas activas.',
+            if ($measurementUnitChanged && $this->cannotChangeStockMeasurementUnit($product)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No se puede cambiar la unidad de medida mientras el producto tenga cantidades reservadas o compromisos activos.',
+                    'data' => null,
+                    'errors' => [
+                        'stock_measurement_unit_id' => [
+                            'La unidad de medida sólo puede cambiarse cuando no hay cantidades reservadas ni compromisos activos.',
+                        ],
                     ],
-                ],
-            ], 422);
-        }
+                ], 422);
+            }
 
-        $product->update($validated);
-        $product->load(['category', 'stockMeasurementUnit']);
+            if (
+                array_key_exists('sale_quantity_step', $validated)
+                && QuantityMath::compare($validated['sale_quantity_step'], $product->sale_quantity_step) !== 0
+                && $this->hasActiveCommercialCommitments($product)
+            ) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No se puede cambiar el paso de venta mientras existan compromisos comerciales activos.',
+                    'data' => null,
+                    'errors' => [
+                        'sale_quantity_step' => [
+                            'El paso de venta sólo puede cambiarse cuando no hay pedidos, reservas o rutas activas.',
+                        ],
+                    ],
+                ], 422);
+            }
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Producto actualizado exitosamente.',
-            'data' => ProductResource::make($product),
-            'errors' => null,
-        ], 200);
+            $product->update($validated);
+            $product->load(['category', 'stockMeasurementUnit']);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Producto actualizado exitosamente.',
+                'data' => ProductResource::make($product),
+                'errors' => null,
+            ], 200);
+        });
     }
 
     private function cannotChangeStockMeasurementUnit(Product $product): bool
     {
-        return ! QuantityMath::isZero($product->stock)
-          || ! QuantityMath::isZero($product->stock_reserved)
-          || OperationItem::query()->where('product_id', $product->id)->exists()
-            || InventoryMovement::query()->where('product_id', $product->id)->exists();
+        return QuantityMath::isPositive($product->stock_reserved)
+            || $this->hasActiveCommercialCommitments($product);
     }
 
     private function hasActiveCommercialCommitments(Product $product): bool

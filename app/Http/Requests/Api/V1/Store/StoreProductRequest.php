@@ -15,7 +15,7 @@ class StoreProductRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->normalizeDecimalQuantities(['stock', 'stock_reserved', 'stock_min', 'sale_quantity_step']);
+        $this->normalizeDecimalQuantities(['stock', 'stock_min', 'sale_quantity_step']);
     }
 
     public function authorize(): bool
@@ -49,7 +49,7 @@ class StoreProductRequest extends FormRequest
             'price' => ['required', 'numeric', 'min:0'],
             'cost' => ['nullable', 'numeric', 'min:0'],
             'stock' => ['nullable', DecimalQuantity::nonNegative()],
-            'stock_reserved' => ['nullable', DecimalQuantity::nonNegative()],
+            'stock_reserved' => ['prohibited'],
             'stock_min' => ['nullable', DecimalQuantity::nonNegative()],
             'stock_measurement_unit_id' => [
                 'sometimes',
@@ -78,6 +78,7 @@ class StoreProductRequest extends FormRequest
             'price.min' => 'El precio no puede ser negativo.',
             'cost.numeric' => 'El costo debe ser un número válido.',
             'cost.min' => 'El costo no puede ser negativo.',
+            'stock_reserved.prohibited' => 'El stock reservado no puede modificarse manualmente.',
         ];
     }
 

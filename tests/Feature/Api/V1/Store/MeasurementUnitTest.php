@@ -2,10 +2,13 @@
 
 use App\Models\Category;
 use App\Models\CommercialOperation;
+use App\Models\DeliveryRoute;
 use App\Models\InventoryMovement;
 use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
 use App\Models\Product;
+use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -79,7 +82,24 @@ test('a product persists an explicit active measurement unit and decimal sale st
 
     $product = Product::query()->where('sku', 'CEM-KG-001')->firstOrFail();
     expect($product->stock_measurement_unit_id)->toBe($unit->id)
-        ->and($product->sale_quantity_step)->toBe('0.2500');
+        ->and($product->sale_quantity_step)->toBe('0.2500')
+        ->and($product->stock_reserved)->toBe('0.0000');
+});
+
+test('product creation rejects manually supplied reserved stock', function () {
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/store/products', [
+            'name' => 'Producto con reserva manual',
+            'sku' => 'RES-001',
+            'category_id' => $this->category->id,
+            'price' => 100,
+            'stock_reserved' => '100.0000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_reserved'])
+        ->assertJsonPath('errors.stock_reserved.0', 'El stock reservado no puede modificarse manualmente.');
+
+    expect(Product::query()->where('sku', 'RES-001')->exists())->toBeFalse();
 });
 
 test('product creation without UOM fields receives compatible defaults', function () {
@@ -120,25 +140,85 @@ test('product update persists UOM and sale step without applying step business r
         ->assertJsonPath('data.stock_min', '5.0000');
 });
 
-test('a product UOM cannot reinterpret existing stock, reservations, or history', function () {
+test('product update rejects manually setting reserved stock to zero', function () {
     $product = Product::factory()->forStore($this->store)->create([
         'category_id' => $this->category->id,
         'stock' => '10.0000',
+        'stock_reserved' => '3.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_reserved' => '0.0000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_reserved'])
+        ->assertJsonPath('errors.stock_reserved.0', 'El stock reservado no puede modificarse manualmente.');
+
+    expect($product->fresh()->stock_reserved)->toBe('3.0000');
+});
+
+test('product update rejects manually setting reserved stock to a positive value', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_reserved' => '3.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_reserved' => '100.0000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_reserved'])
+        ->assertJsonPath('errors.stock_reserved.0', 'El stock reservado no puede modificarse manualmente.');
+
+    expect($product->fresh()->stock_reserved)->toBe('3.0000');
+});
+
+test('product update without reserved stock continues to work', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_reserved' => '3.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'name' => 'Producto actualizado',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Producto actualizado')
+        ->assertJsonPath('data.stock_reserved', '3.0000');
+
+    expect($product->fresh()->stock_reserved)->toBe('3.0000');
+});
+
+test('a product UOM can change with physical stock and preserves stock and stock minimum', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_min' => '3.0000',
     ]);
     $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
 
     $this->actingAs($this->user, 'sanctum')
         ->putJson("/api/v1/store/products/{$product->id}", [
             'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.2500',
         ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
+        ->assertOk()
+        ->assertJsonPath('data.stock_measurement_unit.code', 'kg')
+        ->assertJsonPath('data.sale_quantity_step', '0.2500')
+        ->assertJsonPath('data.stock', '10.0000')
+        ->assertJsonPath('data.stock_min', '3.0000');
 
-    expect($product->fresh()->stock_measurement_unit_id)
-        ->toBe(MeasurementUnit::query()->where('code', 'unit')->value('id'));
+    expect($product->fresh()->stock_measurement_unit_id)->toBe($unit->id)
+        ->and($product->fresh()->stock)->toBe('10.0000')
+        ->and($product->fresh()->stock_min)->toBe('3.0000');
 });
 
-test('a product UOM cannot change after an inventory movement even when current stock is zero', function () {
+test('a product UOM can change after an inventory movement without commitments', function () {
     $product = Product::factory()->forStore($this->store)->create([
         'category_id' => $this->category->id,
         'stock' => '0.0000',
@@ -160,12 +240,14 @@ test('a product UOM cannot change after an inventory movement even when current 
     $this->actingAs($this->user, 'sanctum')
         ->putJson("/api/v1/store/products/{$product->id}", [
             'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.5000',
         ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
+        ->assertOk()
+        ->assertJsonPath('data.stock_measurement_unit.code', 'l')
+        ->assertJsonPath('data.sale_quantity_step', '0.5000');
 });
 
-test('a product UOM cannot change after commercial history even when current stock is zero', function () {
+test('a product UOM can change after complete B6 commercial history without commitments', function () {
     $product = Product::factory()->forStore($this->store)->create([
         'category_id' => $this->category->id,
         'stock' => '0.0000',
@@ -179,6 +261,85 @@ test('a product UOM cannot change after commercial history even when current sto
     ]);
     OperationItem::factory()->forOperation($operation)->forProduct($product)->create([
         'quantity' => '1.0000',
+        'measurement_unit_code' => 'unit',
+        'measurement_unit_symbol' => 'u',
+        'sale_quantity_step' => '1.0000',
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.2500',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.stock_measurement_unit.code', 'kg');
+});
+
+test('a product UOM can change after legacy commercial history without commitments', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+    ]);
+    $operation = CommercialOperation::factory()->forStore($this->store)->create([
+        'user_id' => $this->user->id,
+        'type' => 'sale',
+        'status' => 'confirmed',
+    ]);
+    OperationItem::factory()->forOperation($operation)->forProduct($product)->create([
+        'quantity' => '1.0000',
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.5000',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.stock_measurement_unit.code', 'l');
+});
+
+test('a product UOM can change after a completed route stop without commitments', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+    ]);
+    $order = CommercialOperation::factory()->forStore($this->store)->create([
+        'user_id' => $this->user->id,
+        'type' => 'order',
+        'status' => 'delivered',
+    ]);
+    $route = DeliveryRoute::factory()->forStore($this->store)->create(['status' => 'completed']);
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'status' => 'completed',
+    ]);
+    RouteStopItem::factory()->create([
+        'route_stop_id' => $stop->id,
+        'product_id' => $product->id,
+        'quantity_planned' => '1.0000',
+        'quantity_loaded' => '1.0000',
+        'quantity_delivered' => '1.0000',
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.2500',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.stock_measurement_unit.code', 'kg');
+});
+
+test('a product UOM change requires an explicit sale quantity step', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock_reserved' => '0.0000',
     ]);
     $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
 
@@ -187,8 +348,82 @@ test('a product UOM cannot change after commercial history even when current sto
             'stock_measurement_unit_id' => $unit->id,
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
+        ->assertJsonValidationErrors(['sale_quantity_step'])
+        ->assertJsonPath(
+            'errors.sale_quantity_step.0',
+            'Al cambiar la unidad de medida se debe informar también la cantidad mínima de venta.'
+        );
+
+    expect($product->fresh()->stock_measurement_unit_id)
+        ->toBe(MeasurementUnit::query()->where('code', 'unit')->value('id'));
 });
+
+test('a product UOM change is blocked by reserved stock', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_reserved' => '1.0000',
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.2500',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_measurement_unit_id'])
+        ->assertJsonPath(
+            'message',
+            'No se puede cambiar la unidad de medida mientras el producto tenga cantidades reservadas o compromisos activos.'
+        );
+});
+
+test('active orders block a product UOM change even with inconsistent zero reserved stock', function (string $status) {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_reserved' => '0.0000',
+    ]);
+    $order = CommercialOperation::factory()->forStore($this->store)->create([
+        'user_id' => $this->user->id,
+        'type' => 'order',
+        'status' => $status,
+    ]);
+    OperationItem::factory()->forOperation($order)->forProduct($product)->create();
+    $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.2500',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
+})->with(['open', 'confirmed', 'partially_delivered']);
+
+test('active routes block a product UOM change even with inconsistent zero reserved stock', function (string $status) {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+        'stock_reserved' => '0.0000',
+    ]);
+    $route = DeliveryRoute::factory()->forStore($this->store)->create(['status' => $status]);
+    $stop = RouteStop::factory()->create(['route_id' => $route->id]);
+    RouteStopItem::factory()->create([
+        'route_stop_id' => $stop->id,
+        'product_id' => $product->id,
+    ]);
+    $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $unit->id,
+            'sale_quantity_step' => '0.2500',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
+})->with(['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']);
 
 test('a product cannot change its sale step while it has an active reservation', function () {
     $product = Product::factory()->forStore($this->store)->create([
@@ -220,4 +455,17 @@ test('product requests reject inactive UOMs and non-positive sale steps', functi
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['stock_measurement_unit_id', 'sale_quantity_step']);
+
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock_reserved' => '0.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$product->id}", [
+            'stock_measurement_unit_id' => $inactiveUnit->id,
+            'sale_quantity_step' => '1.0000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_measurement_unit_id']);
 });
