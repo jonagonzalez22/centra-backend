@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CommercialOperation;
+use App\Support\OperationItemCommercialConfiguration;
 use App\Support\QuantityMath;
 use Illuminate\Support\Collection;
 
@@ -40,19 +41,17 @@ class DeliverySummaryService
 
             $line = $items->firstWhere('product_id', $productId);
             $product = $line?->relationLoaded('product') ? $line->product : null;
+            $configuration = $line ? OperationItemCommercialConfiguration::resolve($line) : [
+                'stock_measurement_unit' => null,
+                'sale_quantity_step' => null,
+            ];
 
             return [
                 'product_id' => $productId,
                 'product_name' => $line?->product_name ?? $product?->name,
                 'sku' => $product?->sku,
-                // B4 operational display only; B6 will provide item snapshots.
-                'stock_measurement_unit' => $product?->stockMeasurementUnit ? [
-                    'id' => $product->stockMeasurementUnit->id,
-                    'code' => $product->stockMeasurementUnit->code,
-                    'name' => $product->stockMeasurementUnit->name,
-                    'symbol' => $product->stockMeasurementUnit->symbol,
-                    'category' => $product->stockMeasurementUnit->category,
-                ] : null,
+                'stock_measurement_unit' => $configuration['stock_measurement_unit'],
+                'sale_quantity_step' => $configuration['sale_quantity_step'],
                 'ordered_quantity' => $orderedQuantity,
                 'delivered_quantity' => $deliveredQuantity,
                 'pending_quantity' => $pendingQuantity,

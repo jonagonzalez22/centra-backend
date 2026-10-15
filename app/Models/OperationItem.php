@@ -19,6 +19,10 @@ class OperationItem extends Model
         'operation_id',
         'product_id',
         'product_name',
+        // Commercial configuration snapshots captured when the line is created.
+        'measurement_unit_code',
+        'measurement_unit_symbol',
+        'sale_quantity_step',
         'quantity',
         'price',
         'subtotal',
@@ -27,6 +31,7 @@ class OperationItem extends Model
     ];
 
     protected $casts = [
+        'sale_quantity_step' => 'decimal:4',
         'quantity' => 'decimal:4',
         'price' => 'decimal:2',
         'subtotal' => 'decimal:2',

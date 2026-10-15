@@ -4,6 +4,7 @@ use App\Models\CashSession;
 use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
+use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\PaymentMethod;
@@ -357,6 +358,59 @@ describe('GET /api/v1/store/operations/{id}/receipt', function () {
             ->assertJsonPath('data.payments.1.method_name', 'Transferencia bancaria')
             ->assertJsonPath('data.payments.1.amount', 9150)
             ->assertJsonCount(2, 'data.payments');
+    });
+
+    test('uses the complete operation item commercial snapshot in a receipt after the product changes', function () {
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'type' => 'sale',
+        ]);
+        OperationItem::factory()->create([
+            'operation_id' => $operation->id,
+            'product_id' => $this->product->id,
+            'measurement_unit_code' => 'kg',
+            'measurement_unit_symbol' => 'kg',
+            'sale_quantity_step' => '0.2500',
+        ]);
+
+        $this->product->update([
+            'stock_measurement_unit_id' => MeasurementUnit::query()->where('code', 'l')->value('id'),
+            'sale_quantity_step' => '0.5000',
+        ]);
+
+        getOperationReceipt($operation->id)
+            ->assertOk()
+            ->assertJsonPath('data.items.0.measurement_unit.code', 'kg')
+            ->assertJsonPath('data.items.0.measurement_unit.symbol', 'kg')
+            ->assertJsonPath('data.items.0.sale_quantity_step', '0.2500');
+    });
+
+    test('falls back to the current product commercial configuration for a pre-B6 receipt item', function () {
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'type' => 'sale',
+        ]);
+        $this->product->update([
+            'stock_measurement_unit_id' => MeasurementUnit::query()->where('code', 'l')->value('id'),
+            'sale_quantity_step' => '0.5000',
+        ]);
+        OperationItem::factory()->create([
+            'operation_id' => $operation->id,
+            'product_id' => $this->product->id,
+            'measurement_unit_code' => null,
+            'measurement_unit_symbol' => null,
+            'sale_quantity_step' => null,
+        ]);
+
+        getOperationReceipt($operation->id)
+            ->assertOk()
+            ->assertJsonPath('data.items.0.measurement_unit.code', 'l')
+            ->assertJsonPath('data.items.0.measurement_unit.symbol', 'L')
+            ->assertJsonPath('data.items.0.sale_quantity_step', '0.5000');
     });
 
     test('does not expose another store sale receipt', function () {

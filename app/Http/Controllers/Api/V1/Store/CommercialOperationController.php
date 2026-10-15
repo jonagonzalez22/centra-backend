@@ -308,7 +308,7 @@ class CommercialOperationController extends Controller
                 'store',
                 'customer',
                 'user',
-                'items' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
+                'items' => fn ($query) => $query->with('product.stockMeasurementUnit')->orderBy('created_at')->orderBy('id'),
                 'payments' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
                 'payments.storePaymentMethod.paymentMethod',
             ])

@@ -143,6 +143,21 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
         expect($this->product->fresh()->stock_reserved)->toBe('10.0000');
     });
 
+    test('uses the current product step instead of the operation item snapshot', function () {
+        $order = orderEditabilityOrder($this->store, $this->user, $this->customer);
+        $item = orderEditabilityItem($order, $this->product, 10);
+        $item->update([
+            'measurement_unit_code' => 'kg',
+            'measurement_unit_symbol' => 'kg',
+            'sale_quantity_step' => '0.2500',
+        ]);
+        $this->product->update(['sale_quantity_step' => '0.5000']);
+
+        getOrderEditability($this->user, $order->id)
+            ->assertOk()
+            ->assertJsonPath('data.items.0.sale_quantity_step', '0.5000');
+    });
+
     test('aggregates multiple order lines and separates completed delivery from active commitments', function () {
         $order = orderEditabilityOrder($this->store, $this->user, $this->customer, ['status' => 'partially_delivered']);
         orderEditabilityItem($order, $this->product, 4);

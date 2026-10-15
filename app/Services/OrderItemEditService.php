@@ -88,6 +88,7 @@ class OrderItemEditService
             $products = Product::forStore($order->store_id)
                 ->whereIn('id', $productIds)
                 ->orderBy('id')
+                ->with('stockMeasurementUnit')
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
@@ -262,6 +263,9 @@ class OrderItemEditService
             'operation_id' => $order->id,
             'product_id' => $product->id,
             'product_name' => $sourceItem?->product_name ?? $product->name,
+            'measurement_unit_code' => $product->stockMeasurementUnit->code,
+            'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
+            'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
             'quantity' => $quantity,
             'price' => $price,
             'subtotal' => MoneyMath::multiplyQuantityByPrice($quantity, $price),

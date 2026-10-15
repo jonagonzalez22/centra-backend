@@ -205,6 +205,7 @@ class DriverExecutionService
             $products = Product::forStore($route->store_id)
                 ->whereIn('id', $productIds)
                 ->orderBy('id')
+                ->with('stockMeasurementUnit')
                 ->get()
                 ->keyBy('id');
 
@@ -337,6 +338,9 @@ class DriverExecutionService
                     'operation_id' => $destinationOrder->id,
                     'product_id' => $productId,
                     'product_name' => $product->name,
+                    'measurement_unit_code' => $product->stockMeasurementUnit->code,
+                    'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
+                    'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
                     'quantity' => $quantity,
                     'price' => $product->price,
                     'subtotal' => MoneyMath::multiplyQuantityByPrice($quantity, $product->price),

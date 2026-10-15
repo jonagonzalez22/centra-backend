@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\OperationItemCommercialConfiguration;
 use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -19,16 +20,19 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="price", type="number", format="float"),
  *   @OA\Property(property="subtotal", type="number", format="float"),
  *   @OA\Property(property="tax_amount", type="number", format="float"),
- *   @OA\Property(property="discount_amount", type="number", format="float")
+ *   @OA\Property(property="discount_amount", type="number", format="float"),
+ *   @OA\Property(property="stock_measurement_unit", type="object", nullable=true,
+ *     @OA\Property(property="code", type="string", example="kg"),
+ *     @OA\Property(property="symbol", type="string", example="kg")
+ *   ),
+ *   @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+\\.\\d{4}$", nullable=true, example="0.2500")
  * )
  */
 class OperationItemResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        // B4 uses the current product UOM for operational screens. B6 will
-        // snapshot this value on the operation item for historical display.
-        $product = $this->relationLoaded('product') ? $this->product : null;
+        $configuration = OperationItemCommercialConfiguration::resolve($this->resource);
 
         return [
             'id' => $this->id,
@@ -39,9 +43,8 @@ class OperationItemResource extends JsonResource
             'subtotal' => (float) $this->subtotal,
             'tax_amount' => (float) $this->tax_amount,
             'discount_amount' => (float) $this->discount_amount,
-            'stock_measurement_unit' => $product?->relationLoaded('stockMeasurementUnit')
-                ? MeasurementUnitResource::make($product->stockMeasurementUnit)
-                : null,
+            'stock_measurement_unit' => $configuration['stock_measurement_unit'],
+            'sale_quantity_step' => $configuration['sale_quantity_step'],
         ];
     }
 }

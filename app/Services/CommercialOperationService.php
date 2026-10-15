@@ -207,6 +207,9 @@ class CommercialOperationService
                     'operation_id' => $operation->id,
                     'product_id' => $item['product_id'],
                     'product_name' => $product->name,
+                    'measurement_unit_code' => $product->stockMeasurementUnit->code,
+                    'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
+                    'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
                     'quantity' => $item['quantity'],
                     'price' => $item['price'],
                     'subtotal' => $itemSubtotal,
@@ -351,11 +354,16 @@ class CommercialOperationService
     private function lockAndValidateProducts(array $items, string $storeId): array
     {
         $products = [];
+        $productsById = Product::forStore($storeId)
+            ->whereIn('id', collect($items)->pluck('product_id')->unique())
+            ->with('stockMeasurementUnit')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
 
         foreach ($items as $index => $item) {
-            $product = Product::forStore($storeId)
-                ->lockForUpdate()
-                ->find($item['product_id']);
+            $product = $productsById->get($item['product_id']);
 
             if (! $product) {
                 throw ValidationException::withMessages([

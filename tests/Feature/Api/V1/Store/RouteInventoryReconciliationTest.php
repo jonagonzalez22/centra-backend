@@ -7,6 +7,7 @@ use App\Models\DeliveryRoute;
 use App\Models\ExtraSaleAllocation;
 use App\Models\Feature;
 use App\Models\InventoryMovement;
+use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\PaymentMethod;
@@ -686,10 +687,13 @@ test('A B C D route with failed source and extra sale reconciles exact inventory
 });
 
 test('extra sale definitively transfers the commercial obligation without changing stock or reservation', function () {
+    $kilogram = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
     $product = Product::factory()->forStore($this->store)->create([
         'price' => 100,
         'stock' => 10,
         'stock_reserved' => 0,
+        'stock_measurement_unit_id' => $kilogram->id,
+        'sale_quantity_step' => '0.2500',
     ]);
     $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
     $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 3]]);
@@ -714,6 +718,9 @@ test('extra sale definitively transfers the commercial obligation without changi
     $destinationItem = RouteStopItem::where('route_stop_id', $destinationStop->id)
         ->where('product_id', $product->id)
         ->sole();
+    $destinationOperationItem = $destinationOrder->fresh()->items()
+        ->where('product_id', $product->id)
+        ->sole();
 
     expect($sourceOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(2)
         ->and((float) $sourceOrder->fresh()->total)->toBe(200.0)
@@ -722,6 +729,9 @@ test('extra sale definitively transfers the commercial obligation without changi
         ->and((float) OperationPayment::find($payment->id)->amount)->toBe(300.0)
         ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(1)
         ->and((float) $destinationOrder->fresh()->items()->where('product_id', $product->id)->sole()->price)->toBe(100.0)
+        ->and($destinationOperationItem->measurement_unit_code)->toBe('kg')
+        ->and($destinationOperationItem->measurement_unit_symbol)->toBe('kg')
+        ->and($destinationOperationItem->sale_quantity_step)->toBe('0.2500')
         ->and($destinationItem->quantity_planned)->toBe('1.0000')
         ->and($destinationItem->quantity_loaded)->toBe('1.0000')
         ->and($destinationItem->quantity_delivered)->toBe('0.0000')

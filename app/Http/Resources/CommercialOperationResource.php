@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\OperationItem;
+use App\Support\OperationItemCommercialConfiguration;
 use App\Support\QuantityMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -63,9 +64,8 @@ class CommercialOperationResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        // currentCommercialItems() serializes grouped OperationItems directly,
-        // before DeliverySummaryService gets a chance to load relations.
-        // Load the current Product UOM here for B4 operational display.
+        // Legacy or partial snapshots fall back to the current Product config.
+        // Loading it here keeps that fallback free of per-line queries.
         $this->resource->loadMissing('items.product.stockMeasurementUnit');
 
         return [
@@ -142,9 +142,9 @@ class CommercialOperationResource extends JsonResource
      * OperationItem preserves commercial history, including lines reduced to
      * zero. The order response instead represents the products currently
      * owed: inactive lines are omitted and only economically equivalent lines
-     * of the same product are combined.
+     * of the same product and commercial measurement configuration are combined.
      *
-     * @return array<int, array<string, int|float|string>>
+     * @return array<int, array<string, mixed>>
      */
     private function currentCommercialItems(): array
     {
@@ -163,13 +163,20 @@ class CommercialOperationResource extends JsonResource
                 $groups = [];
 
                 foreach ($productItems as $item) {
+                    $configuration = OperationItemCommercialConfiguration::resolve($item);
                     $groupIndex = collect($groups)->search(
-                        fn (array $group): bool => $this->hasSameCommercialTerms($group['source'], $item)
+                        fn (array $group): bool => $this->hasSameCommercialTerms(
+                            $group['source'],
+                            $item,
+                            $group['configuration'],
+                            $configuration
+                        )
                     );
 
                     if ($groupIndex === false) {
                         $groups[] = [
                             'source' => $item,
+                            'configuration' => $configuration,
                             'quantity' => QuantityMath::normalize($item->quantity),
                             'subtotal' => (float) $item->subtotal,
                             'tax_amount' => (float) $item->tax_amount,
@@ -200,17 +207,8 @@ class CommercialOperationResource extends JsonResource
                         'subtotal' => round($group['subtotal'], 2),
                         'tax_amount' => round($group['tax_amount'], 2),
                         'discount_amount' => round($group['discount_amount'], 2),
-                        // B4 operational display only; B6 will snapshot UOM on OperationItem.
-                        'stock_measurement_unit' => $source->relationLoaded('product')
-                            && $source->product?->relationLoaded('stockMeasurementUnit')
-                            ? [
-                                'id' => $source->product->stockMeasurementUnit->id,
-                                'code' => $source->product->stockMeasurementUnit->code,
-                                'name' => $source->product->stockMeasurementUnit->name,
-                                'symbol' => $source->product->stockMeasurementUnit->symbol,
-                                'category' => $source->product->stockMeasurementUnit->category,
-                            ]
-                            : null,
+                        'stock_measurement_unit' => $group['configuration']['stock_measurement_unit'],
+                        'sale_quantity_step' => $group['configuration']['sale_quantity_step'],
                     ];
                 })->all();
             })
@@ -218,9 +216,18 @@ class CommercialOperationResource extends JsonResource
             ->all();
     }
 
-    private function hasSameCommercialTerms(OperationItem $first, OperationItem $second): bool
-    {
-        return $this->amountInCents($first->price) === $this->amountInCents($second->price)
+    /**
+     * @param  array{stock_measurement_unit: array{code: string, symbol: string}|null, sale_quantity_step: string|null}  $firstConfiguration
+     * @param  array{stock_measurement_unit: array{code: string, symbol: string}|null, sale_quantity_step: string|null}  $secondConfiguration
+     */
+    private function hasSameCommercialTerms(
+        OperationItem $first,
+        OperationItem $second,
+        array $firstConfiguration,
+        array $secondConfiguration
+    ): bool {
+        return $firstConfiguration === $secondConfiguration
+            && $this->amountInCents($first->price) === $this->amountInCents($second->price)
             && bccomp(
                 bcmul((string) $this->amountInCents($first->tax_amount), QuantityMath::normalize($second->quantity), 8),
                 bcmul((string) $this->amountInCents($second->tax_amount), QuantityMath::normalize($first->quantity), 8),
