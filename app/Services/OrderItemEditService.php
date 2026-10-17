@@ -19,6 +19,7 @@ class OrderItemEditService
         private readonly CommercialOperationService $commercialOperationService,
         private readonly OrderEditabilityService $orderEditabilityService,
         private readonly OrderDeliveryDateService $orderDeliveryDateService,
+        private readonly ProductStockConsumptionResolver $stockConsumptionResolver,
     ) {}
 
     /**
@@ -85,18 +86,47 @@ class OrderItemEditService
                 ->sort()
                 ->values();
 
-            $products = Product::forStore($order->store_id)
+            $preliminaryProducts = Product::forStore($order->store_id)
                 ->whereIn('id', $productIds)
+                ->get()
+                ->keyBy('id');
+
+            if ($preliminaryProducts->count() !== $productIds->count()) {
+                throw ValidationException::withMessages([
+                    'items' => ['Uno o más productos no existen o no pertenecen a la tienda.'],
+                ]);
+            }
+
+            $stockOwnerIds = $preliminaryProducts->map(
+                fn (Product $product): string => $product->stock_source_product_id ?? $product->id
+            );
+            $snapshotOwnerIds = $lockedItems->map(
+                fn (OperationItem $item): string => $item->stock_source_product_id ?? $item->product_id
+            );
+            $lockIds = $productIds->merge($stockOwnerIds)->merge($snapshotOwnerIds)->unique()->sort()->values();
+            $lockedProducts = Product::forStore($order->store_id)
+                ->whereIn('id', $lockIds)
                 ->orderBy('id')
                 ->with('stockMeasurementUnit')
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
 
-            if ($products->count() !== $productIds->count()) {
+            if ($lockedProducts->count() !== $lockIds->count()) {
                 throw ValidationException::withMessages([
                     'items' => ['Uno o más productos no existen o no pertenecen a la tienda.'],
                 ]);
+            }
+
+            $products = $lockedProducts;
+            foreach ($products as $product) {
+                if ($product->stock_source_product_id !== null) {
+                    $source = $lockedProducts->get($product->stock_source_product_id);
+                    if (! $source) {
+                        throw new \LogicException('La fuente de stock del producto no pudo bloquearse.');
+                    }
+                    $product->setRelation('stockSourceProduct', $source);
+                }
             }
 
             foreach ($requestedQuantities as $productId => $requestedQuantity) {
@@ -153,22 +183,45 @@ class OrderItemEditService
             $paidInCents = (int) round((float) $order->payments()->sum('amount') * 100);
             $previousTotal = (float) $order->total;
 
+            $additionalReservations = [];
+            foreach ($changes as $productId => $change) {
+                $delta = QuantityMath::subtract($change['new_quantity'], $change['previous_quantity']);
+                if (! QuantityMath::isPositive($delta)) {
+                    continue;
+                }
+
+                $consumption = $this->stockConsumptionResolver->resolve($products[$productId]);
+                $physicalQuantity = QuantityMath::multiply($delta, $consumption->consumptionFactor);
+                $additionalReservations[$consumption->stockProduct->id] = QuantityMath::add(
+                    $additionalReservations[$consumption->stockProduct->id] ?? '0.0000',
+                    $physicalQuantity,
+                );
+            }
+
+            foreach ($additionalReservations as $stockProductId => $physicalQuantity) {
+                $stockProduct = $lockedProducts->get($stockProductId);
+                $availableStock = QuantityMath::subtract($stockProduct->stock, $stockProduct->stock_reserved);
+                if (QuantityMath::compare($availableStock, $physicalQuantity) < 0) {
+                    throw ValidationException::withMessages([
+                        'items' => ["No hay stock disponible suficiente para aumentar {$stockProduct->name}."],
+                    ]);
+                }
+            }
+
+            $reductions = [];
+
             foreach ($changes as $productId => $change) {
                 $delta = QuantityMath::subtract($change['new_quantity'], $change['previous_quantity']);
                 $product = $products[$productId];
 
                 if (QuantityMath::isPositive($delta)) {
-                    $availableStock = QuantityMath::subtract($product->stock, $product->stock_reserved);
-
-                    if (QuantityMath::compare($availableStock, $delta) < 0) {
-                        throw ValidationException::withMessages([
-                            'items' => ["No hay stock disponible suficiente para aumentar {$product->name}."],
-                        ]);
-                    }
-
                     $this->addCommercialObligation($order, $product, $delta);
-                    $product->update([
-                        'stock_reserved' => QuantityMath::add($product->stock_reserved, $delta),
+                    $consumption = $this->stockConsumptionResolver->resolve($product);
+                    $consumption->stockProduct->update([
+                        'stock_reserved' => QuantityMath::add(
+                            $consumption->stockProduct->stock_reserved,
+                            QuantityMath::multiply($delta, $consumption->consumptionFactor),
+                        ),
                     ]);
 
                     continue;
@@ -178,21 +231,17 @@ class OrderItemEditService
                     ? QuantityMath::subtract('0', $delta)
                     : '0.0000';
 
-                if (QuantityMath::compare($product->stock_reserved, $quantityToRelease) < 0) {
-                    throw ValidationException::withMessages([
-                        'stock_reserved' => ["La reserva de {$product->name} es inconsistente para la reducción solicitada."],
-                    ]);
-                }
-
-                $this->commercialOperationService->reduceCommercialObligation(
-                    $order->id,
-                    $productId,
-                    $quantityToRelease
-                );
-                $product->update([
-                    'stock_reserved' => QuantityMath::subtract($product->stock_reserved, $quantityToRelease),
-                ]);
+                $reductions = [
+                    ...$reductions,
+                    ...$this->commercialOperationService->reduceCommercialObligation(
+                        $order->id,
+                        $productId,
+                        $quantityToRelease
+                    ),
+                ];
             }
+
+            $this->commercialOperationService->releaseReservedStockForItemQuantities($order->store_id, $reductions);
 
             $this->commercialOperationService->recalculateTotals($order);
             $updatedOrder = CommercialOperation::whereKey($order->id)->lockForUpdate()->firstOrFail();
@@ -263,6 +312,7 @@ class OrderItemEditService
             'operation_id' => $order->id,
             'product_id' => $product->id,
             'product_name' => $sourceItem?->product_name ?? $product->name,
+            ...$this->stockConsumptionResolver->operationItemSnapshot($product),
             'measurement_unit_code' => $product->stockMeasurementUnit->code,
             'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
             'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),

@@ -272,6 +272,38 @@ describe('POST /api/v1/store/inventory/adjust', function () {
             ->assertJsonValidationErrors(['product_id']);
     });
 
+    test('associated product rejects manual inventory adjustment while its source remains adjustable', function () {
+        $source = createProductForStore($this->store, $this->category, 10);
+        $child = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'category_id' => $this->category->id,
+            'stock' => '0.0000',
+            'stock_reserved' => '0.0000',
+            'stock_min' => '0.0000',
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '5.0000',
+        ]);
+
+        adjustInventory([
+            'product_id' => $child->id,
+            'quantity' => '1.0000',
+            'type' => 'input',
+            'concept' => 'Ajuste inválido de child',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'El stock de este producto se administra desde su producto fuente.');
+
+        adjustInventory([
+            'product_id' => $source->id,
+            'quantity' => '1.0000',
+            'type' => 'input',
+            'concept' => 'Ajuste válido de source',
+        ])->assertCreated();
+
+        expect($child->fresh()->stock)->toBe('0.0000')
+            ->and($source->fresh()->stock)->toBe('11.0000');
+    });
+
     test('unauthenticated request returns 401', function () {
         $product = createProductForStore($this->store, $this->category, 10);
 

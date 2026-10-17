@@ -27,6 +27,16 @@ class RouteStopItemResource extends JsonResource
             'stock_measurement_unit' => $product?->relationLoaded('stockMeasurementUnit')
                 ? MeasurementUnitResource::make($product->stockMeasurementUnit)
                 : null,
+            // Separate physical metadata. Commercial quantities above always
+            // belong to the sold product and its commercial UOM.
+            'physical_stock' => $this->stock_source_product_id === null ? null : [
+                'source_product_id' => $this->stock_source_product_id,
+                'consumption_quantity' => QuantityMath::normalize($this->stock_consumption_quantity),
+                'measurement_unit' => [
+                    'code' => $this->stock_source_measurement_unit_code,
+                    'symbol' => $this->stock_source_measurement_unit_symbol,
+                ],
+            ],
         ];
     }
 }

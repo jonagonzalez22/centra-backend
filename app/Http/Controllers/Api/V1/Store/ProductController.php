@@ -9,6 +9,7 @@ use App\Http\Resources\ProductResource;
 use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\RouteStopItem;
+use App\Services\ProductStockAssociationValidator;
 use App\Support\QuantityMath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
+    public function __construct(private readonly ProductStockAssociationValidator $associationValidator) {}
+
     /**
      * Display a listing of products for the authenticated user's store.
      *
@@ -62,7 +65,7 @@ class ProductController extends Controller
         $storeId = $request->user()->store_id;
 
         $query = Product::forStore($storeId)
-            ->with(['category', 'stockMeasurementUnit'])
+            ->with(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit'])
             ->when($request->filled('category_id'), function ($query) use ($request) {
                 $query->where('category_id', $request->category_id);
             })
@@ -154,32 +157,55 @@ class ProductController extends Controller
     public function store(StoreProductRequest $request): JsonResponse
     {
         $storeId = $request->user()->store_id;
+        $validated = $request->validated();
 
-        $product = Product::create([
-            'store_id' => $storeId,
-            'name' => $request->name,
-            'sku' => $request->sku,
-            'category_id' => $request->category_id,
-            'barcode' => $request->barcode,
-            'description' => $request->description,
-            'price' => $request->price,
-            'cost' => $request->cost,
-            'stock' => $request->stock ?? 0,
-            'stock_reserved' => 0,
-            'stock_min' => $request->stock_min ?? 0,
-            'stock_measurement_unit_id' => $request->stock_measurement_unit_id,
-            'sale_quantity_step' => $request->sale_quantity_step,
-            'is_active' => $request->boolean('is_active', true),
-        ]);
+        return DB::transaction(function () use ($request, $storeId, $validated): JsonResponse {
+            $source = isset($validated['stock_source_product_id'])
+                ? Product::forStore($storeId)->whereKey($validated['stock_source_product_id'])->lockForUpdate()->first()
+                : null;
+            if (array_key_exists('stock_source_product_id', $validated) && $validated['stock_source_product_id'] !== null && ! $source) {
+                return $this->validationResponse('stock_source_product_id', 'El producto fuente no existe o no pertenece a tu tienda.');
+            }
 
-        $product->load(['category', 'stockMeasurementUnit']);
+            $associated = $source !== null;
+            if (! $associated && ($validated['stock_consumption_quantity'] ?? null) !== null) {
+                return $this->validationResponse('stock_consumption_quantity', 'Un producto sin fuente de stock no puede tener factor de consumo.');
+            }
+            if ($associated && (! QuantityMath::isZero($validated['stock'] ?? '0') || ! QuantityMath::isZero($validated['stock_min'] ?? '0'))) {
+                return $this->validationResponse('stock', 'Un producto asociado debe crearse sin stock físico ni stock mínimo propios.');
+            }
+            $product = new Product([
+                'store_id' => $storeId,
+                'name' => $validated['name'],
+                'sku' => $validated['sku'],
+                'category_id' => $validated['category_id'],
+                'barcode' => $validated['barcode'] ?? null,
+                'description' => $validated['description'] ?? null,
+                'price' => $validated['price'],
+                'cost' => $validated['cost'] ?? null,
+                'stock' => $associated ? '0.0000' : ($validated['stock'] ?? 0),
+                'stock_reserved' => 0,
+                'stock_min' => $associated ? '0.0000' : ($validated['stock_min'] ?? 0),
+                'stock_measurement_unit_id' => $validated['stock_measurement_unit_id'] ?? null,
+                'stock_source_product_id' => $source?->id,
+                'stock_consumption_quantity' => $associated ? ($validated['stock_consumption_quantity'] ?? null) : null,
+                'sale_quantity_step' => $validated['sale_quantity_step'] ?? '1.0000',
+                'is_active' => $request->boolean('is_active', true),
+            ]);
+            try {
+                $this->associationValidator->validate($product, $source, $product->stock_consumption_quantity);
+            } catch (\InvalidArgumentException $exception) {
+                return $this->validationResponse('stock_source_product_id', $exception->getMessage());
+            }
+            $product->save();
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Producto creado exitosamente.',
-            'data' => ProductResource::make($product),
-            'errors' => null,
-        ], 201);
+            $product->load(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
+
+            return response()->json([
+                'status' => 'success', 'message' => 'Producto creado exitosamente.',
+                'data' => ProductResource::make($product), 'errors' => null,
+            ], 201);
+        });
     }
 
     /**
@@ -213,7 +239,7 @@ class ProductController extends Controller
     {
         $storeId = $request->user()->store_id;
 
-        $product = Product::forStore($storeId)->with(['category', 'stockMeasurementUnit'])->find($id);
+        $product = Product::forStore($storeId)->with(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit'])->find($id);
 
         if (! $product) {
             return response()->json([
@@ -297,6 +323,57 @@ class ProductController extends Controller
                 ], 404);
             }
 
+            $nextSourceId = array_key_exists('stock_source_product_id', $validated)
+                ? $validated['stock_source_product_id']
+                : $product->stock_source_product_id;
+            $nextFactor = array_key_exists('stock_consumption_quantity', $validated)
+                ? $validated['stock_consumption_quantity']
+                : $product->stock_consumption_quantity;
+            $associationChanged = $nextSourceId !== $product->stock_source_product_id
+                || $nextFactor !== $product->stock_consumption_quantity;
+            $nextIsAssociated = $nextSourceId !== null;
+
+            if ($associationChanged && $this->hasActiveCommercialCommitments($product)) {
+                return $this->validationResponse('stock_source_product_id', 'No se puede cambiar la fuente o el consumo mientras existan compromisos comerciales o logísticos activos.');
+            }
+            if ($nextIsAssociated && ! QuantityMath::isZero($product->stock)) {
+                return $this->validationResponse('stock_source_product_id', 'Para usar stock de otro producto, el stock físico propio debe ser cero. Realizá primero un ajuste de inventario explícito.');
+            }
+            if ($nextIsAssociated && $product->stockDependentProducts()->exists()) {
+                return $this->validationResponse('stock_source_product_id', 'No se puede usar stock de otro producto porque este producto ya es fuente de stock de otros productos.');
+            }
+
+            $source = $nextSourceId === null ? null : Product::forStore($storeId)->whereKey($nextSourceId)->lockForUpdate()->first();
+            if ($nextSourceId !== null && ! $source) {
+                return $this->validationResponse('stock_source_product_id', 'El producto fuente no existe o no pertenece a tu tienda.');
+            }
+
+            $candidate = clone $product;
+            $candidate->stock_source_product_id = $nextSourceId;
+            $candidate->stock_consumption_quantity = $nextFactor;
+            $candidate->sale_quantity_step = $validated['sale_quantity_step'] ?? $product->sale_quantity_step;
+            if ($nextIsAssociated) {
+                $candidate->stock = '0.0000';
+                $candidate->stock_reserved = '0.0000';
+                $candidate->stock_min = '0.0000';
+            }
+            try {
+                $this->associationValidator->validate($candidate, $source, $nextFactor);
+            } catch (\InvalidArgumentException $exception) {
+                return $this->validationResponse('stock_source_product_id', $exception->getMessage());
+            }
+
+            if ($product->stock_source_product_id !== null && array_key_exists('stock', $validated)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El stock de este producto se administra desde su producto fuente.',
+                    'data' => null,
+                    'errors' => [
+                        'stock' => ['El stock de este producto se administra desde su producto fuente.'],
+                    ],
+                ], 422);
+            }
+
             $measurementUnitChanged = array_key_exists('stock_measurement_unit_id', $validated)
                 && $validated['stock_measurement_unit_id'] !== $product->stock_measurement_unit_id;
 
@@ -343,8 +420,20 @@ class ProductController extends Controller
                 ], 422);
             }
 
+            if (! $product->is_active && ($validated['is_active'] ?? true) === false) {
+                // already inactive: nothing to validate
+            } elseif (($validated['is_active'] ?? true) === false && $product->stockDependentProducts()->where('is_active', true)->exists()) {
+                return $this->validationResponse('is_active', 'No se puede desactivar este producto porque es fuente de stock de otros productos activos.');
+            }
+
+            if ($nextIsAssociated) {
+                $validated['stock'] = '0.0000';
+                $validated['stock_min'] = '0.0000';
+            }
+            $validated['stock_source_product_id'] = $nextSourceId;
+            $validated['stock_consumption_quantity'] = $nextFactor;
             $product->update($validated);
-            $product->load(['category', 'stockMeasurementUnit']);
+            $product->load(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
 
             return response()->json([
                 'status' => 'success',
@@ -377,6 +466,11 @@ class ProductController extends Controller
                     ['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']
                 ))
                 ->exists();
+    }
+
+    private function validationResponse(string $field, string $message): JsonResponse
+    {
+        return response()->json(['status' => 'error', 'message' => 'Error de validación.', 'data' => null, 'errors' => [$field => [$message]]], 422);
     }
 
     /**

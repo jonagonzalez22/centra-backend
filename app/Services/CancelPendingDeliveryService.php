@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
 use App\Models\OperationItem;
-use App\Models\Product;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
 use App\Models\User;
@@ -58,12 +57,13 @@ class CancelPendingDeliveryService
                 ]);
             }
 
+            $reductions = [];
             foreach ($pending as $item) {
-                $this->operationService->reduceCommercialObligation(
+                $reductions = array_merge($reductions, $this->operationService->reduceCommercialObligation(
                     $operation->id,
                     $item['product_id'],
                     $item['pending_quantity']
-                );
+                ));
             }
 
             $operation->refresh();
@@ -75,20 +75,13 @@ class CancelPendingDeliveryService
                 ]);
             }
 
-            foreach ($pending->sortBy('product_id') as $item) {
-                $product = Product::forStore($operation->store_id)
-                    ->whereKey($item['product_id'])->lockForUpdate()->firstOrFail();
-                $product->update([
-                    'stock_reserved' => QuantityMath::max(
-                        '0',
-                        QuantityMath::subtract($product->stock_reserved, $item['pending_quantity'])
-                    ),
-                ]);
-
-                if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
-                    throw new \RuntimeException("Stock integrity violation on product {$product->id}.");
-                }
-            }
+            // The reduced operation lines carry the immutable source/factor
+            // snapshot, so the reservation is released from the physical
+            // owner rather than from the commercial child product.
+            $this->operationService->releaseReservedStockForItemQuantities(
+                $operation->store_id,
+                $reductions,
+            );
 
             $operation->update(['status' => 'delivered']);
             CommercialOperationEvent::create([

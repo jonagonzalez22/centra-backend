@@ -93,8 +93,8 @@ function routeInventoryAddStop(
     DeliveryRoute $route,
     $order,
     Product $product,
-    int $loaded,
-    int $delivered,
+    int|string $loaded,
+    int|string $delivered,
     string $status,
     ?int $released = null
 ): array {
@@ -119,7 +119,7 @@ function routeInventoryAddStop(
     return [$stop, $item];
 }
 
-function routeInventoryResolve(object $test, DeliveryRoute $route, RouteStopItem $item, string $resolution, int $quantity): void
+function routeInventoryResolve(object $test, DeliveryRoute $route, RouteStopItem $item, string $resolution, int|string $quantity): void
 {
     app('auth')->forgetGuards();
     $test->flushHeaders()
@@ -130,6 +130,20 @@ function routeInventoryResolve(object $test, DeliveryRoute $route, RouteStopItem
             'quantity_to_resolve' => $quantity,
         ])
         ->assertOk();
+}
+
+function routeInventorySnapshotPhysical(RouteStopItem $item, Product $source, string $factor): RouteStopItem
+{
+    $source->loadMissing('stockMeasurementUnit');
+
+    $item->update([
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => $factor,
+        'stock_source_measurement_unit_code' => $source->stockMeasurementUnit->code,
+        'stock_source_measurement_unit_symbol' => $source->stockMeasurementUnit->symbol,
+    ]);
+
+    return $item->fresh();
 }
 
 function routeInventoryFinalize(object $test, DeliveryRoute $route): void
@@ -166,6 +180,294 @@ test('fully delivered order decreases stock and releases its reservation', funct
     $product->refresh();
     expect($product->stock)->toBe('5.0000')
         ->and($product->stock_reserved)->toBe('0.0000');
+});
+
+test('fully delivered associated product consumes and releases its physical source', function () {
+    $source = Product::factory()->forStore($this->store)->create([
+        'stock' => '20.0000',
+        'stock_reserved' => '0.0000',
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [
+        ['product' => $child, 'quantity' => '1.0000'],
+        ['product' => $child, 'quantity' => '1.0000'],
+    ]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '2.0000', '2.0000', 'completed');
+    routeInventorySnapshotPhysical($item, $source, '5.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('10.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000');
+});
+
+test('partial associated delivery keeps the remaining physical reservation on its source', function () {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '3.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '3.0000', '2.0000', 'completed');
+    $item = routeInventorySnapshotPhysical($item, $source, '5.0000');
+    routeInventoryResolve($this, $route, $item, 'pending_redelivery', '1.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('10.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('5.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000');
+});
+
+test('associated reconciliation preserves an exact decimal physical factor', function () {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '10.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'sale_quantity_step' => '0.5000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '1.5000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '1.5000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '1.5000', '1.5000', 'completed');
+    routeInventorySnapshotPhysical($item, $source, '1.5000');
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('7.7500')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000');
+});
+
+test('associated returned and rejected discrepancies release the physical source reservation', function (string $resolution) {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '2.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '2.0000', '0.0000', 'failed');
+    $item = routeInventorySnapshotPhysical($item, $source, '5.0000');
+    routeInventoryResolve($this, $route, $item, $resolution, '2.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('20.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000');
+})->with(['returned', 'rejected_by_customer']);
+
+test('associated missing and damaged discrepancies move physical stock on the source and keep its reservation', function (string $resolution) {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '2.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '2.0000', '0.0000', 'failed');
+    $item = routeInventorySnapshotPhysical($item, $source, '5.0000');
+    routeInventoryResolve($this, $route, $item, $resolution, '2.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    $movement = InventoryMovement::where('product_id', $source->id)->sole();
+    expect($source->fresh()->stock)->toBe('10.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('10.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($movement->quantity)->toBe('-10.0000');
+})->with(['missing', 'damaged']);
+
+test('source direct sale and multiple children are grouped against one physical source', function () {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $firstChild = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $secondChild = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '2.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [
+        ['product' => $source, 'quantity' => '3.0000'],
+        ['product' => $firstChild, 'quantity' => '2.0000'],
+        ['product' => $secondChild, 'quantity' => '1.0000'],
+    ]);
+    $route = routeInventoryCreateRoute($this);
+    [, $directItem] = routeInventoryAddStop($route, $order, $source, '3.0000', '3.0000', 'completed');
+    [, $firstChildItem] = routeInventoryAddStop($route, $order, $firstChild, '2.0000', '2.0000', 'completed');
+    [, $secondChildItem] = routeInventoryAddStop($route, $order, $secondChild, '1.0000', '1.0000', 'completed');
+    routeInventorySnapshotPhysical($firstChildItem, $source, '5.0000');
+    routeInventorySnapshotPhysical($secondChildItem, $source, '2.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('5.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($directItem->fresh()->product_id)->toBe($source->id);
+});
+
+test('reconciliation uses the RouteStopItem physical snapshot after the current association changes', function () {
+    $firstSource = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $secondSource = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $firstSource->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '1.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '1.0000', '1.0000', 'completed');
+    routeInventorySnapshotPhysical($item, $firstSource, '5.0000');
+    $child->update([
+        'stock_source_product_id' => $secondSource->id,
+        'stock_consumption_quantity' => '4.0000',
+    ]);
+
+    routeInventoryFinalize($this, $route);
+
+    expect($firstSource->fresh()->stock)->toBe('15.0000')
+        ->and($firstSource->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($secondSource->fresh()->stock)->toBe('20.0000');
+});
+
+test('reconciliation keeps distinct physical snapshots for the same commercial child separate until source aggregation', function () {
+    $firstSource = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $secondSource = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $firstSource->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '2.0000']]);
+
+    // Model two historical lines for the same child: one from each physical
+    // configuration. Route items must convert them independently.
+    $operationItems = $order->items()->orderBy('id')->get();
+    $operationItems->first()->update([
+        'stock_source_product_id' => $firstSource->id,
+        'stock_consumption_quantity' => '5.0000',
+        'quantity' => '1.0000',
+    ]);
+    $operationItems->last()->update([
+        'stock_source_product_id' => $secondSource->id,
+        'stock_consumption_quantity' => '4.0000',
+        'quantity' => '1.0000',
+    ]);
+    $firstSource->update(['stock_reserved' => '5.0000']);
+    $secondSource->update(['stock_reserved' => '4.0000']);
+
+    $route = routeInventoryCreateRoute($this);
+    [, $firstItem] = routeInventoryAddStop($route, $order, $child, '1.0000', '1.0000', 'completed');
+    [, $secondItem] = routeInventoryAddStop($route, $order, $child, '1.0000', '1.0000', 'completed');
+    routeInventorySnapshotPhysical($firstItem, $firstSource, '5.0000');
+    routeInventorySnapshotPhysical($secondItem, $secondSource, '4.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    expect($firstSource->fresh()->stock)->toBe('15.0000')
+        ->and($firstSource->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($secondSource->fresh()->stock)->toBe('16.0000')
+        ->and($secondSource->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000');
+});
+
+test('an inactive historical source remains reconcilable through the RouteStopItem snapshot', function () {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '1.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '1.0000', '1.0000', 'completed');
+    routeInventorySnapshotPhysical($item, $source, '5.0000');
+    $source->update(['is_active' => false]);
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('15.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000');
+});
+
+test('a repeated reconciliation request cannot consume an associated source twice', function () {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '1.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '1.0000', '1.0000', 'completed');
+    routeInventorySnapshotPhysical($item, $source, '5.0000');
+
+    routeInventoryFinalize($this, $route);
+
+    $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertStatus(409);
+
+    expect($source->fresh()->stock)->toBe('15.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and(InventoryMovement::query()->where('product_id', $source->id)->count())->toBe(0);
+});
+
+test('an insufficient physical reservation rejects delivery reconciliation without partial mutations', function () {
+    $source = Product::factory()->forStore($this->store)->create(['stock' => '20.0000']);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '2.0000']]);
+    $route = routeInventoryCreateRoute($this);
+    [, $item] = routeInventoryAddStop($route, $order, $child, '2.0000', '2.0000', 'completed');
+    routeInventorySnapshotPhysical($item, $source, '5.0000');
+    Product::whereKey($source->id)->update(['stock_reserved' => '0.0000']);
+
+    expect($item->fresh()->stock_source_product_id)->toBe($source->id)
+        ->and($item->fresh()->stock_consumption_quantity)->toBe('5.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000');
+
+    $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+        ->postJson("/api/v1/store/routes/{$route->id}/finalize-reconciliation")
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'La reserva física es insuficiente para completar la conciliación.');
+
+    expect($route->fresh()->status)->toBe('awaiting_reconciliation')
+        ->and($source->fresh()->stock)->toBe('20.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000')
+        ->and(InventoryMovement::query()->where('product_id', $source->id)->count())->toBe(0);
 });
 
 test('fully failed and returned order does not create stock', function () {

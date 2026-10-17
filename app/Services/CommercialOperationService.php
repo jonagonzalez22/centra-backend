@@ -19,18 +19,22 @@ class CommercialOperationService
     public function __construct(
         private readonly StoreOperationPaymentService $storePaymentService,
         private readonly OrderDeliveryDateService $orderDeliveryDateService,
+        private readonly ProductStockConsumptionResolver $stockConsumptionResolver,
     ) {}
 
     /**
      * Reduce quantities that are no longer commercially owed while preserving
      * item price history and existing payments.
      */
-    public function reduceCommercialObligation(string $orderId, string $productId, int|string $quantity): void
+    /**
+     * @return array<int, array{item: OperationItem, quantity: string}>
+     */
+    public function reduceCommercialObligation(string $orderId, string $productId, int|string $quantity): array
     {
         $quantity = QuantityMath::normalize($quantity);
 
         if (! QuantityMath::isPositive($quantity)) {
-            return;
+            return [];
         }
 
         $order = CommercialOperation::where('id', $orderId)->lockForUpdate()->first();
@@ -49,6 +53,7 @@ class CommercialOperationService
             ->get();
 
         $remaining = $quantity;
+        $reductions = [];
 
         foreach ($items as $operationItem) {
             if (QuantityMath::isZero($remaining)) {
@@ -58,6 +63,8 @@ class CommercialOperationService
             $oldQuantity = QuantityMath::normalize($operationItem->quantity);
             $decrement = QuantityMath::min($remaining, $oldQuantity);
             $newQuantity = QuantityMath::subtract($oldQuantity, $decrement);
+
+            $reductions[] = ['item' => $operationItem, 'quantity' => $decrement];
 
             $operationItem->update([
                 'quantity' => $newQuantity,
@@ -76,6 +83,8 @@ class CommercialOperationService
         }
 
         $this->recalculateTotals($order);
+
+        return $reductions;
     }
 
     public function recalculateTotals(CommercialOperation $operation): void
@@ -132,7 +141,8 @@ class CommercialOperationService
 
             usort($items, fn ($a, $b) => strcmp($a['product_id'], $b['product_id']));
 
-            $products = $this->lockAndValidateProducts($items, $storeId);
+            $stockContext = $this->lockAndValidateProducts($items, $storeId);
+            $products = $stockContext['products'];
 
             $subtotal = '0.00';
             $tax = '0.00';
@@ -175,7 +185,7 @@ class CommercialOperationService
                 ]);
             }
 
-            $this->applyStockChanges($products, $items, $isSale);
+            $this->applyStockChanges($stockContext, $isSale);
 
             $status = $isSale ? 'confirmed' : 'open';
 
@@ -207,6 +217,7 @@ class CommercialOperationService
                     'operation_id' => $operation->id,
                     'product_id' => $item['product_id'],
                     'product_name' => $product->name,
+                    ...$this->stockConsumptionResolver->operationItemSnapshot($product),
                     'measurement_unit_code' => $product->stockMeasurementUnit->code,
                     'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
                     'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
@@ -299,30 +310,11 @@ class CommercialOperationService
                 'reason_note' => $reasonNote,
             ]);
 
-            // Release stock_reserved for future deliveries
-            if ($operation->requested_delivery_date && $operation->requested_delivery_date->isFuture()) {
-                $items = $operation->items;
-
-                foreach ($items as $item) {
-                    $product = Product::forStore($operation->store_id)
-                        ->lockForUpdate()
-                        ->find($item->product_id);
-
-                    if ($product) {
-                        $product->stock_reserved = QuantityMath::max(
-                            '0',
-                            QuantityMath::subtract($product->stock_reserved, $item->quantity)
-                        );
-                        $product->save();
-
-                        if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
-                            throw new \RuntimeException(
-                                "Stock integrity violation on product {$product->id}: stock={$product->stock}, reserved={$product->stock_reserved}"
-                            );
-                        }
-                    }
-                }
-            }
+            // Every open order reserves stock when it is created, regardless of
+            // its requested delivery date. Cancelling it must release that same
+            // pending reservation before changing its status.
+            $items = $operation->items()->orderBy('id')->lockForUpdate()->get();
+            $this->releaseReservedStockForOperationItems($operation->store_id, $items);
 
             $operation->update([
                 'status' => 'cancelled',
@@ -351,16 +343,53 @@ class CommercialOperationService
         }
     }
 
+    /**
+     * @return array{
+     *     products: array<int, Product>,
+     *     stock_products: \Illuminate\Support\Collection<string, Product>,
+     *     physical_quantities: array<int, string>,
+     *     physical_totals: array<string, string>
+     * }
+     */
     private function lockAndValidateProducts(array $items, string $storeId): array
     {
         $products = [];
-        $productsById = Product::forStore($storeId)
-            ->whereIn('id', collect($items)->pluck('product_id')->unique())
+        $commercialProductIds = collect($items)->pluck('product_id')->unique()->sort()->values();
+
+        // The preliminary read only discovers stock owners. C2 does not expose
+        // association changes publicly; after the deterministic lock we resolve
+        // again from the locked rows before using any configuration.
+        $preliminaryProducts = Product::forStore($storeId)
+            ->whereIn('id', $commercialProductIds)
+            ->get()
+            ->keyBy('id');
+
+        if ($preliminaryProducts->count() !== $commercialProductIds->count()) {
+            throw ValidationException::withMessages([
+                'items' => ['Uno o más productos no existen o no pertenecen a la tienda.'],
+            ]);
+        }
+
+        $stockOwnerIds = $preliminaryProducts->map(
+            fn (Product $product): string => $product->stock_source_product_id ?? $product->id
+        );
+        $lockIds = $commercialProductIds->merge($stockOwnerIds)->unique()->sort()->values();
+
+        $lockedProducts = Product::forStore($storeId)
+            ->whereIn('id', $lockIds)
             ->with('stockMeasurementUnit')
             ->orderBy('id')
             ->lockForUpdate()
             ->get()
             ->keyBy('id');
+
+        if ($lockedProducts->count() !== $lockIds->count()) {
+            throw new \RuntimeException('No se pudieron bloquear todos los productos involucrados en la operación.');
+        }
+
+        $productsById = $lockedProducts;
+        $physicalQuantities = [];
+        $physicalTotals = [];
 
         foreach ($items as $index => $item) {
             $product = $productsById->get($item['product_id']);
@@ -371,35 +400,60 @@ class CommercialOperationService
                 ]);
             }
 
+            if ($product->stock_source_product_id !== null) {
+                $source = $lockedProducts->get($product->stock_source_product_id);
+                if (! $source) {
+                    throw new \LogicException('La fuente de stock del producto no pudo bloquearse.');
+                }
+                $product->setRelation('stockSourceProduct', $source);
+            }
+
             if ($quantityError = $product->commercialQuantityError($item['quantity'])) {
                 throw ValidationException::withMessages([
                     "items.{$index}.quantity" => $quantityError,
                 ]);
             }
 
-            $available = QuantityMath::subtract($product->stock, $product->stock_reserved);
-
-            if (QuantityMath::compare(QuantityMath::normalize($item['quantity']), $available) > 0) {
-                throw ValidationException::withMessages([
-                    "items.{$index}.quantity" => 'Stock insuficiente. Disponible: '.$available.' unidades.',
-                ]);
-            }
-
             $products[$index] = $product;
+            $consumption = $this->stockConsumptionResolver->resolve($product);
+            $physicalQuantity = QuantityMath::multiply($item['quantity'], $consumption->consumptionFactor);
+            $physicalQuantities[$index] = $physicalQuantity;
+            $stockProductId = $consumption->stockProduct->id;
+            $physicalTotals[$stockProductId] = QuantityMath::add(
+                $physicalTotals[$stockProductId] ?? '0.0000',
+                $physicalQuantity,
+            );
         }
 
-        return $products;
+        foreach ($physicalTotals as $stockProductId => $requiredQuantity) {
+            $stockProduct = $lockedProducts->get($stockProductId);
+            $available = QuantityMath::subtract($stockProduct->stock, $stockProduct->stock_reserved);
+
+            if (QuantityMath::compare($requiredQuantity, $available) > 0) {
+                throw ValidationException::withMessages([
+                    'items' => ['Stock insuficiente para los productos que consumen '.$stockProduct->name.'.'],
+                ]);
+            }
+        }
+
+        return [
+            'products' => $products,
+            'stock_products' => $lockedProducts,
+            'physical_quantities' => $physicalQuantities,
+            'physical_totals' => $physicalTotals,
+        ];
     }
 
-    private function applyStockChanges(array $products, array $items, bool $isSale): void
+    private function applyStockChanges(array $stockContext, bool $isSale): void
     {
-        foreach ($items as $index => $item) {
-            $product = $products[$index];
+        foreach ($stockContext['physical_totals'] as $stockProductId => $physicalQuantity) {
+            /** @var Product $product */
+            $product = $stockContext['stock_products']->get($stockProductId);
 
             if ($isSale) {
-                $product->stock = QuantityMath::subtract($product->stock, $item['quantity']);
+                $product->stock = QuantityMath::subtract($product->stock, $physicalQuantity);
             } else {
-                $product->stock_reserved = QuantityMath::add($product->stock_reserved, $item['quantity']);
+                $product->stock_reserved = QuantityMath::add($product->stock_reserved, $physicalQuantity);
             }
 
             if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
@@ -408,6 +462,88 @@ class CommercialOperationService
 
             $product->save();
         }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, OperationItem>  $items
+     */
+    public function releaseReservedStockForOperationItems(string $storeId, $items): void
+    {
+        $itemQuantities = $items->map(fn (OperationItem $item): array => [
+            'item' => $item,
+            'quantity' => QuantityMath::normalize($item->quantity),
+        ])->all();
+
+        $this->releaseReservedStockForItemQuantities($storeId, $itemQuantities);
+    }
+
+    /**
+     * @param  array<int, array{item: OperationItem, quantity: string}>  $itemQuantities
+     */
+    public function releaseReservedStockForItemQuantities(string $storeId, array $itemQuantities): void
+    {
+        $physicalTotals = $this->physicalTotalsForItemQuantities($itemQuantities);
+
+        $this->releaseReservedStockForPhysicalTotals($storeId, $physicalTotals);
+    }
+
+    /** @param array<string, string> $physicalTotals */
+    public function releaseReservedStockForPhysicalTotals(string $storeId, array $physicalTotals): void
+    {
+        if ($physicalTotals === []) {
+            return;
+        }
+
+        $stockProducts = Product::forStore($storeId)
+            ->whereIn('id', array_keys($physicalTotals))
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        if ($stockProducts->count() !== count($physicalTotals)) {
+            throw new \RuntimeException('No se pudieron encontrar todas las fuentes de stock de la operación.');
+        }
+
+        foreach ($physicalTotals as $stockProductId => $physicalQuantity) {
+            /** @var Product $product */
+            $product = $stockProducts->get($stockProductId);
+            if (QuantityMath::compare($physicalQuantity, $product->stock_reserved) > 0) {
+                throw ValidationException::withMessages([
+                    'stock_reserved' => ['La reserva física es insuficiente para liberar la obligación comercial.'],
+                ]);
+            }
+
+            $product->stock_reserved = QuantityMath::subtract($product->stock_reserved, $physicalQuantity);
+            $product->save();
+
+            if (! Product::validateStockIntegrity($product->stock, $product->stock_reserved)) {
+                throw new \RuntimeException(
+                    "Stock integrity violation on product {$product->id}: stock={$product->stock}, reserved={$product->stock_reserved}"
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  array<int, array{item: OperationItem, quantity: string}>  $itemQuantities
+     * @return array<string, string>
+     */
+    public function physicalTotalsForItemQuantities(array $itemQuantities): array
+    {
+        $physicalTotals = [];
+        $snapshotResolver = app(OperationItemStockConsumptionResolver::class);
+
+        foreach ($itemQuantities as ['item' => $item, 'quantity' => $commercialQuantity]) {
+            $consumption = $snapshotResolver->resolve($item);
+            $physicalQuantity = QuantityMath::multiply($commercialQuantity, $consumption->consumptionFactor);
+            $physicalTotals[$consumption->stockProductId] = QuantityMath::add(
+                $physicalTotals[$consumption->stockProductId] ?? '0.0000',
+                $physicalQuantity,
+            );
+        }
+
+        return $physicalTotals;
     }
 
     private function calculateTotalPaid(array $payments): float

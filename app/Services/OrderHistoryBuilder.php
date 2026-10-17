@@ -4,7 +4,11 @@ namespace App\Services;
 
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRouteEvent;
+use App\Models\OperationItem;
 use App\Models\RouteStop;
+use App\Models\RouteStopItem;
+use App\Support\OperationItemCommercialConfiguration;
+use App\Support\QuantityMath;
 use Illuminate\Support\Collection;
 
 class OrderHistoryBuilder
@@ -13,6 +17,7 @@ class OrderHistoryBuilder
     {
         $operation->load([
             'items.product' => fn ($query) => $query->where('store_id', $storeId),
+            'items.product.stockMeasurementUnit',
             'events' => fn ($query) => $query->where('store_id', $storeId),
             'events.user',
             'routeStops.route' => fn ($query) => $query->where('store_id', $storeId),
@@ -21,6 +26,7 @@ class OrderHistoryBuilder
             'routeStops.route.events.user',
             'routeStops.completedBy',
             'routeStops.items.product' => fn ($query) => $query->where('store_id', $storeId),
+            'routeStops.items.product.stockMeasurementUnit',
             'routeStops.items.discrepancy.resolvedBy',
         ]);
         $operation->setAttribute('history', $this->build($operation));
@@ -45,13 +51,13 @@ class OrderHistoryBuilder
             $history->push($this->assignmentEntry($stop));
 
             if ($stop->status === 'completed' && $stop->items->sum('quantity_delivered') > 0) {
-                $history->push($this->deliveryEntry($stop, $deliveryContext));
+                $history->push($this->deliveryEntry($operation, $stop, $deliveryContext));
             }
         }
 
         return $history
             ->sortBy([
-                ['occurred_at', 'asc'],
+                ['occurred_at', 'desc'],
                 ['sort_order', 'asc'],
                 ['id', 'asc'],
             ])
@@ -135,7 +141,7 @@ class OrderHistoryBuilder
         ];
     }
 
-    private function deliveryEntry(RouteStop $stop, array $context): array
+    private function deliveryEntry(CommercialOperation $operation, RouteStop $stop, array $context): array
     {
         $confirmed = $stop->route->status === 'completed';
         $event = $confirmed
@@ -172,16 +178,19 @@ class OrderHistoryBuilder
                     'status' => $stop->status,
                     'completed_at' => $this->formatDateTime($stop->completed_at),
                 ],
-                'items' => $stop->items->filter(fn ($item) => $item->product)->map(fn ($item) => [
+                'items' => $stop->items->filter(fn ($item) => $item->product)->map(fn (RouteStopItem $item) => [
                     'id' => $item->id,
                     'product_id' => $item->product_id,
                     'product_name' => $item->product?->name,
-                    'quantity_planned' => (int) $item->quantity_planned,
-                    'quantity_loaded' => (int) $item->quantity_loaded,
-                    'quantity_delivered' => (int) $item->quantity_delivered,
+                    // These values belong to this historical route stop, not to the
+                    // order's current obligation.
+                    'quantity_planned' => QuantityMath::normalize($item->quantity_planned),
+                    'quantity_loaded' => QuantityMath::normalize($item->quantity_loaded),
+                    'quantity_delivered' => QuantityMath::normalize($item->quantity_delivered),
+                    'stock_measurement_unit' => $this->commercialMeasurementUnit($operation, $item),
                     'discrepancies' => $item->discrepancy ? [[
                         'id' => $item->discrepancy->id,
-                        'quantity' => (int) $item->discrepancy->difference_quantity,
+                        'quantity' => QuantityMath::normalize($item->discrepancy->difference_quantity),
                         'resolution_type' => $item->discrepancy->resolution_type,
                         'status' => $item->discrepancy->resolution_type ? 'resolved' : 'pending',
                         'notes' => $item->discrepancy->notes,
@@ -192,6 +201,27 @@ class OrderHistoryBuilder
             ],
             'sort_order' => 30,
         ];
+    }
+
+    /**
+     * The route item owns the historical quantities; its corresponding
+     * OperationItem owns the commercial UOM snapshot captured when the order
+     * line was created. Legacy lines retain the established Product fallback.
+     *
+     * @return array{code: string, symbol: string}|null
+     */
+    private function commercialMeasurementUnit(CommercialOperation $operation, RouteStopItem $routeStopItem): ?array
+    {
+        /** @var OperationItem|null $operationItem */
+        $operationItem = $operation->items->firstWhere('product_id', $routeStopItem->product_id);
+
+        if ($operationItem) {
+            return OperationItemCommercialConfiguration::resolve($operationItem)['stock_measurement_unit'];
+        }
+
+        $unit = $routeStopItem->product?->stockMeasurementUnit;
+
+        return $unit ? ['code' => $unit->code, 'symbol' => $unit->symbol] : null;
     }
 
     /**

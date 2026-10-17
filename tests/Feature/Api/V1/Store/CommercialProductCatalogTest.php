@@ -31,6 +31,23 @@ function commercialCatalog(User $user, array $query): \Illuminate\Testing\TestRe
 }
 
 describe('GET /api/v1/store/operations/products/search', function () {
+    test('exposes the stock-source selector metadata on the inventory product search', function () {
+        $this->posOnlyPlan->features()->sync([$this->pos->id, $this->inventory->id]);
+        $product = Product::factory()->forStore($this->store)->create([
+            'name' => 'Ariel granel',
+            'sku' => 'ARIEL-GR',
+            'stock' => '0.0000',
+        ]);
+
+        test()->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/store/products/search?q=Ariel')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $product->id)
+            ->assertJsonPath('data.0.stock_source_product_id', null)
+            ->assertJsonPath('data.0.commercial_available_quantity', '0.0000')
+            ->assertJsonPath('data.0.stock_measurement_unit.code', 'unit');
+    });
+
     test('allows POS without Inventory to search active products by name and SKU', function () {
         Product::factory()->forStore($this->store)->create([
             'name' => 'Cinta Métrica',

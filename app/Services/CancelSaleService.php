@@ -113,29 +113,34 @@ class CancelSaleService
      */
     private function restoreStock(CommercialOperation $sale, string $storeId): array
     {
-        $quantities = OperationItem::query()
+        $items = OperationItem::query()
             ->where('operation_id', $sale->id)
             ->orderBy('product_id')
             ->orderBy('id')
-            ->get()
-            ->groupBy('product_id')
-            ->map(fn (Collection $items): string => $items->reduce(
-                fn (string $total, OperationItem $item): string => QuantityMath::add($total, $item->quantity),
-                '0.0000'
-            ));
+            ->get();
+        $snapshotResolver = app(OperationItemStockConsumptionResolver::class);
+        $quantities = [];
+
+        foreach ($items as $item) {
+            $consumption = $snapshotResolver->resolve($item);
+            $quantities[$consumption->stockProductId] = QuantityMath::add(
+                $quantities[$consumption->stockProductId] ?? '0.0000',
+                QuantityMath::multiply($item->quantity, $consumption->consumptionFactor),
+            );
+        }
 
         $products = Product::forStore($storeId)
-            ->whereIn('id', $quantities->keys())
+            ->whereIn('id', array_keys($quantities))
             ->orderBy('id')
             ->lockForUpdate()
             ->get()
             ->keyBy('id');
 
-        if ($products->count() !== $quantities->count()) {
+        if ($products->count() !== count($quantities)) {
             throw new \RuntimeException('No se pudieron encontrar todos los productos de la venta para restaurar el stock.');
         }
 
-        return $quantities->map(function (string $quantity, string $productId) use ($products): array {
+        return collect($quantities)->map(function (string $quantity, string $productId) use ($products): array {
             /** @var Product $product */
             $product = $products->get($productId);
             $product->stock = QuantityMath::add($product->stock, $quantity);

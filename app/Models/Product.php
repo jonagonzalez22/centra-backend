@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ProductStockConsumptionResolver;
 use App\Support\QuantityMath;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -32,6 +33,8 @@ class Product extends Model
         'stock_reserved',
         'stock_min',
         'stock_measurement_unit_id',
+        'stock_source_product_id',
+        'stock_consumption_quantity',
         'sale_quantity_step',
         'parent_product_id',
         'is_active',
@@ -44,6 +47,7 @@ class Product extends Model
         'stock_reserved' => 'decimal:4',
         'stock_min' => 'decimal:4',
         'sale_quantity_step' => 'decimal:4',
+        'stock_consumption_quantity' => 'decimal:4',
         'is_active' => 'boolean',
     ];
 
@@ -86,6 +90,16 @@ class Product extends Model
         return $this->belongsTo(MeasurementUnit::class, 'stock_measurement_unit_id');
     }
 
+    public function stockSourceProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'stock_source_product_id');
+    }
+
+    public function stockDependentProducts(): HasMany
+    {
+        return $this->hasMany(Product::class, 'stock_source_product_id');
+    }
+
     public function parentProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'parent_product_id');
@@ -108,10 +122,7 @@ class Product extends Model
 
     public function getCommercialAvailableQuantityAttribute(): string
     {
-        return QuantityMath::floorToMultiple(
-            $this->available_stock,
-            $this->sale_quantity_step ?? '1.0000'
-        );
+        return app(ProductStockConsumptionResolver::class)->commercialAvailableQuantity($this);
     }
 
     public function commercialQuantityError(int|string $quantity): ?string

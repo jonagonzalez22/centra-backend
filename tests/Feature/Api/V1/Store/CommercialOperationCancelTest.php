@@ -146,6 +146,130 @@ describe('Cancelar pendiente', function () {
             'new_status' => 'delivered',
         ]);
     });
+
+    it('releases a shared-stock child pending quantity from its operation-item source snapshot', function () {
+        $user = makeAuthUserCancel($this->store, 'STORE_ADMIN', ['orders.edit']);
+        $source = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'category_id' => $this->category->id,
+            'stock' => '20.0000',
+            'stock_reserved' => '10.0000',
+        ]);
+        $child = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'category_id' => $this->category->id,
+            'stock' => '0.0000',
+            'stock_reserved' => '0.0000',
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '5.0000',
+        ]);
+        $order = makeOrderForCancel($this->store, [
+            'status' => 'partially_delivered',
+            'subtotal' => 200,
+            'total' => 200,
+        ]);
+        $item = OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $child->id,
+            'product_name' => $child->name,
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '5.0000',
+            'quantity' => '2.0000',
+            'price' => 100,
+            'subtotal' => 200,
+            'tax_amount' => 0,
+            'discount_amount' => 0,
+        ]);
+        $route = DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'status' => 'completed']);
+        $stop = RouteStop::factory()->create([
+            'route_id' => $route->id,
+            'order_id' => $order->id,
+            'status' => 'completed',
+        ]);
+        RouteStopItem::factory()->create([
+            'route_stop_id' => $stop->id,
+            'product_id' => $child->id,
+            'quantity_planned' => '2.0000',
+            'quantity_loaded' => '2.0000',
+            'quantity_delivered' => '1.0000',
+        ]);
+
+        cancelPendingDelivery($user, $order->id)->assertOk();
+
+        expect($item->fresh()->quantity)->toBe('1.0000')
+            ->and($source->fresh()->stock_reserved)->toBe('5.0000')
+            ->and($child->fresh()->stock_reserved)->toBe('0.0000');
+    });
+
+    it('aggregates direct and multiple child pending reservations on their shared source', function () {
+        $user = makeAuthUserCancel($this->store, 'STORE_ADMIN', ['orders.edit']);
+        $source = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'category_id' => $this->category->id,
+            'stock' => '20.0000',
+            // One direct unit was already delivered; 1 + 5 + 3 remains reserved.
+            'stock_reserved' => '9.0000',
+        ]);
+        $firstChild = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'category_id' => $this->category->id,
+            'stock' => '0.0000',
+            'stock_reserved' => '0.0000',
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '5.0000',
+        ]);
+        $secondChild = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'category_id' => $this->category->id,
+            'stock' => '0.0000',
+            'stock_reserved' => '0.0000',
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '1.5000',
+        ]);
+        $order = makeOrderForCancel($this->store, ['status' => 'partially_delivered']);
+
+        foreach ([
+            [$source, '2.0000', null],
+            [$firstChild, '1.0000', '5.0000'],
+            [$secondChild, '2.0000', '1.5000'],
+        ] as [$product, $quantity, $factor]) {
+            OperationItem::factory()->create([
+                'operation_id' => $order->id,
+                'product_id' => $product->id,
+                'product_name' => $product->name,
+                'stock_source_product_id' => $factor === null ? null : $source->id,
+                'stock_consumption_quantity' => $factor,
+                'quantity' => $quantity,
+                'price' => 100,
+                'subtotal' => 100,
+            ]);
+        }
+
+        $route = DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'status' => 'completed']);
+        $stop = RouteStop::factory()->create([
+            'route_id' => $route->id,
+            'order_id' => $order->id,
+            'status' => 'completed',
+        ]);
+        foreach ([[$source, '2.0000', '1.0000'], [$firstChild, '1.0000', '0.0000'], [$secondChild, '2.0000', '0.0000']] as [$product, $planned, $delivered]) {
+            RouteStopItem::factory()->create([
+                'route_stop_id' => $stop->id,
+                'product_id' => $product->id,
+                'quantity_planned' => $planned,
+                'quantity_loaded' => $planned,
+                'quantity_delivered' => $delivered,
+            ]);
+        }
+
+        cancelPendingDelivery($user, $order->id)->assertOk();
+
+        expect($source->fresh()->stock)->toBe('20.0000')
+            ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+            ->and($firstChild->fresh()->stock)->toBe('0.0000')
+            ->and($firstChild->fresh()->stock_reserved)->toBe('0.0000')
+            ->and($secondChild->fresh()->stock)->toBe('0.0000')
+            ->and($secondChild->fresh()->stock_reserved)->toBe('0.0000');
+    });
 });
 
 // ─── CANCEL-008: Migration columns ─────────────────────────────────────
@@ -269,7 +393,7 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
         expect($order->status)->toBe('cancelled');
     });
 
-    it('returns 200 and cancels same-day order without modifying stock_reserved', function () {
+    it('returns 200 and cancels same-day order releasing stock_reserved', function () {
         $user = makeAuthUserCancel($this->store, 'STORE_ADMIN', ['orders.edit']);
         $order = makeOrderForCancel($this->store, [
             'requested_delivery_date' => now()->format('Y-m-d'),
@@ -294,9 +418,9 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
         $response->assertOk()
             ->assertJsonPath('data.status', 'cancelled');
 
-        // Stock reserved must NOT change for same-day delivery
+        // Open orders reserve stock regardless of their requested date.
         $product->refresh();
-        expect($product->stock_reserved)->toBe('5.0000');
+        expect($product->stock_reserved)->toBe('3.0000');
     });
 
     it('returns 403 when user lacks orders.edit permission', function () {

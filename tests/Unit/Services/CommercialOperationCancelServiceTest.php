@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
+use App\Models\InventoryMovement;
 use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\Store;
@@ -110,6 +111,7 @@ describe('cancel() — happy path with stock release', function () {
 
         $product->refresh();
         expect($product->stock_reserved)->toBe('3.0000'); // 5 - 2
+        expect(InventoryMovement::query()->where('product_id', $product->id)->count())->toBe(0);
 
         $this->assertDatabaseHas('commercial_operation_events', [
             'operation_id' => $operation->id,
@@ -125,7 +127,7 @@ describe('cancel() — happy path with stock release', function () {
             ->and($event->reason_note)->toBe('Ya no lo necesita');
     });
 
-    it('cancels same-day order without modifying stock_reserved', function () {
+    it('cancels same-day order and releases its stock_reserved', function () {
         $operation = makeOrderForCancelUnit($this->store, [
             'requested_delivery_date' => now()->format('Y-m-d'),
         ]);
@@ -157,12 +159,12 @@ describe('cancel() — happy path with stock release', function () {
         expect($result->status)->toBe('cancelled');
 
         $product->refresh();
-        expect($product->stock_reserved)->toBe('5.0000'); // unchanged — same-day delivery
+        expect($product->stock_reserved)->toBe('3.0000'); // 5 - 2
     });
 });
 
 describe('cancel() — stock underflow guard', function () {
-    it('prevents negative stock_reserved when release exceeds reserved', function () {
+    it('rejects cancellation and rolls back when the physical reservation is insufficient', function () {
         $operation = makeOrderForCancelUnit($this->store, [
             'requested_delivery_date' => now()->addDays(3)->format('Y-m-d'),
         ]);
@@ -184,17 +186,15 @@ describe('cancel() — stock underflow guard', function () {
             'subtotal' => 500.00,
         ]);
 
-        $result = $this->service->cancel(
+        expect(fn () => $this->service->cancel(
             $operation,
             'out_of_stock',
             null,
             $this->user
-        );
+        ))->toThrow(ValidationException::class);
 
-        expect($result->status)->toBe('cancelled');
-
-        $product->refresh();
-        expect($product->stock_reserved)->toBe('0.0000'); // max(0, 2-5) = 0
+        expect($operation->fresh()->status)->toBe('open')
+            ->and($product->fresh()->stock_reserved)->toBe('2.0000');
     });
 });
 

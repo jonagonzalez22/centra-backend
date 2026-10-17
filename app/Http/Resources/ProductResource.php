@@ -26,6 +26,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   @OA\Property(property="stock_min", type="string", pattern="^\\d+\\.\\d{4}$", example="1.0000"),
  *   @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid"),
  *   @OA\Property(property="stock_measurement_unit", ref="#/components/schemas/MeasurementUnitResource"),
+ *   @OA\Property(property="stock_source_product", type="object", nullable=true),
+ *   @OA\Property(property="stock_consumption_quantity", type="string", nullable=true, example="5.0000"),
  *   @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+\\.\\d{4}$", example="1.0000"),
  *   @OA\Property(property="is_active", type="boolean"),
  *   @OA\Property(property="parent_product_id", type="string", format="uuid", nullable=true),
@@ -53,6 +55,22 @@ class ProductResource extends JsonResource
             'stock_min' => QuantityMath::normalize($this->stock_min),
             'stock_measurement_unit_id' => $this->stock_measurement_unit_id,
             'stock_measurement_unit' => MeasurementUnitResource::make($this->whenLoaded('stockMeasurementUnit')),
+            'stock_source_product' => $this->relationLoaded('stockSourceProduct') && $this->stockSourceProduct !== null
+                ? [
+                    'id' => $this->stockSourceProduct->id,
+                    'name' => $this->stockSourceProduct->name,
+                    'sku' => $this->stockSourceProduct->sku,
+                    'stock_measurement_unit' => $this->stockSourceProduct->relationLoaded('stockMeasurementUnit')
+                        ? [
+                            'code' => $this->stockSourceProduct->stockMeasurementUnit?->code,
+                            'symbol' => $this->stockSourceProduct->stockMeasurementUnit?->symbol,
+                        ]
+                        : null,
+                ]
+                : null,
+            'stock_consumption_quantity' => $this->stock_consumption_quantity === null
+                ? null
+                : QuantityMath::normalize($this->stock_consumption_quantity),
             'sale_quantity_step' => QuantityMath::normalize($this->sale_quantity_step),
             'is_active' => $this->is_active,
             'parent_product_id' => $this->parent_product_id,

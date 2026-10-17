@@ -9,6 +9,7 @@ use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
 use App\Models\Locality;
+use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\PaymentMethod;
@@ -408,7 +409,7 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
         expect($order->fresh()->status)->toBe('open')
             ->and($delivery['status'])->toBe('provisional')
             ->and($delivery['description'])->toBe('Pendiente de conciliación')
-            ->and($delivery['details']['items'][0]['quantity_delivered'])->toBe(70);
+            ->and($delivery['details']['items'][0]['quantity_delivered'])->toBe('70.0000');
     });
 
     test('history keeps partial and final reconciliations from multiple routes in order', function () {
@@ -448,20 +449,87 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
             ->values();
 
         expect($deliveries)->toHaveCount(2)
-            ->and($deliveries[0]['type'])->toBe('delivery_reconciled_partial')
-            ->and($deliveries[0]['route']['id'])->toBe($routeOne->id)
-            ->and($deliveries[0]['description'])->toBe('Queda mercadería pendiente')
-            ->and($deliveries[1]['type'])->toBe('delivery_reconciled_final')
-            ->and($deliveries[1]['route']['id'])->toBe($routeTwo->id)
-            ->and($deliveries[1]['description'])->toBe('Pedido entregado');
+            ->and($deliveries[0]['type'])->toBe('delivery_reconciled_final')
+            ->and($deliveries[0]['route']['id'])->toBe($routeTwo->id)
+            ->and($deliveries[0]['description'])->toBe('Pedido entregado')
+            ->and($deliveries[1]['type'])->toBe('delivery_reconciled_partial')
+            ->and($deliveries[1]['route']['id'])->toBe($routeOne->id)
+            ->and($deliveries[1]['description'])->toBe('Queda mercadería pendiente');
+    });
+
+    test('history is returned newest first using the event timestamp', function () {
+        $order = createDetailOrder($this->store, ['status' => 'delivered']);
+        $order->forceFill(['created_at' => '2026-08-20 11:28:00'])->save();
+        OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'quantity' => 5,
+        ]);
+        [$route] = createDetailRouteStop(
+            $this->store,
+            $order,
+            $this->product,
+            $this->user,
+            'completed',
+            'completed',
+            5,
+            5,
+            5,
+            '2026-08-20 11:48:00'
+        );
+        DeliveryRouteEvent::query()
+            ->where('route_id', $route->id)
+            ->where('event_type', 'stop_added')
+            ->firstOrFail()
+            ->forceFill(['created_at' => '2026-08-20 11:29:00'])
+            ->save();
+
+        $history = getOrderDetail($order->id)->assertOk()->json('data.history');
+
+        expect(array_column($history, 'type'))->toBe([
+            'delivery_reconciled_final',
+            'route_assigned',
+            'order_created',
+        ]);
+    });
+
+    test('history uses its existing deterministic criteria when timestamps tie', function () {
+        $order = createDetailOrder($this->store);
+        $timestamp = '2026-08-20 11:29:00';
+        $laterId = 'f0000000-0000-4000-8000-000000000000';
+        $earlierId = 'a0000000-0000-4000-8000-000000000000';
+
+        foreach ([$laterId, $earlierId] as $id) {
+            $event = \App\Models\CommercialOperationEvent::factory()->create([
+                'id' => $id,
+                'store_id' => $this->store->id,
+                'operation_id' => $order->id,
+                'user_id' => $this->user->id,
+                'event_type' => 'reschedule',
+            ]);
+            $event->forceFill(['created_at' => $timestamp])->save();
+        }
+
+        $history = collect(getOrderDetail($order->id)->assertOk()->json('data.history'))
+            ->where('occurred_at', $timestamp)
+            ->values();
+
+        expect($history->pluck('id')->all())->toBe([
+            "commercial-event-{$earlierId}",
+            "commercial-event-{$laterId}",
+        ]);
     });
 
     test('history exposes resolved discrepancies inside delivery details', function () {
         $order = createDetailOrder($this->store, ['status' => 'partially_delivered']);
+        $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+        $this->product->update(['stock_measurement_unit_id' => $liter->id]);
         OperationItem::factory()->create([
             'operation_id' => $order->id,
             'product_id' => $this->product->id,
-            'quantity' => 10,
+            'quantity' => 5,
+            'measurement_unit_code' => 'l',
+            'measurement_unit_symbol' => 'L',
         ]);
         [, , $item] = createDetailRouteStop(
             $this->store,
@@ -470,19 +538,19 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
             $this->user,
             'completed',
             'completed',
-            10,
-            10,
-            8,
+            5,
+            5,
+            3,
             '2026-08-20 10:00:00'
         );
         $discrepancy = DeliveryDiscrepancy::create([
             'route_stop_item_id' => $item->id,
             'product_id' => $this->product->id,
-            'quantity_loaded' => 10,
-            'quantity_delivered' => 8,
+            'quantity_loaded' => 5,
+            'quantity_delivered' => 3,
             'difference_quantity' => 2,
-            'resolution_type' => 'pending_redelivery',
-            'notes' => 'Reprogramar entrega',
+            'resolution_type' => 'damaged',
+            'notes' => 'Merma durante el traslado',
             'resolved_by' => $this->user->id,
             'resolved_at' => now(),
         ]);
@@ -491,10 +559,64 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
         $delivery = $history->firstWhere('type', 'delivery_reconciled_partial');
         $serialized = $delivery['details']['items'][0]['discrepancies'][0];
 
+        expect($delivery['details']['items'][0]['quantity_planned'])->toBe('5.0000')
+            ->and($delivery['details']['items'][0]['quantity_loaded'])->toBe('5.0000')
+            ->and($delivery['details']['items'][0]['quantity_delivered'])->toBe('3.0000')
+            ->and($delivery['details']['items'][0]['stock_measurement_unit'])->toBe(['code' => 'l', 'symbol' => 'L']);
         expect($serialized['id'])->toBe($discrepancy->id)
-            ->and($serialized['quantity'])->toBe(2)
-            ->and($serialized['resolution_type'])->toBe('pending_redelivery')
+            ->and($serialized['quantity'])->toBe('2.0000')
+            ->and($serialized['resolution_type'])->toBe('damaged')
             ->and($serialized['resolved_by']['id'])->toBe($this->user->id);
+    });
+
+    test('history keeps commercial quantities and UOM for an associated product', function () {
+        $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+        $kilogram = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+        $source = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'stock_measurement_unit_id' => $kilogram->id,
+        ]);
+        $child = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'stock_measurement_unit_id' => $liter->id,
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '2.0000',
+        ]);
+        $order = createDetailOrder($this->store, ['status' => 'delivered']);
+        OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $child->id,
+            'quantity' => '5.0000',
+            'measurement_unit_code' => 'l',
+            'measurement_unit_symbol' => 'L',
+        ]);
+        [, , $routeItem] = createDetailRouteStop(
+            $this->store,
+            $order,
+            $child,
+            $this->user,
+            'completed',
+            'completed',
+            5,
+            5,
+            5,
+            '2026-08-20 10:00:00'
+        );
+        $routeItem->update([
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '2.0000',
+            'stock_source_measurement_unit_code' => 'kg',
+            'stock_source_measurement_unit_symbol' => 'kg',
+        ]);
+
+        $history = collect(getOrderDetail($order->id)->assertOk()->json('data.history'));
+        $item = $history->firstWhere('type', 'delivery_reconciled_final')['details']['items'][0];
+
+        expect($item['product_id'])->toBe($child->id)
+            ->and($item['quantity_planned'])->toBe('5.0000')
+            ->and($item['quantity_loaded'])->toBe('5.0000')
+            ->and($item['quantity_delivered'])->toBe('5.0000')
+            ->and($item['stock_measurement_unit'])->toBe(['code' => 'l', 'symbol' => 'L']);
     });
 
     test('history excludes route data whose route belongs to another store', function () {

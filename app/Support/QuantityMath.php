@@ -120,4 +120,20 @@ final class QuantityMath
 
         return self::normalize(bcmul($quotient, $normalizedStep, self::SCALE));
     }
+
+    public static function floorDivide(int|string $dividend, int|string $divisor): string
+    {
+        $normalizedDividend = self::normalize($dividend);
+        $normalizedDivisor = self::normalize($divisor);
+
+        if (! self::isPositive($normalizedDivisor)) {
+            throw new InvalidArgumentException('El divisor de cantidad debe ser mayor a cero.');
+        }
+
+        if (self::isNegative($normalizedDividend)) {
+            return '0';
+        }
+
+        return bcdiv($normalizedDividend, $normalizedDivisor, 0);
+    }
 }

@@ -29,7 +29,8 @@ class RouteManagementService
 {
     public function __construct(
         private CommercialOperationService $commercialOperationService,
-        private DeliveryCollectionAmountService $deliveryCollectionAmountService
+        private DeliveryCollectionAmountService $deliveryCollectionAmountService,
+        private RouteStopItemStockConsumptionResolver $routeStopItemStockConsumptionResolver,
     ) {}
 
     /**
@@ -765,7 +766,10 @@ class RouteManagementService
                 throw $this->validationError('El stop no pertenece a esta ruta.');
             }
 
-            $order->load('items');
+            $order->load([
+                'items.product.stockSourceProduct.stockMeasurementUnit',
+                'items.stockSourceProduct.stockMeasurementUnit',
+            ]);
 
             foreach ($items as $item) {
                 $productId = $item['product_id'];
@@ -780,6 +784,22 @@ class RouteManagementService
                 if ($orderItems->isEmpty()) {
                     throw $this->validationError("El producto {$productId} no pertenece a este pedido.");
                 }
+
+                $snapshotGroups = $orderItems->groupBy(
+                    fn ($orderItem) => $this->routeStopItemStockConsumptionResolver->snapshotKey(
+                        $this->routeStopItemStockConsumptionResolver->snapshotForOperationItem($orderItem)
+                    )
+                );
+
+                if ($snapshotGroups->count() !== 1) {
+                    throw $this->validationError(
+                        'No se puede asignar manualmente este producto porque el pedido contiene configuraciones físicas históricas distintas. Replanificá la ruta para conservar cada configuración por separado.'
+                    );
+                }
+
+                $physicalSnapshot = $this->routeStopItemStockConsumptionResolver->snapshotForOperationItem(
+                    $snapshotGroups->first()->first()
+                );
 
                 $this->assertCommercialQuantity($route->store_id, $productId, $quantityPlanned);
                 $orderedQuantity = $this->sumQuantities($orderItems->pluck('quantity')->all());
@@ -805,17 +825,19 @@ class RouteManagementService
                     );
                 }
 
-                // Create or update (unique on route_stop_id + product_id)
+                // A commercial product can have historical lines with different
+                // physical configurations, so its route item identity includes
+                // the immutable snapshot as well.
                 RouteStopItem::updateOrCreate(
-                    [
+                    array_merge([
                         'route_stop_id' => $stop->id,
                         'product_id' => $productId,
-                    ],
-                    [
+                    ], $physicalSnapshot),
+                    array_merge($physicalSnapshot, [
                         'quantity_planned' => $quantityPlanned,
                         'quantity_loaded' => 0,
                         'quantity_delivered' => 0,
-                    ]
+                    ])
                 );
             }
 
@@ -1088,38 +1110,21 @@ class RouteManagementService
                 throw $this->validationError('La ruta no pertenece a la tienda del usuario.');
             }
 
-            // 3. Process each completed stop
-            $inventoryService = new InventoryMovementService;
+            // 3. Process each completed stop. Quantities remain commercial on
+            // the route item; physical stock is resolved from its snapshot.
             $completedStops = $route->stops()
                 ->where('status', 'completed')
                 ->with('items.product')
                 ->get();
-
-            foreach ($completedStops as $stop) {
-                foreach ($stop->items as $item) {
-                    if (! QuantityMath::isPositive($item->quantity_delivered)) {
-                        continue;
-                    }
-
-                    // a. Record inventory movement (output)
-                    $inventoryService->recordMovement(
-                        $item->product,
-                        $user,
-                        'output',
-                        $item->quantity_delivered,
-                        "Entrega ruta {$route->id} — Pedido {$stop->order_id}"
-                    );
-
-                    // b. Release stock_reserved
-                    $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
-                    $newReserved = QuantityMath::max(
-                        '0',
-                        QuantityMath::subtract($product->stock_reserved, $item->quantity_delivered)
-                    );
-                    $product->update(['stock_reserved' => $newReserved]);
-
-                }
-            }
+            $completedItems = $completedStops->flatMap->items;
+            $stockProducts = $this->lockPhysicalSourcesForRouteItems($route->store_id, $completedItems);
+            $this->applyDeliveredPhysicalStock(
+                $route,
+                $completedItems,
+                $stockProducts,
+                $user,
+                recordMovement: true,
+            );
 
             // 4. Update order statuses using deliveries accumulated across routes.
             $orderIds = $route->stops()
@@ -1691,7 +1696,7 @@ class RouteManagementService
 
             $stops = $route->stops()
                 ->where('status', '!=', 'cancelled')
-                ->with(['items', 'collections'])
+                ->with(['items.product', 'collections'])
                 ->get();
 
             // Check for any declared (unprocessed) collections
@@ -1725,44 +1730,27 @@ class RouteManagementService
                 }
             }
 
-            // Process inventory for delivered items on completed stops
-            foreach ($stops as $stop) {
-                if ($stop->status !== 'completed') {
-                    continue;
-                }
-                foreach ($stop->items as $item) {
-                    if (! QuantityMath::isPositive($item->quantity_delivered)) {
-                        continue;
-                    }
-                    $product = Product::forStore($route->store_id)
-                        ->where('id', $item->product_id)
-                        ->lockForUpdate()
-                        ->first();
-                    if (! $product) {
-                        continue;
-                    }
+            $allRouteItems = $stops->flatMap->items;
+            // Lock every physical owner for this reconciliation in a single,
+            // deterministic order before any stock or reservation mutation.
+            $stockProducts = $this->lockPhysicalSourcesForRouteItems($route->store_id, $allRouteItems);
 
-                    // Decrement stock for sold/delivered items
-                    $product->update([
-                        'stock' => QuantityMath::max(
-                            '0',
-                            QuantityMath::subtract($product->stock, $item->quantity_delivered)
-                        ),
-                    ]);
-
-                    // Every delivered unit consumes one reserved unit, including extra sales
-                    // allocated from surplus on another stop.
-                    $product->update([
-                        'stock_reserved' => QuantityMath::max(
-                            '0',
-                            QuantityMath::subtract($product->stock_reserved, $item->quantity_delivered)
-                        ),
-                    ]);
-                }
-            }
+            // Process inventory for delivered items on completed stops. This
+            // path historically did not create movements, so it keeps that
+            // behavior while applying source/factor snapshots correctly.
+            $completedItems = $stops
+                ->filter(fn (RouteStop $stop): bool => $stop->status === 'completed')
+                ->flatMap->items;
+            $this->applyDeliveredPhysicalStock(
+                $route,
+                $completedItems,
+                $stockProducts,
+                $user,
+                recordMovement: false,
+            );
 
             // Process discrepancy inventory impacts
-            $this->processDiscrepancyInventory($route, $stops, $user);
+            $this->processDiscrepancyInventory($route, $stops, $user, $stockProducts);
 
             // Update commercial statuses after discrepancy resolutions have adjusted
             // any quantities that are no longer owed to the customer.
@@ -2262,12 +2250,128 @@ class RouteManagementService
     }
 
     /**
+     * @param  iterable<RouteStopItem>  $items
+     */
+    private function lockPhysicalSourcesForRouteItems(string $storeId, iterable $items): Collection
+    {
+        $sourceIds = [];
+
+        foreach ($items as $item) {
+            $sourceIds[] = $this->routeStopItemStockConsumptionResolver->resolve($item)->stockProductId;
+        }
+
+        $sourceIds = collect($sourceIds)->unique()->sort()->values();
+        if ($sourceIds->isEmpty()) {
+            return collect();
+        }
+
+        $products = Product::forStore($storeId)
+            ->whereIn('id', $sourceIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        if ($products->count() !== $sourceIds->count()) {
+            throw new \RuntimeException('No se pudieron bloquear todas las fuentes físicas de la ruta.');
+        }
+
+        return $products;
+    }
+
+    /**
+     * @param  iterable<RouteStopItem>  $items
+     * @return array<string, string>
+     */
+    private function physicalTotalsForRouteStopItems(iterable $items, string $quantityField): array
+    {
+        $totals = [];
+
+        foreach ($items as $item) {
+            $commercialQuantity = QuantityMath::normalize($item->{$quantityField});
+            if (! QuantityMath::isPositive($commercialQuantity)) {
+                continue;
+            }
+
+            $consumption = $this->routeStopItemStockConsumptionResolver->resolve($item);
+            $physicalQuantity = QuantityMath::multiply($commercialQuantity, $consumption->consumptionFactor);
+            $totals[$consumption->stockProductId] = QuantityMath::add(
+                $totals[$consumption->stockProductId] ?? '0.0000',
+                $physicalQuantity,
+            );
+        }
+
+        return $totals;
+    }
+
+    private function physicalQuantityForRouteStopItem(RouteStopItem $item, int|string $commercialQuantity): string
+    {
+        $consumption = $this->routeStopItemStockConsumptionResolver->resolve($item);
+
+        return QuantityMath::multiply(
+            QuantityMath::normalize($commercialQuantity),
+            $consumption->consumptionFactor,
+        );
+    }
+
+    /**
+     * @param  iterable<RouteStopItem>  $items
+     */
+    private function applyDeliveredPhysicalStock(
+        DeliveryRoute $route,
+        iterable $items,
+        Collection $stockProducts,
+        User $user,
+        bool $recordMovement,
+    ): void {
+        $physicalTotals = $this->physicalTotalsForRouteStopItems($items, 'quantity_delivered');
+        $inventoryService = $recordMovement ? new InventoryMovementService : null;
+
+        foreach ($physicalTotals as $sourceId => $physicalQuantity) {
+            /** @var Product $product */
+            $product = $stockProducts->get($sourceId);
+            if (! $product) {
+                throw new \RuntimeException('No se pudo resolver la fuente física de la entrega.');
+            }
+
+            if ($recordMovement) {
+                $inventoryService->recordDeliveredForLockedProduct(
+                    $product,
+                    $user,
+                    $physicalQuantity,
+                    "Entrega ruta {$route->id}",
+                );
+
+                continue;
+            }
+
+            $newStock = QuantityMath::subtract($product->stock, $physicalQuantity);
+            if (QuantityMath::isNegative($newStock)) {
+                throw new \InvalidArgumentException('El stock resultante no puede ser negativo.');
+            }
+            $newReserved = $this->reservedAfterPhysicalRelease($product, $physicalQuantity);
+            if (! Product::validateStockIntegrity($newStock, $newReserved)) {
+                throw new \RuntimeException("Stock integrity violation on product {$product->id}.");
+            }
+
+            $product->update([
+                'stock' => $newStock,
+                'stock_reserved' => $newReserved,
+            ]);
+        }
+    }
+
+    /**
      * Process inventory impacts for all discrepancies in a route.
      * Called during finalizeReconciliation. Idempotent via processed_at.
      */
-    private function processDiscrepancyInventory(DeliveryRoute $route, $stops, User $user): void
+    private function processDiscrepancyInventory(DeliveryRoute $route, $stops, User $user, Collection $stockProducts): void
     {
         $inventoryService = new InventoryMovementService;
+        $reservationReleases = [];
+        $inventoryOutputs = [];
+        $commercialReductions = [];
+        $processedDiscrepancies = [];
 
         foreach ($stops as $stop) {
             foreach ($stop->items as $item) {
@@ -2280,17 +2384,10 @@ class RouteManagementService
                     continue;
                 }
 
-                $product = Product::forStore($route->store_id)
-                    ->where('id', $discrepancy->product_id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $product) {
-                    continue;
-                }
-
                 $diff = $this->getReconciliationDifference($item);
-                $orderId = $stop->order_id;
+                $physicalQuantity = $this->physicalQuantityForRouteStopItem($item, $diff);
+                $consumption = $this->routeStopItemStockConsumptionResolver->resolve($item);
+                $sourceId = $consumption->stockProductId;
 
                 switch ($discrepancy->resolution_type) {
                     case 'returned':
@@ -2298,34 +2395,32 @@ class RouteManagementService
                         // Loaded route units were never removed from consolidated stock.
                         // They are no longer owed: release their reservation and reduce
                         // the commercial obligation without changing route history.
-                        $product->update([
-                            'stock_reserved' => QuantityMath::max(
-                                '0',
-                                QuantityMath::subtract($product->stock_reserved, $diff)
-                            ),
-                        ]);
-                        $this->commercialOperationService->reduceCommercialObligation(
-                            $stop->order_id,
-                            $item->product_id,
-                            $diff
+                        $reservationReleases[$sourceId] = QuantityMath::add(
+                            $reservationReleases[$sourceId] ?? '0.0000',
+                            $physicalQuantity,
                         );
+                        $commercialReductions[] = [
+                            'order_id' => $stop->order_id,
+                            'product_id' => $item->product_id,
+                            'quantity' => $diff,
+                        ];
                         break;
 
                     case 'missing':
                         // The physical units are lost, but the customer is still owed
                         // replacements, so the reservation remains in place.
-                        $inventoryService->recordMovement(
-                            $product, $user, 'output', $diff,
-                            "Ajuste por faltante — Ruta {$route->id} — Pedido {$orderId}"
+                        $inventoryOutputs['missing'][$sourceId] = QuantityMath::add(
+                            $inventoryOutputs['missing'][$sourceId] ?? '0.0000',
+                            $physicalQuantity,
                         );
                         break;
 
                     case 'damaged':
                         // The physical units are unusable, but the customer is still owed
                         // replacements, so the reservation remains in place.
-                        $inventoryService->recordMovement(
-                            $product, $user, 'output', $diff,
-                            "Salida por daño logístico — Ruta {$route->id} — Pedido {$orderId}"
+                        $inventoryOutputs['damaged'][$sourceId] = QuantityMath::add(
+                            $inventoryOutputs['damaged'][$sourceId] ?? '0.0000',
+                            $physicalQuantity,
                         );
                         break;
 
@@ -2334,9 +2429,57 @@ class RouteManagementService
                         break;
                 }
 
-                $discrepancy->update(['processed_at' => now()]);
+                $processedDiscrepancies[] = $discrepancy;
             }
         }
+
+        foreach ($reservationReleases as $sourceId => $physicalQuantity) {
+            /** @var Product $product */
+            $product = $stockProducts->get($sourceId);
+            $newReserved = $this->reservedAfterPhysicalRelease($product, $physicalQuantity);
+            if (! Product::validateStockIntegrity($product->stock, $newReserved)) {
+                throw new \RuntimeException("Stock integrity violation on product {$product->id}.");
+            }
+            $product->update(['stock_reserved' => $newReserved]);
+        }
+
+        foreach ($inventoryOutputs as $resolutionType => $outputsBySource) {
+            foreach ($outputsBySource as $sourceId => $physicalQuantity) {
+                /** @var Product $product */
+                $product = $stockProducts->get($sourceId);
+                $concept = $resolutionType === 'missing'
+                    ? "Ajuste por faltante — Ruta {$route->id}"
+                    : "Salida por daño logístico — Ruta {$route->id}";
+                $inventoryService->recordMovementForLockedProduct(
+                    $product,
+                    $user,
+                    'output',
+                    $physicalQuantity,
+                    $concept,
+                );
+            }
+        }
+
+        foreach ($commercialReductions as $reduction) {
+            $this->commercialOperationService->reduceCommercialObligation(
+                $reduction['order_id'],
+                $reduction['product_id'],
+                $reduction['quantity'],
+            );
+        }
+
+        foreach ($processedDiscrepancies as $discrepancy) {
+            $discrepancy->update(['processed_at' => now()]);
+        }
+    }
+
+    private function reservedAfterPhysicalRelease(Product $product, string $physicalQuantity): string
+    {
+        if (QuantityMath::compare($physicalQuantity, $product->stock_reserved) > 0) {
+            throw $this->validationError('La reserva física es insuficiente para completar la conciliación.');
+        }
+
+        return QuantityMath::subtract($product->stock_reserved, $physicalQuantity);
     }
 
     /**
@@ -2468,53 +2611,129 @@ class RouteManagementService
         }
 
         foreach ($stops as $stop) {
-            $order = CommercialOperation::with('items')->find($stop->order_id);
+            $order = CommercialOperation::with([
+                'items.product.stockSourceProduct.stockMeasurementUnit',
+                'items.stockSourceProduct.stockMeasurementUnit',
+            ])->find($stop->order_id);
 
             if (! $order || $order->items->isEmpty()) {
                 continue;
             }
 
-            foreach ($order->items->groupBy('product_id') as $productId => $orderItems) {
-                $orderedQuantity = $this->sumQuantities($orderItems->pluck('quantity')->all());
-                $previouslyDelivered = $this->getPreviouslyDelivered(
-                    $productId,
-                    $stop->order_id
-                );
-
-                $plannedElsewhere = $this->getPlannedInOtherRoutes(
-                    $productId,
-                    $stop->order_id,
-                    $routeId
-                );
-
-                $remaining = QuantityMath::max(
-                    '0',
-                    QuantityMath::subtract(
-                        QuantityMath::subtract($orderedQuantity, $previouslyDelivered),
-                        $plannedElsewhere
+            foreach ($order->items->groupBy('product_id') as $productId => $productOrderItems) {
+                $itemsByPhysicalSnapshot = $productOrderItems->groupBy(
+                    fn ($orderItem) => $this->routeStopItemStockConsumptionResolver->snapshotKey(
+                        $this->routeStopItemStockConsumptionResolver->snapshotForOperationItem($orderItem)
                     )
                 );
 
-                if (QuantityMath::isPositive($remaining)) {
-                    RouteStopItem::updateOrCreate(
-                        [
-                            'route_stop_id' => $stop->id,
-                            'product_id' => $productId,
-                        ],
-                        [
-                            'quantity_planned' => $remaining,
-                            'quantity_loaded' => 0,
-                            'quantity_delivered' => 0,
-                        ]
+                foreach ($itemsByPhysicalSnapshot as $orderItems) {
+                    $physicalSnapshot = $this->routeStopItemStockConsumptionResolver->snapshotForOperationItem(
+                        $orderItems->first()
                     );
-                } else {
-                    // Saldo agotado: eliminar registro si existía de una planificación anterior
-                    RouteStopItem::where('route_stop_id', $stop->id)
-                        ->where('product_id', $productId)
-                        ->delete();
+                    $orderedQuantity = $this->sumQuantities($orderItems->pluck('quantity')->all());
+                    $previouslyDelivered = $this->getPreviouslyDeliveredForPhysicalSnapshot(
+                        $productId,
+                        $stop->order_id,
+                        $physicalSnapshot,
+                    );
+
+                    $plannedElsewhere = $this->getPlannedInOtherRoutesForPhysicalSnapshot(
+                        $productId,
+                        $stop->order_id,
+                        $routeId,
+                        $physicalSnapshot,
+                    );
+
+                    $remaining = QuantityMath::max(
+                        '0',
+                        QuantityMath::subtract(
+                            QuantityMath::subtract($orderedQuantity, $previouslyDelivered),
+                            $plannedElsewhere
+                        )
+                    );
+
+                    $itemQuery = $this->routeStopItemPhysicalSnapshotQuery(
+                        RouteStopItem::where('route_stop_id', $stop->id)
+                            ->where('product_id', $productId),
+                        $physicalSnapshot,
+                    );
+
+                    if (QuantityMath::isPositive($remaining)) {
+                        $routeStopItem = $itemQuery->first();
+                        if ($routeStopItem) {
+                            $routeStopItem->update([
+                                'quantity_planned' => $remaining,
+                                'quantity_loaded' => 0,
+                                'quantity_delivered' => 0,
+                            ]);
+                        } else {
+                            RouteStopItem::create(array_merge([
+                                'route_stop_id' => $stop->id,
+                                'product_id' => $productId,
+                                'quantity_planned' => $remaining,
+                                'quantity_loaded' => 0,
+                                'quantity_delivered' => 0,
+                            ], $physicalSnapshot));
+                        }
+                    } else {
+                        // Saldo agotado: eliminar sólo esta configuración física.
+                        $itemQuery->delete();
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * @param  array{stock_source_product_id: string|null, stock_consumption_quantity: string|null, stock_source_measurement_unit_code: string|null, stock_source_measurement_unit_symbol: string|null}  $snapshot
+     */
+    private function getPreviouslyDeliveredForPhysicalSnapshot(string $productId, string $orderId, array $snapshot): string
+    {
+        $query = RouteStopItem::where('product_id', $productId)
+            ->where('quantity_delivered', '>', 0)
+            ->whereHas('routeStop', function (Builder $q) use ($orderId) {
+                $q->where('order_id', $orderId);
+            })
+            ->whereHas('routeStop.route', function (Builder $q) {
+                $q->where('status', 'completed');
+            });
+
+        return QuantityMath::normalize(
+            $this->routeStopItemPhysicalSnapshotQuery($query, $snapshot)->sum('quantity_delivered')
+        );
+    }
+
+    /**
+     * @param  array{stock_source_product_id: string|null, stock_consumption_quantity: string|null, stock_source_measurement_unit_code: string|null, stock_source_measurement_unit_symbol: string|null}  $snapshot
+     */
+    private function getPlannedInOtherRoutesForPhysicalSnapshot(string $productId, string $orderId, string $excludeRouteId, array $snapshot): string
+    {
+        $query = RouteStopItem::where('product_id', $productId)
+            ->whereHas('routeStop', function (Builder $q) use ($orderId, $excludeRouteId) {
+                $q->where('order_id', $orderId)
+                    ->where('route_id', '!=', $excludeRouteId)
+                    ->where('status', '!=', 'cancelled');
+            })
+            ->whereHas('routeStop.route', function (Builder $q) {
+                $q->whereIn('status', ['draft', 'planned', 'loaded', 'dispatched', 'awaiting_reconciliation']);
+            });
+
+        return QuantityMath::normalize(
+            $this->routeStopItemPhysicalSnapshotQuery($query, $snapshot)->sum('quantity_planned')
+        );
+    }
+
+    /**
+     * @param  array{stock_source_product_id: string|null, stock_consumption_quantity: string|null, stock_source_measurement_unit_code: string|null, stock_source_measurement_unit_symbol: string|null}  $snapshot
+     */
+    private function routeStopItemPhysicalSnapshotQuery(Builder $query, array $snapshot): Builder
+    {
+        foreach ($snapshot as $column => $value) {
+            $value === null ? $query->whereNull($column) : $query->where($column, $value);
+        }
+
+        return $query;
     }
 
     private function measurementUnitData($unit): ?array

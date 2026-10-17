@@ -194,6 +194,80 @@ test('product update without reserved stock continues to work', function () {
     expect($product->fresh()->stock_reserved)->toBe('3.0000');
 });
 
+test('product update rejects direct stock changes for an associated product', function () {
+    $source = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '10.0000',
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_min' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$child->id}", [
+            'stock' => '1.0000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock'])
+        ->assertJsonPath('errors.stock.0', 'El stock de este producto se administra desde su producto fuente.');
+
+    expect($child->fresh()->stock)->toBe('0.0000');
+});
+
+test('a normal source may serve multiple children but cannot become a child itself', function () {
+    $source = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_min' => '0.0000',
+    ]);
+    $otherSource = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_min' => '0.0000',
+    ]);
+
+    $childPayload = fn (string $name, string $sku): array => [
+        'name' => $name,
+        'sku' => $sku,
+        'category_id' => $this->category->id,
+        'price' => 100,
+        'stock' => '0.0000',
+        'stock_min' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '1.0000',
+    ];
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/store/products', $childPayload('Child A', 'CHILD-A'))
+        ->assertCreated();
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/store/products', $childPayload('Child B', 'CHILD-B'))
+        ->assertCreated();
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/store/products', $childPayload('Child C', 'CHILD-C'))
+        ->assertCreated();
+
+    expect($source->stockDependentProducts()->count())->toBe(3);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson("/api/v1/store/products/{$source->id}", [
+            'stock_source_product_id' => $otherSource->id,
+            'stock_consumption_quantity' => '1.0000',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_source_product_id'])
+        ->assertJsonPath('errors.stock_source_product_id.0', 'No se puede usar stock de otro producto porque este producto ya es fuente de stock de otros productos.');
+
+    expect($source->fresh()->stock_source_product_id)->toBeNull();
+});
+
 test('a product UOM can change with physical stock and preserves stock and stock minimum', function () {
     $product = Product::factory()->forStore($this->store)->create([
         'category_id' => $this->category->id,

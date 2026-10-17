@@ -180,6 +180,67 @@ test('full delivery: all stops completed with full quantities', function () {
     expect(DeliveryRouteEvent::where('event_type', 'route_processed')->count())->toBe(1);
 });
 
+test('process deliveries applies an associated route item to its snapshotted physical source', function () {
+    $vehicle = recCreateVehicle($this->store);
+    $driver = recCreateDriver($this->store);
+    [$customer] = recCreateCustomerWithAddress($this->store);
+    $source = Product::factory()->create([
+        'store_id' => $this->store->id,
+        'stock' => '20.0000',
+        'stock_reserved' => '10.0000',
+    ]);
+    $child = Product::factory()->create([
+        'store_id' => $this->store->id,
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = recCreateEligibleOrder($this->store, $customer);
+    OperationItem::factory()->create([
+        'operation_id' => $order->id,
+        'product_id' => $child->id,
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+        'quantity' => '2.0000',
+    ]);
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'awaiting_reconciliation',
+    ]);
+    $stop = RouteStop::create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'completed',
+    ]);
+    $source->load('stockMeasurementUnit');
+    RouteStopItem::create([
+        'route_stop_id' => $stop->id,
+        'product_id' => $child->id,
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+        'stock_source_measurement_unit_code' => $source->stockMeasurementUnit->code,
+        'stock_source_measurement_unit_symbol' => $source->stockMeasurementUnit->symbol,
+        'quantity_planned' => '2.0000',
+        'quantity_loaded' => '2.0000',
+        'quantity_delivered' => '2.0000',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$this->token}")
+        ->postJson("/api/v1/store/routes/{$route->id}/process-deliveries")
+        ->assertOk();
+
+    $movement = InventoryMovement::where('product_id', $source->id)->sole();
+    expect($source->fresh()->stock)->toBe('10.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($movement->quantity)->toBe('-10.0000');
+});
+
 test('partial delivery: some items partially delivered', function () {
     [$route, $stop, $product, $routeStopItem, $order] = recCreateRouteReadyForReconciliation($this->store);
 

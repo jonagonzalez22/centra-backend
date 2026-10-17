@@ -19,6 +19,9 @@ class OperationItem extends Model
         'operation_id',
         'product_id',
         'product_name',
+        // Physical stock-consumption snapshots captured when the line is created.
+        'stock_source_product_id',
+        'stock_consumption_quantity',
         // Commercial configuration snapshots captured when the line is created.
         'measurement_unit_code',
         'measurement_unit_symbol',
@@ -32,6 +35,7 @@ class OperationItem extends Model
 
     protected $casts = [
         'sale_quantity_step' => 'decimal:4',
+        'stock_consumption_quantity' => 'decimal:4',
         'quantity' => 'decimal:4',
         'price' => 'decimal:2',
         'subtotal' => 'decimal:2',
@@ -47,5 +51,10 @@ class OperationItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function stockSourceProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'stock_source_product_id');
     }
 }

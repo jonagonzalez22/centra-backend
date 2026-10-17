@@ -19,6 +19,12 @@ class RouteStopItem extends Model
     protected $fillable = [
         'route_stop_id',
         'product_id',
+        // Immutable physical stock-consumption snapshots. Route stop quantities
+        // remain expressed in the commercial product's measurement unit.
+        'stock_source_product_id',
+        'stock_consumption_quantity',
+        'stock_source_measurement_unit_code',
+        'stock_source_measurement_unit_symbol',
         'quantity_planned',
         'quantity_loaded',
         'quantity_delivered',
@@ -29,6 +35,7 @@ class RouteStopItem extends Model
     protected function casts(): array
     {
         return [
+            'stock_consumption_quantity' => 'decimal:4',
             'quantity_planned' => 'decimal:4',
             'quantity_loaded' => 'decimal:4',
             'quantity_delivered' => 'decimal:4',
@@ -45,6 +52,11 @@ class RouteStopItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function stockSourceProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'stock_source_product_id');
     }
 
     public function adjustments(): HasMany
