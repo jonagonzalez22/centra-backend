@@ -1042,6 +1042,201 @@ test('extra sale definitively transfers the commercial obligation without changi
         ->and($product->fresh()->stock_reserved)->toBe($reservedBefore);
 });
 
+test('extra sale preserves the associated product and its physical snapshot', function () {
+    $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+    $unit = MeasurementUnit::query()->where('code', 'unit')->firstOrFail();
+    $source = Product::factory()->forStore($this->store)->create([
+        'stock' => '20.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $liter->id,
+        'sale_quantity_step' => '0.2500',
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $unit->id,
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+        'sale_quantity_step' => '1.0000',
+    ]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => '1.0000']]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $child, 1, 0, 'failed');
+    routeInventorySnapshotPhysical($sourceItem, $source, '5.0000');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $child->id, 'quantity' => '1.0000']],
+        ])
+        ->assertOk();
+
+    $destinationItem = RouteStopItem::query()
+        ->where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $child->id)
+        ->sole();
+    $destinationOperationItem = $destinationOrder->fresh()->items()
+        ->where('product_id', $child->id)
+        ->sole();
+
+    expect($destinationItem->product_id)->toBe($child->id)
+        ->and($destinationItem->stock_source_product_id)->toBe($source->id)
+        ->and($destinationItem->stock_consumption_quantity)->toBe('5.0000')
+        ->and($destinationItem->stock_source_measurement_unit_symbol)->toBe('L')
+        ->and($destinationOperationItem->product_id)->toBe($child->id)
+        ->and($destinationOperationItem->stock_source_product_id)->toBe($source->id)
+        ->and($destinationOperationItem->stock_consumption_quantity)->toBe('5.0000')
+        ->and($source->fresh()->stock)->toBe('20.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('5.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000');
+});
+
+test('extra sale uses the source route item snapshot after the child factor changes', function () {
+    $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+    $unit = MeasurementUnit::query()->where('code', 'unit')->firstOrFail();
+    $source = Product::factory()->forStore($this->store)->create([
+        'stock' => '20.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $liter->id,
+    ]);
+    $replacementSource = Product::factory()->forStore($this->store)->create([
+        'stock' => '20.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $liter->id,
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $unit->id,
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $child, 1, 0, 'failed');
+    routeInventorySnapshotPhysical($sourceItem, $source, '5.0000');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    // The model update intentionally simulates a later administrative change;
+    // the historical route must continue to transfer its original recipe.
+    $child->update([
+        'stock_source_product_id' => $replacementSource->id,
+        'stock_consumption_quantity' => '4.0000',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $child->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $destinationItem = RouteStopItem::query()
+        ->where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $child->id)
+        ->sole();
+    $destinationOperationItem = $destinationOrder->fresh()->items()
+        ->where('product_id', $child->id)
+        ->sole();
+
+    expect($destinationItem->stock_source_product_id)->toBe($source->id)
+        ->and($destinationItem->stock_consumption_quantity)->toBe('5.0000')
+        ->and($destinationOperationItem->stock_source_product_id)->toBe($source->id)
+        ->and($destinationOperationItem->stock_consumption_quantity)->toBe('5.0000');
+});
+
+test('reconciling an associated extra sale consumes only its physical source', function () {
+    $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+    $unit = MeasurementUnit::query()->where('code', 'unit')->firstOrFail();
+    $source = Product::factory()->forStore($this->store)->create([
+        'stock' => '20.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $liter->id,
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $unit->id,
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $child, 1, 0, 'failed');
+    routeInventorySnapshotPhysical($sourceItem, $source, '5.0000');
+    [$destinationStop, $otherDestinationItem] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $child->id, 'quantity' => 1]],
+        ])
+        ->assertOk();
+
+    $extraItem = RouteStopItem::query()
+        ->where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $child->id)
+        ->sole();
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/complete", [
+            'status' => 'completed',
+            'items' => [
+                ['route_stop_item_id' => $otherDestinationItem->id, 'quantity_delivered' => 1],
+                ['route_stop_item_id' => $extraItem->id, 'quantity_delivered' => 1],
+            ],
+        ])
+        ->assertOk();
+
+    routeInventoryFinalize($this, $route);
+
+    expect($source->fresh()->stock)->toBe('15.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000')
+        ->and($child->fresh()->stock_reserved)->toBe('0.0000')
+        ->and(InventoryMovement::query()->where('product_id', $child->id)->exists())->toBeFalse();
+});
+
+test('extra sale cannot transfer released stock between associated sibling products', function () {
+    $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+    $unit = MeasurementUnit::query()->where('code', 'unit')->firstOrFail();
+    $source = Product::factory()->forStore($this->store)->create([
+        'stock' => '20.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $liter->id,
+    ]);
+    $childA = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000', 'stock_reserved' => '0.0000', 'stock_measurement_unit_id' => $unit->id,
+        'stock_source_product_id' => $source->id, 'stock_consumption_quantity' => '5.0000',
+    ]);
+    $childB = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000', 'stock_reserved' => '0.0000', 'stock_measurement_unit_id' => $unit->id,
+        'stock_source_product_id' => $source->id, 'stock_consumption_quantity' => '1.0000',
+    ]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $childA, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $childA, 1, 0, 'failed');
+    routeInventorySnapshotPhysical($sourceItem, $source, '5.0000');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $childB->id, 'quantity' => 1]],
+        ])
+        ->assertStatus(422);
+
+    expect(ExtraSaleAllocation::query()->where('route_id', $route->id)->exists())->toBeFalse()
+        ->and($destinationOrder->fresh()->items()->where('product_id', $childB->id)->exists())->toBeFalse()
+        ->and($sourceOrder->fresh()->items()->where('product_id', $childA->id)->sum('quantity'))->toBe(1);
+});
+
 test('extra sale combines multiple sources into one destination stop item', function () {
     $product = Product::factory()->forStore($this->store)->create(['price' => 50, 'stock' => 20, 'stock_reserved' => 0]);
     $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
@@ -1072,6 +1267,58 @@ test('extra sale combines multiple sources into one destination stop item', func
         ->and($sourceOrderA->fresh()->items()->sum('quantity'))->toBe(0)
         ->and($sourceOrderB->fresh()->items()->sum('quantity'))->toBe(0)
         ->and($destinationOrder->fresh()->items()->where('product_id', $product->id)->sum('quantity'))->toBe(3);
+});
+
+test('extra sale keeps route items with distinct historical physical snapshots separate', function () {
+    $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+    $unit = MeasurementUnit::query()->where('code', 'unit')->firstOrFail();
+    $source = Product::factory()->forStore($this->store)->create([
+        'stock' => '30.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $liter->id,
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_measurement_unit_id' => $unit->id,
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+    $otherProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrderA = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => 1]]);
+    $child->update(['stock_consumption_quantity' => '4.0000']);
+    $sourceOrderB = routeInventoryCreateOrder($this, [['product' => $child, 'quantity' => 1]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $otherProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItemA] = routeInventoryAddStop($route, $sourceOrderA, $child, 1, 0, 'failed');
+    [, $sourceItemB] = routeInventoryAddStop($route, $sourceOrderB, $child, 1, 0, 'failed');
+    routeInventorySnapshotPhysical($sourceItemA, $source, '5.0000');
+    routeInventorySnapshotPhysical($sourceItemB, $source, '4.0000');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $otherProduct, 1, 0, 'pending');
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $child->id, 'quantity' => 2]],
+        ])
+        ->assertOk();
+
+    $destinationItems = RouteStopItem::query()
+        ->where('route_stop_id', $destinationStop->id)
+        ->where('product_id', $child->id)
+        ->orderBy('stock_consumption_quantity')
+        ->get();
+    $destinationOperationItems = $destinationOrder->fresh()->items()
+        ->where('product_id', $child->id)
+        ->get()
+        ->sortBy('stock_consumption_quantity')
+        ->values();
+
+    expect($destinationItems)->toHaveCount(2)
+        ->and($destinationItems->pluck('stock_consumption_quantity')->all())->toBe(['4.0000', '5.0000'])
+        ->and($destinationOperationItems)->toHaveCount(2)
+        ->and($destinationOperationItems->pluck('stock_consumption_quantity')->all())->toBe(['4.0000', '5.0000'])
+        ->and($sourceOrderA->fresh()->items()->sole()->quantity)->toBe('0.0000')
+        ->and($sourceOrderB->fresh()->items()->sole()->quantity)->toBe('0.0000');
 });
 
 test('successive extra sales reuse an original destination item and preserve sale prices', function () {

@@ -23,7 +23,8 @@ class DriverExecutionService
 {
     public function __construct(
         private CommercialOperationService $commercialOperationService,
-        private DeliveryCollectionAmountService $deliveryCollectionAmountService
+        private DeliveryCollectionAmountService $deliveryCollectionAmountService,
+        private RouteStopItemStockConsumptionResolver $routeStopItemConsumptionResolver,
     ) {}
 
     /**
@@ -117,7 +118,7 @@ class DriverExecutionService
             $query->where('route_id', $routeId)
                 ->whereIn('status', ['completed', 'failed']);
         })
-            ->with('product')
+            ->with('product.stockMeasurementUnit')
             ->get();
 
         // Sum valid allocations by physical source item.
@@ -218,7 +219,7 @@ class DriverExecutionService
                     $query->where('route_id', $route->id)
                         ->whereIn('status', ['completed', 'failed']);
                 })
-                ->with('routeStop')
+                ->with(['routeStop', 'product.stockMeasurementUnit'])
                 ->orderBy('product_id')
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -290,63 +291,88 @@ class DriverExecutionService
 
             foreach ($items as $itemData) {
                 $productId = $itemData['product_id'];
-                $quantity = QuantityMath::normalize($itemData['quantity']);
                 $product = $products[$productId];
-                $destinationItem = RouteStopItem::where('route_stop_id', $stop->id)
-                    ->where('product_id', $productId)
-                    ->lockForUpdate()
-                    ->first();
 
-                if ($destinationItem) {
-                    $destinationItem->update([
-                        'quantity_planned' => QuantityMath::add($destinationItem->quantity_planned, $quantity),
-                        'quantity_loaded' => QuantityMath::add($destinationItem->quantity_loaded, $quantity),
-                    ]);
-                } else {
-                    $destinationItem = RouteStopItem::create([
-                        'route_stop_id' => $stop->id,
+                // A RouteStopItem has immutable physical terms. One commercial
+                // product can therefore require more than one destination row
+                // when historical source/factor snapshots differ.
+                $allocationsBySnapshot = collect($allocationPlan)
+                    ->filter(fn (array $allocation) => $allocation[0]->product_id === $productId)
+                    ->groupBy(function (array $allocation): string {
+                        return $this->routeStopItemConsumptionResolver->snapshotKey(
+                            $this->routeStopItemConsumptionResolver->snapshotForRouteStopItem($allocation[0])
+                        );
+                    });
+
+                foreach ($allocationsBySnapshot as $allocations) {
+                    /** @var RouteStopItem $sourceItem */
+                    $sourceItem = $allocations->first()[0];
+                    $snapshot = $this->routeStopItemConsumptionResolver->snapshotForRouteStopItem($sourceItem);
+                    $quantity = $allocations->reduce(
+                        fn (string $total, array $allocation): string => QuantityMath::add($total, $allocation[1]),
+                        '0.0000'
+                    );
+                    $destinationItem = $this->destinationItemForPhysicalSnapshot($stop, $productId, $snapshot);
+
+                    if ($destinationItem) {
+                        $destinationItem->update([
+                            'quantity_planned' => QuantityMath::add($destinationItem->quantity_planned, $quantity),
+                            'quantity_loaded' => QuantityMath::add($destinationItem->quantity_loaded, $quantity),
+                        ]);
+                    } else {
+                        $destinationItem = RouteStopItem::create([
+                            'route_stop_id' => $stop->id,
+                            'product_id' => $productId,
+                            'product_name' => $product->name,
+                            ...$snapshot,
+                            'quantity_planned' => $quantity,
+                            'quantity_loaded' => $quantity,
+                            'quantity_delivered' => 0,
+                            'is_extra' => true,
+                        ]);
+                    }
+
+                    foreach ($allocations as [$allocatedSourceItem, $allocatedQuantity]) {
+                        ExtraSaleAllocation::create([
+                            'store_id' => $route->store_id,
+                            'route_id' => $route->id,
+                            'destination_stop_id' => $stop->id,
+                            'destination_stop_item_id' => $destinationItem->id,
+                            'source_stop_item_id' => $allocatedSourceItem->id,
+                            'quantity' => $allocatedQuantity,
+                        ]);
+
+                        $this->updateSourceDiscrepancy($allocatedSourceItem, $stop);
+                        $this->commercialOperationService->reduceCommercialObligation(
+                            $allocatedSourceItem->routeStop->order_id,
+                            $productId,
+                            $allocatedQuantity,
+                            [
+                                'stock_source_product_id' => $snapshot['stock_source_product_id'],
+                                'stock_consumption_quantity' => $snapshot['stock_consumption_quantity'],
+                            ],
+                        );
+                    }
+
+                    // Extra sale transfers an existing commercial obligation;
+                    // preserve the physical recipe of the released route item
+                    // rather than resolving the child Product's current setup.
+                    OperationItem::create([
+                        'operation_id' => $destinationOrder->id,
                         'product_id' => $productId,
                         'product_name' => $product->name,
-                        'quantity_planned' => $quantity,
-                        'quantity_loaded' => $quantity,
-                        'quantity_delivered' => 0,
-                        'is_extra' => true,
+                        'stock_source_product_id' => $snapshot['stock_source_product_id'],
+                        'stock_consumption_quantity' => $snapshot['stock_consumption_quantity'],
+                        'measurement_unit_code' => $product->stockMeasurementUnit->code,
+                        'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
+                        'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
+                        'quantity' => $quantity,
+                        'price' => $product->price,
+                        'subtotal' => MoneyMath::multiplyQuantityByPrice($quantity, $product->price),
+                        'tax_amount' => 0,
+                        'discount_amount' => 0,
                     ]);
                 }
-
-                foreach (collect($allocationPlan)->filter(
-                    fn (array $allocation) => $allocation[0]->product_id === $productId
-                ) as [$sourceItem, $allocatedQuantity]) {
-                    ExtraSaleAllocation::create([
-                        'store_id' => $route->store_id,
-                        'route_id' => $route->id,
-                        'destination_stop_id' => $stop->id,
-                        'destination_stop_item_id' => $destinationItem->id,
-                        'source_stop_item_id' => $sourceItem->id,
-                        'quantity' => $allocatedQuantity,
-                    ]);
-
-                    $this->updateSourceDiscrepancy($sourceItem, $stop);
-                    $this->commercialOperationService->reduceCommercialObligation(
-                        $sourceItem->routeStop->order_id,
-                        $productId,
-                        $allocatedQuantity
-                    );
-                }
-
-                OperationItem::create([
-                    'operation_id' => $destinationOrder->id,
-                    'product_id' => $productId,
-                    'product_name' => $product->name,
-                    'measurement_unit_code' => $product->stockMeasurementUnit->code,
-                    'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
-                    'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
-                    'quantity' => $quantity,
-                    'price' => $product->price,
-                    'subtotal' => MoneyMath::multiplyQuantityByPrice($quantity, $product->price),
-                    'tax_amount' => 0,
-                    'discount_amount' => 0,
-                ]);
             }
 
             $this->commercialOperationService->recalculateTotals($destinationOrder);
@@ -358,6 +384,21 @@ class DriverExecutionService
                 'order.payments',
             ]);
         });
+    }
+
+    /**
+     * @param  array{stock_source_product_id: string|null, stock_consumption_quantity: string|null, stock_source_measurement_unit_code: string|null, stock_source_measurement_unit_symbol: string|null}  $snapshot
+     */
+    private function destinationItemForPhysicalSnapshot(RouteStop $stop, string $productId, array $snapshot): ?RouteStopItem
+    {
+        $query = RouteStopItem::where('route_stop_id', $stop->id)
+            ->where('product_id', $productId);
+
+        foreach ($snapshot as $column => $value) {
+            $value === null ? $query->whereNull($column) : $query->where($column, $value);
+        }
+
+        return $query->lockForUpdate()->first();
     }
 
     private function updateSourceDiscrepancy(RouteStopItem $sourceItem, RouteStop $destinationStop): void

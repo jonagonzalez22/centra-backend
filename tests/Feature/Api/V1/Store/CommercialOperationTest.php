@@ -609,7 +609,7 @@ describe('POST /api/v1/store/operations - Stock', function () {
         expect($this->product->stock_reserved)->toBe('2.0000');
     });
 
-    test('insufficient stock returns 422 with items index', function () {
+    test('insufficient aggregated stock returns 422 with an items error', function () {
         $this->product->stock_reserved = 5;
         $this->product->save();
 
@@ -623,7 +623,10 @@ describe('POST /api/v1/store/operations - Stock', function () {
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['items.0.quantity']);
+            ->assertJsonValidationErrors(['items']);
+
+        expect($response->json('errors.items.0'))
+            ->toContain('Stock insuficiente para los productos que consumen');
     });
 });
 

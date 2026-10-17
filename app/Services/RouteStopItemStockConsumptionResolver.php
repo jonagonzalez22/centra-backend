@@ -87,6 +87,44 @@ class RouteStopItemStockConsumptionResolver
     }
 
     /**
+     * Returns the immutable physical snapshot stored on a route item. Legacy
+     * rows deliberately retain the existing current-product compatibility
+     * fallback, because they predate route-item snapshots.
+     *
+     * @return array{stock_source_product_id: string|null, stock_consumption_quantity: string|null, stock_source_measurement_unit_code: string|null, stock_source_measurement_unit_symbol: string|null}
+     */
+    public function snapshotForRouteStopItem(RouteStopItem $item): array
+    {
+        if ($item->stock_source_product_id !== null || $item->stock_consumption_quantity !== null) {
+            if ($item->stock_source_product_id === null || $item->stock_consumption_quantity === null) {
+                throw new \LogicException('El snapshot de consumo físico del item de ruta está incompleto.');
+            }
+
+            if ($item->stock_source_measurement_unit_code === null || $item->stock_source_measurement_unit_symbol === null) {
+                throw new \LogicException('El snapshot de unidad física del item de ruta está incompleto.');
+            }
+
+            return [
+                'stock_source_product_id' => $item->stock_source_product_id,
+                'stock_consumption_quantity' => QuantityMath::normalize($item->stock_consumption_quantity),
+                'stock_source_measurement_unit_code' => $item->stock_source_measurement_unit_code,
+                'stock_source_measurement_unit_symbol' => $item->stock_source_measurement_unit_symbol,
+            ];
+        }
+
+        $product = $item->relationLoaded('product') ? $item->product : $item->product()->first();
+        if (! $product) {
+            throw new \LogicException('El producto comercial del item de ruta no existe.');
+        }
+
+        $consumption = $this->productResolver->resolve($product);
+
+        return $consumption->isAssociated()
+            ? $this->associatedSnapshot($consumption->stockProduct, $consumption->consumptionFactor)
+            : $this->normalSnapshot();
+    }
+
+    /**
      * @return array{stock_source_product_id: string|null, stock_consumption_quantity: string|null, stock_source_measurement_unit_code: string|null, stock_source_measurement_unit_symbol: string|null}
      */
     public function normalSnapshot(): array

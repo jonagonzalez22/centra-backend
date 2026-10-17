@@ -1,16 +1,21 @@
 <?php
 
+use App\Models\Customer;
+use App\Models\CustomerAddress;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
+use App\Models\Locality;
 use App\Models\OperationItem;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\Province;
 use App\Models\RouteLoadAdjustment;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
+use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -59,9 +64,46 @@ beforeEach(function () {
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────
-// NOTE: createDriver(), createVehicle(), createCustomerWithAddress(), and
-// createEligibleOrder() are already defined in RouteManagementTest.php.
-// They are available globally in Pest.
+
+function routeExecutionCreateDriver(Store $store): User
+{
+    $driver = User::factory()->create(['store_id' => $store->id]);
+    $driver->assignRole('STORE_DRIVER');
+
+    return $driver;
+}
+
+function routeExecutionCreateVehicle(Store $store): Vehicle
+{
+    return Vehicle::factory()->forStore($store)->create(['is_active' => true]);
+}
+
+function routeExecutionCreateCustomerWithAddress(Store $store): Customer
+{
+    $province = Province::factory()->create();
+    $locality = Locality::factory()->for($province)->create();
+    $customer = Customer::factory()->create(['store_id' => $store->id]);
+
+    CustomerAddress::factory()->forCustomer($customer)->for($locality)->asMain()->create([
+        'latitude' => -34.6037,
+        'longitude' => -58.3816,
+    ]);
+
+    return $customer;
+}
+
+function routeExecutionCreateEligibleOrder(Store $store, Customer $customer, array $attrs = []): \App\Models\CommercialOperation
+{
+    return \App\Models\CommercialOperation::factory()
+        ->forStore($store)
+        ->for($store->users()->first() ?? User::factory()->create(['store_id' => $store->id]), 'user')
+        ->forCustomer($customer)
+        ->order()
+        ->create(array_merge([
+            'status' => 'confirmed',
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+        ], $attrs));
+}
 
 /**
  * Create a planned route with one stop and assigned items.
@@ -69,15 +111,15 @@ beforeEach(function () {
  */
 function createPlannedRouteWithItems(Store $store, ?User $driver = null): array
 {
-    $vehicle = createVehicle($store);
-    $driver = $driver ?? createDriver($store);
-    $customer = createCustomerWithAddress($store);
+    $vehicle = routeExecutionCreateVehicle($store);
+    $driver = $driver ?? routeExecutionCreateDriver($store);
+    $customer = routeExecutionCreateCustomerWithAddress($store);
     $product = Product::factory()->create(['store_id' => $store->id]);
 
     $date = now()->addDay()->format('Y-m-d');
     $store->update(['latitude' => -34.6037, 'longitude' => -58.3816]);
 
-    $order = createEligibleOrder($store, $customer, ['requested_delivery_date' => $date]);
+    $order = routeExecutionCreateEligibleOrder($store, $customer, ['requested_delivery_date' => $date]);
     OperationItem::factory()->create([
         'operation_id' => $order->id,
         'product_id' => $product->id,
@@ -114,14 +156,14 @@ function createPlannedRouteWithItems(Store $store, ?User $driver = null): array
 // ── Item Assignment Tests ────────────────────────────────────────────
 
 test('assigns items to a stop in draft route', function () {
-    $vehicle = createVehicle($this->store);
-    $driver = createDriver($this->store);
-    $customer = createCustomerWithAddress($this->store);
+    $vehicle = routeExecutionCreateVehicle($this->store);
+    $driver = routeExecutionCreateDriver($this->store);
+    $customer = routeExecutionCreateCustomerWithAddress($this->store);
     $product = Product::factory()->create(['store_id' => $this->store->id]);
 
     $date = now()->addDay()->format('Y-m-d');
 
-    $order = createEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
+    $order = routeExecutionCreateEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
     OperationItem::factory()->create([
         'operation_id' => $order->id,
         'product_id' => $product->id,
@@ -165,14 +207,14 @@ test('assigns items to a stop in draft route', function () {
 });
 
 test('rejects item assignment if route is loaded', function () {
-    $vehicle = createVehicle($this->store);
-    $driver = createDriver($this->store);
-    $customer = createCustomerWithAddress($this->store);
+    $vehicle = routeExecutionCreateVehicle($this->store);
+    $driver = routeExecutionCreateDriver($this->store);
+    $customer = routeExecutionCreateCustomerWithAddress($this->store);
     $product = Product::factory()->create(['store_id' => $this->store->id]);
 
     $date = now()->addDay()->format('Y-m-d');
 
-    $order = createEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
+    $order = routeExecutionCreateEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
     OperationItem::factory()->create([
         'operation_id' => $order->id,
         'product_id' => $product->id,
@@ -205,14 +247,14 @@ test('rejects item assignment if route is loaded', function () {
 });
 
 test('rejects item assignment if quantity exceeds order item quantity', function () {
-    $vehicle = createVehicle($this->store);
-    $driver = createDriver($this->store);
-    $customer = createCustomerWithAddress($this->store);
+    $vehicle = routeExecutionCreateVehicle($this->store);
+    $driver = routeExecutionCreateDriver($this->store);
+    $customer = routeExecutionCreateCustomerWithAddress($this->store);
     $product = Product::factory()->create(['store_id' => $this->store->id]);
 
     $date = now()->addDay()->format('Y-m-d');
 
-    $order = createEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
+    $order = routeExecutionCreateEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
     OperationItem::factory()->create([
         'operation_id' => $order->id,
         'product_id' => $product->id,
@@ -245,14 +287,14 @@ test('rejects item assignment if quantity exceeds order item quantity', function
 });
 
 test('updates existing item quantity on reassignment', function () {
-    $vehicle = createVehicle($this->store);
-    $driver = createDriver($this->store);
-    $customer = createCustomerWithAddress($this->store);
+    $vehicle = routeExecutionCreateVehicle($this->store);
+    $driver = routeExecutionCreateDriver($this->store);
+    $customer = routeExecutionCreateCustomerWithAddress($this->store);
     $product = Product::factory()->create(['store_id' => $this->store->id]);
 
     $date = now()->addDay()->format('Y-m-d');
 
-    $order = createEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
+    $order = routeExecutionCreateEligibleOrder($this->store, $customer, ['requested_delivery_date' => $date]);
     OperationItem::factory()->create([
         'operation_id' => $order->id,
         'product_id' => $product->id,
@@ -516,17 +558,17 @@ test('cannot assign items to route from another store', function () {
     $otherPlan = Plan::factory()->create();
     $otherStore->update(['plan_id' => $otherPlan->id]);
 
-    $otherCustomer = createCustomerWithAddress($otherStore);
+    $otherCustomer = routeExecutionCreateCustomerWithAddress($otherStore);
     $product = Product::factory()->create(['store_id' => $this->store->id]);
 
     $date = now()->addDay()->format('Y-m-d');
 
-    $otherOrder = createEligibleOrder($otherStore, $otherCustomer, ['requested_delivery_date' => $date]);
+    $otherOrder = routeExecutionCreateEligibleOrder($otherStore, $otherCustomer, ['requested_delivery_date' => $date]);
 
     $otherRoute = DeliveryRoute::create([
         'store_id' => $otherStore->id,
-        'vehicle_id' => createVehicle($otherStore)->id,
-        'driver_id' => createDriver($otherStore)->id,
+        'vehicle_id' => routeExecutionCreateVehicle($otherStore)->id,
+        'driver_id' => routeExecutionCreateDriver($otherStore)->id,
         'operational_date' => $date,
         'status' => 'draft',
     ]);
@@ -597,8 +639,8 @@ test('delivery_route has loaded_by and dispatched_by relationships', function ()
 });
 
 test('scope_active includes loaded and dispatched statuses', function () {
-    $vehicle = createVehicle($this->store);
-    $driver = createDriver($this->store);
+    $vehicle = routeExecutionCreateVehicle($this->store);
+    $driver = routeExecutionCreateDriver($this->store);
 
     DeliveryRoute::create([
         'store_id' => $this->store->id,
@@ -631,8 +673,8 @@ test('scope_active includes loaded and dispatched statuses', function () {
 });
 
 test('is_active returns true for loaded and dispatched', function () {
-    $vehicle = createVehicle($this->store);
-    $driver = createDriver($this->store);
+    $vehicle = routeExecutionCreateVehicle($this->store);
+    $driver = routeExecutionCreateDriver($this->store);
 
     $loaded = DeliveryRoute::create([
         'store_id' => $this->store->id,

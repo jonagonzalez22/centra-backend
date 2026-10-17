@@ -24,13 +24,18 @@ class CommercialOperationService
 
     /**
      * Reduce quantities that are no longer commercially owed while preserving
-     * item price history and existing payments.
-     */
-    /**
+     * item price history and existing payments. A physical snapshot restricts
+     * the reduction to the historical line that released the merchandise.
+     *
+     * @param  array{stock_source_product_id: string|null, stock_consumption_quantity: string|null}|null  $physicalSnapshot
      * @return array<int, array{item: OperationItem, quantity: string}>
      */
-    public function reduceCommercialObligation(string $orderId, string $productId, int|string $quantity): array
-    {
+    public function reduceCommercialObligation(
+        string $orderId,
+        string $productId,
+        int|string $quantity,
+        ?array $physicalSnapshot = null,
+    ): array {
         $quantity = QuantityMath::normalize($quantity);
 
         if (! QuantityMath::isPositive($quantity)) {
@@ -45,12 +50,20 @@ class CommercialOperationService
             ]);
         }
 
-        $items = $order->items()
+        $itemsQuery = $order->items()
             ->where('product_id', $productId)
             ->orderByDesc('created_at')
-            ->orderByDesc('id')
-            ->lockForUpdate()
-            ->get();
+            ->orderByDesc('id');
+
+        if ($physicalSnapshot !== null) {
+            foreach ($physicalSnapshot as $column => $value) {
+                $value === null
+                    ? $itemsQuery->whereNull($column)
+                    : $itemsQuery->where($column, $value);
+            }
+        }
+
+        $items = $itemsQuery->lockForUpdate()->get();
 
         $remaining = $quantity;
         $reductions = [];
