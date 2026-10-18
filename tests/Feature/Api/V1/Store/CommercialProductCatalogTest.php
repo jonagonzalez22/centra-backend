@@ -37,10 +37,11 @@ describe('GET /api/v1/store/operations/products/search', function () {
             'name' => 'Ariel granel',
             'sku' => 'ARIEL-GR',
             'stock' => '0.0000',
+            'is_sellable' => false,
         ]);
 
         test()->actingAs($this->user, 'sanctum')
-            ->getJson('/api/v1/store/products/search?q=Ariel')
+            ->getJson('/api/v1/store/products/search?q=Ariel&for_stock_source=1')
             ->assertOk()
             ->assertJsonPath('data.0.id', $product->id)
             ->assertJsonPath('data.0.stock_source_product_id', null)
@@ -80,6 +81,11 @@ describe('GET /api/v1/store/operations/products/search', function () {
             'barcode' => '7790000000003',
             'is_active' => false,
         ]);
+        Product::factory()->forStore($this->store)->create([
+            'name' => 'Producto no vendible',
+            'barcode' => '7790000000005',
+            'is_sellable' => false,
+        ]);
         $otherStore = Store::factory()->create(['plan_id' => $this->posOnlyPlan->id]);
         Product::factory()->forStore($otherStore)->create([
             'name' => 'Producto ajeno',
@@ -92,6 +98,32 @@ describe('GET /api/v1/store/operations/products/search', function () {
             ->assertJsonPath('data.0.name', 'Producto activo');
         commercialCatalog($this->user, ['barcode' => '7790000000003'])->assertOk()->assertJsonCount(0, 'data');
         commercialCatalog($this->user, ['barcode' => '7790000000004'])->assertOk()->assertJsonCount(0, 'data');
+        commercialCatalog($this->user, ['barcode' => '7790000000005'])->assertOk()->assertJsonCount(0, 'data');
+    });
+
+    test('excludes a non-sellable source while keeping its sellable child in the commercial catalog', function () {
+        $source = Product::factory()->forStore($this->store)->create([
+            'name' => 'Jaula de cloro 500 L',
+            'sku' => 'CLORO-SOURCE',
+            'stock' => '20.0000',
+            'is_sellable' => false,
+        ]);
+        $child = Product::factory()->forStore($this->store)->create([
+            'name' => 'Bidón de cloro 5 L',
+            'sku' => 'CLORO-5L',
+            'stock' => '0.0000',
+            'stock_reserved' => '0.0000',
+            'stock_min' => '0.0000',
+            'stock_source_product_id' => $source->id,
+            'stock_consumption_quantity' => '5.0000',
+            'is_sellable' => true,
+        ]);
+
+        commercialCatalog($this->user, ['q' => 'Jaula'])->assertOk()->assertJsonCount(0, 'data');
+        commercialCatalog($this->user, ['q' => 'Bidón'])
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $child->id);
+
     });
 
     test('limits autocomplete results to ten and validates one search mode', function () {

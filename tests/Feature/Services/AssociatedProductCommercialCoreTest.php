@@ -79,6 +79,35 @@ test('a sale keeps the child commercial line and aggregates physical consumption
         ->and($sourceLine->stock_consumption_quantity)->toBeNull();
 });
 
+test('a sellable child can consume an active non-sellable source', function () {
+    $source = associatedCoreProduct($this, [
+        'stock' => '20.0000',
+        'is_sellable' => false,
+    ]);
+    $child = associatedCoreChild($this, $source, '5.0000', [
+        'is_sellable' => true,
+    ]);
+
+    createAssociatedCoreOperation($this, 'sale', [
+        ['product_id' => $child->id, 'quantity' => '2.0000', 'price' => '10.00'],
+    ]);
+
+    expect($source->fresh()->stock)->toBe('10.0000')
+        ->and($child->fresh()->stock)->toBe('0.0000');
+});
+
+test('rejects a non-sellable child for new commercial operations', function () {
+    $source = associatedCoreProduct($this, ['stock' => '20.0000']);
+    $child = associatedCoreChild($this, $source, '5.0000', ['is_sellable' => false]);
+
+    expect(fn () => createAssociatedCoreOperation($this, 'sale', [
+        ['product_id' => $child->id, 'quantity' => '1.0000', 'price' => '10.00'],
+    ]))->toThrow(ValidationException::class);
+
+    expect($source->fresh()->stock)->toBe('20.0000')
+        ->and($source->fresh()->stock_reserved)->toBe('0.0000');
+});
+
 test('order cancellation releases a normal product reservation without restoring physical stock', function () {
     $product = associatedCoreProduct($this, ['stock' => '3.0000']);
 

@@ -17,6 +17,7 @@ class ProductSearchRequest extends FormRequest
     {
         return [
             'q' => ['required', 'string', 'min:2', 'max:255'],
+            'for_stock_source' => ['nullable', 'boolean'],
         ];
     }
 

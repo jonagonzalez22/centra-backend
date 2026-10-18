@@ -59,6 +59,76 @@ test('measurement units endpoint requires authentication and returns only active
         ->toBe(['kg', 'l', 'unit']);
 });
 
+test('products index filters paginated products by stock type', function () {
+    $source = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'name' => 'Producto propio',
+    ]);
+    $child = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'name' => 'Producto compartido',
+        'stock' => '0.0000',
+        'stock_reserved' => '0.0000',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '1.0000',
+    ]);
+
+    $all = $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?per_page=50')
+        ->assertOk();
+    expect(collect($all->json('data.items'))->pluck('id'))
+        ->toContain($source->id, $child->id);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?stock_type=own&per_page=50')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $source->id);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?stock_type=shared&per_page=50')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $child->id);
+});
+
+test('products index rejects an unknown stock type filter', function () {
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?stock_type=invalid')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['stock_type']);
+});
+
+test('products index filters paginated products by sellable status', function () {
+    $sellable = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'is_sellable' => true,
+    ]);
+    $notSellable = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'is_sellable' => false,
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?is_sellable=true&per_page=50')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.id', $sellable->id)
+        ->assertJsonMissing(['id' => $notSellable->id]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?is_sellable=false&per_page=50')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.id', $notSellable->id)
+        ->assertJsonMissing(['id' => $sellable->id]);
+});
+
+test('products index rejects an invalid sellable filter', function () {
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?is_sellable=invalid')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['is_sellable']);
+});
+
 test('a product persists an explicit active measurement unit and decimal sale step', function () {
     $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
 
@@ -78,6 +148,7 @@ test('a product persists an explicit active measurement unit and decimal sale st
         ->assertJsonPath('data.stock_measurement_unit.code', 'kg')
         ->assertJsonPath('data.stock_measurement_unit.symbol', 'kg')
         ->assertJsonPath('data.sale_quantity_step', '0.2500')
+        ->assertJsonPath('data.is_sellable', true)
         ->assertJsonPath('data.stock', '10.0000');
 
     $product = Product::query()->where('sku', 'CEM-KG-001')->firstOrFail();

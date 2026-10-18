@@ -175,6 +175,15 @@ class OrderItemEditService
                 return $order->fresh();
             }
 
+            foreach ($changes as $productId => $change) {
+                if (QuantityMath::compare($change['new_quantity'], $change['previous_quantity']) > 0
+                    && (! $products[$productId]->is_active || ! $products[$productId]->is_sellable)) {
+                    throw ValidationException::withMessages([
+                        'items' => ["{$products[$productId]->name} no está disponible para aumentar o agregar al pedido."],
+                    ]);
+                }
+            }
+
             $previousDate = $requestedDeliveryDate === null
                 ? $order->requested_delivery_date?->format('Y-m-d')
                 : $this->changeDeliveryDate($order, $requestedDeliveryDate, $reason);

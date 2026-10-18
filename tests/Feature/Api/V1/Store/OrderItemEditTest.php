@@ -142,6 +142,21 @@ function orderPayloadItem(Product $product, int $quantity): array
 }
 
 describe('PUT /api/v1/store/orders/{order} — item editing', function () {
+    test('allows reducing a historical non-sellable item but blocks increasing it', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        editableOrderLine($order, $this->productA, 10);
+        $this->productA->update(['is_sellable' => false]);
+
+        updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 9)])
+            ->assertOk();
+
+        updateEditableOrder($this->user, $order->fresh(), [orderPayloadItem($this->productA, 10)])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['items']);
+
+        expect((int) OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(9);
+    });
+
     test('changes delivery date without changing stock, reservations or items', function (string $status) {
         $order = editableOrder($this->store, $this->user, $this->customer, ['status' => $status]);
         editableOrderLine($order, $this->productA, 10);

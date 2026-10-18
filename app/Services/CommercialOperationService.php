@@ -413,6 +413,12 @@ class CommercialOperationService
                 ]);
             }
 
+            if (! $product->is_active || ! $product->is_sellable) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.product_id" => 'El producto no está disponible para nuevas ventas o pedidos.',
+                ]);
+            }
+
             if ($product->stock_source_product_id !== null) {
                 $source = $lockedProducts->get($product->stock_source_product_id);
                 if (! $source) {

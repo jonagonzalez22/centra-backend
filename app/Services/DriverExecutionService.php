@@ -214,6 +214,12 @@ class DriverExecutionService
                 throw $this->validationError('Uno o más productos no pertenecen a la tienda de la ruta.');
             }
 
+            foreach ($products as $product) {
+                if (! $product->is_active || ! $product->is_sellable) {
+                    throw $this->validationError('El producto '.$product->name.' no está disponible para una nueva Venta Extra.');
+                }
+            }
+
             $sourceItems = RouteStopItem::whereIn('product_id', $productIds)
                 ->whereHas('routeStop', function ($query) use ($route) {
                     $query->where('route_id', $route->id)

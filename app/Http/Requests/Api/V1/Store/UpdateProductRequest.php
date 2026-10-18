@@ -61,6 +61,7 @@ class UpdateProductRequest extends FormRequest
             'stock_source_product_id' => ['nullable', 'uuid'],
             'stock_consumption_quantity' => ['nullable', DecimalQuantity::positive()],
             'is_active' => ['sometimes', 'boolean'],
+            'is_sellable' => ['sometimes', 'boolean'],
         ];
     }
 

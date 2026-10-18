@@ -1042,6 +1042,30 @@ test('extra sale definitively transfers the commercial obligation without changi
         ->and($product->fresh()->stock_reserved)->toBe($reservedBefore);
 });
 
+test('extra sale rejects a product marked as not sellable without changing the historical route', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'stock' => 10,
+        'stock_reserved' => 0,
+    ]);
+    $destinationProduct = Product::factory()->forStore($this->store)->create(['stock' => 10, 'stock_reserved' => 0]);
+    $sourceOrder = routeInventoryCreateOrder($this, [['product' => $product, 'quantity' => 2]]);
+    $destinationOrder = routeInventoryCreateOrder($this, [['product' => $destinationProduct, 'quantity' => 1]]);
+    $route = routeInventoryCreateRoute($this, 'dispatched');
+    [, $sourceItem] = routeInventoryAddStop($route, $sourceOrder, $product, 2, 0, 'failed');
+    [$destinationStop] = routeInventoryAddStop($route, $destinationOrder, $destinationProduct, 1, 0, 'pending');
+    $product->update(['is_sellable' => false]);
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$destinationStop->id}/extra-sales", [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.error.0', "El producto {$product->name} no está disponible para una nueva Venta Extra.");
+
+    expect($destinationOrder->fresh()->items()->where('product_id', $product->id)->exists())->toBeFalse()
+        ->and($sourceItem->fresh()->quantity_released_for_extra_sale)->toBe('2.0000');
+});
+
 test('extra sale preserves the associated product and its physical snapshot', function () {
     $liter = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
     $unit = MeasurementUnit::query()->where('code', 'unit')->firstOrFail();

@@ -14,6 +14,7 @@ use App\Support\QuantityMath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
@@ -33,6 +34,8 @@ class ProductController extends Controller
      *   @OA\Parameter(name="sku", in="query", @OA\Schema(type="string"), description="Filtrar por SKU (búsqueda parcial)"),
      *   @OA\Parameter(name="barcode", in="query", @OA\Schema(type="string"), description="Filtrar por código de barras"),
      *   @OA\Parameter(name="is_active", in="query", @OA\Schema(type="boolean"), description="Filtrar por estado activo"),
+     *   @OA\Parameter(name="is_sellable", in="query", @OA\Schema(type="boolean"), description="Filtrar por disponibilidad para venta"),
+     *   @OA\Parameter(name="stock_type", in="query", @OA\Schema(type="string", enum={"own", "shared"}), description="Filtrar por tipo de stock"),
      *   @OA\Parameter(name="sort_by", in="query", @OA\Schema(type="string", enum={"name", "sku", "price", "stock", "created_at"}), description="Campo por el cual ordenar"),
      *   @OA\Parameter(name="sort_dir", in="query", @OA\Schema(type="string", enum={"asc", "desc"}), description="Dirección del ordenamiento"),
      *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
@@ -62,6 +65,11 @@ class ProductController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'stock_type' => ['nullable', 'string', Rule::in(['own', 'shared'])],
+            'is_sellable' => ['nullable', Rule::in(['true', 'false', '1', '0'])],
+        ]);
+
         $storeId = $request->user()->store_id;
 
         $query = Product::forStore($storeId)
@@ -80,6 +88,15 @@ class ProductController extends Controller
             })
             ->when($request->has('is_active'), function ($query) use ($request) {
                 $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
+            })
+            ->when($request->has('is_sellable'), function ($query) use ($request) {
+                $query->where('is_sellable', filter_var($request->is_sellable, FILTER_VALIDATE_BOOLEAN));
+            })
+            ->when($request->stock_type === 'own', function ($query) {
+                $query->whereNull('stock_source_product_id');
+            })
+            ->when($request->stock_type === 'shared', function ($query) {
+                $query->whereNotNull('stock_source_product_id');
             });
 
         $sortBy = $request->get('sort_by', 'created_at');
@@ -134,7 +151,8 @@ class ProductController extends Controller
      *       @OA\Property(property="stock_min", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="10.0000", nullable=true),
      *       @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid", nullable=true),
      *       @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="1.0000", nullable=true),
-     *       @OA\Property(property="is_active", type="boolean", example=true, nullable=true)
+     *       @OA\Property(property="is_active", type="boolean", example=true, nullable=true),
+     *       @OA\Property(property="is_sellable", type="boolean", example=true, nullable=true)
      *     )
      *   ),
      *
@@ -191,6 +209,7 @@ class ProductController extends Controller
                 'stock_consumption_quantity' => $associated ? ($validated['stock_consumption_quantity'] ?? null) : null,
                 'sale_quantity_step' => $validated['sale_quantity_step'] ?? '1.0000',
                 'is_active' => $request->boolean('is_active', true),
+                'is_sellable' => $request->boolean('is_sellable', true),
             ]);
             try {
                 $this->associationValidator->validate($product, $source, $product->stock_consumption_quantity);

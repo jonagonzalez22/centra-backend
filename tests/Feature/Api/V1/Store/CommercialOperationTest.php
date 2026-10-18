@@ -628,6 +628,34 @@ describe('POST /api/v1/store/operations - Stock', function () {
         expect($response->json('errors.items.0'))
             ->toContain('Stock insuficiente para los productos que consumen');
     });
+
+    test('rejects direct sales and orders for a non-sellable product', function () {
+        $this->product->update(['is_sellable' => false]);
+
+        createOperation([
+            'type' => 'sale',
+            'customer_id' => $this->customer->id,
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.product_id']);
+
+        createOperation([
+            'type' => 'order',
+            'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [
+                ['product_id' => $this->product->id, 'quantity' => 1, 'price' => 100.00],
+            ],
+            'payments' => [],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['items.0.product_id']);
+
+        expect($this->product->fresh()->stock)->toBe('10.0000')
+            ->and($this->product->fresh()->stock_reserved)->toBe('0.0000');
+    });
 });
 
 describe('POST /api/v1/store/operations - Business Rules', function () {

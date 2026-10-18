@@ -21,6 +21,7 @@ class ProductSearchController extends Controller
      *   security={{"sanctum":{}}},
      *
      *   @OA\Parameter(name="q", in="query", required=true, @OA\Schema(type="string", minLength=2, maxLength=255), description="Término de búsqueda (mínimo 2 caracteres)"),
+     *   @OA\Parameter(name="for_stock_source", in="query", @OA\Schema(type="boolean"), description="Incluye fuentes de stock activas, incluso si no están disponibles para venta"),
      *
      *   @OA\Response(
      *     response=200,
@@ -53,7 +54,9 @@ class ProductSearchController extends Controller
         $storeId = $request->user()->store_id;
         $q = $request->validated('q');
 
-        $products = $catalog->search($storeId, $q);
+        $products = $request->boolean('for_stock_source')
+            ? $catalog->searchStockSources($storeId, $q)
+            : $catalog->search($storeId, $q);
 
         return response()->json([
             'status' => 'success',

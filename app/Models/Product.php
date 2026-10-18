@@ -38,6 +38,7 @@ class Product extends Model
         'sale_quantity_step',
         'parent_product_id',
         'is_active',
+        'is_sellable',
     ];
 
     protected $casts = [
@@ -49,6 +50,7 @@ class Product extends Model
         'sale_quantity_step' => 'decimal:4',
         'stock_consumption_quantity' => 'decimal:4',
         'is_active' => 'boolean',
+        'is_sellable' => 'boolean',
     ];
 
     protected static function booted(): void
