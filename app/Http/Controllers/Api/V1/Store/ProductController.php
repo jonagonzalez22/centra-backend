@@ -68,17 +68,24 @@ class ProductController extends Controller
         $request->validate([
             'stock_type' => ['nullable', 'string', Rule::in(['own', 'shared'])],
             'is_sellable' => ['nullable', Rule::in(['true', 'false', '1', '0'])],
+            'brand_id' => ['nullable', 'uuid'],
         ]);
 
         $storeId = $request->user()->store_id;
 
         $query = Product::forStore($storeId)
-            ->with(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit'])
+            ->with(['category', 'brand', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit'])
             ->when($request->filled('category_id'), function ($query) use ($request) {
                 $query->where('category_id', $request->category_id);
             })
+            ->when($request->filled('brand_id'), function ($query) use ($request) {
+                $query->where('brand_id', $request->brand_id);
+            })
             ->when($request->filled('name'), function ($query) use ($request) {
-                $query->where('name', 'like', '%'.$request->name.'%');
+                $query->where(function ($query) use ($request) {
+                    $query->where('name', 'like', '%'.$request->name.'%')
+                        ->orWhereHas('brand', fn ($brands) => $brands->where('name', 'like', '%'.$request->name.'%'));
+                });
             })
             ->when($request->filled('sku'), function ($query) use ($request) {
                 $query->where('sku', 'like', '%'.$request->sku.'%');
@@ -197,6 +204,7 @@ class ProductController extends Controller
                 'name' => $validated['name'],
                 'sku' => $validated['sku'],
                 'category_id' => $validated['category_id'],
+                'brand_id' => $validated['brand_id'] ?? null,
                 'barcode' => $validated['barcode'] ?? null,
                 'description' => $validated['description'] ?? null,
                 'price' => $validated['price'],
@@ -218,7 +226,7 @@ class ProductController extends Controller
             }
             $product->save();
 
-            $product->load(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
+            $product->load(['category', 'brand', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
 
             return response()->json([
                 'status' => 'success', 'message' => 'Producto creado exitosamente.',
@@ -258,7 +266,7 @@ class ProductController extends Controller
     {
         $storeId = $request->user()->store_id;
 
-        $product = Product::forStore($storeId)->with(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit'])->find($id);
+        $product = Product::forStore($storeId)->with(['category', 'brand', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit'])->find($id);
 
         if (! $product) {
             return response()->json([
@@ -452,7 +460,7 @@ class ProductController extends Controller
             $validated['stock_source_product_id'] = $nextSourceId;
             $validated['stock_consumption_quantity'] = $nextFactor;
             $product->update($validated);
-            $product->load(['category', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
+            $product->load(['category', 'brand', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
 
             return response()->json([
                 'status' => 'success',

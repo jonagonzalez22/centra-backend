@@ -44,6 +44,7 @@ class StoreProductRequest extends FormRequest
                     return $query->where('store_id', $storeId);
                 }),
             ],
+            'brand_id' => ['nullable', 'uuid', Rule::exists('brands', 'id')->where(fn ($query) => $query->where('store_id', $storeId))],
             'barcode' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],

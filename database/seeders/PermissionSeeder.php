@@ -58,6 +58,12 @@ class PermissionSeeder extends Seeder
             'categories.edit',
             'categories.delete',
 
+            // Module: Brands
+            'brands.view',
+            'brands.create',
+            'brands.edit',
+            'brands.delete',
+
             // Module: Commercial Groups
             'commercial_groups.view',
             'commercial_groups.create',

@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\Driver\DriverExtraSaleController;
 use App\Http\Controllers\Api\V1\Driver\DriverRouteController;
 use App\Http\Controllers\Api\V1\Driver\DriverStopController;
 use App\Http\Controllers\Api\V1\GeocodingController;
+use App\Http\Controllers\Api\V1\Store\BrandController;
 use App\Http\Controllers\Api\V1\Store\CashSessionController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
 use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
@@ -148,6 +149,11 @@ Route::prefix('v1')->group(function () {
             Route::post('categories', [CategoryController::class, 'store'])->name('store.categories.store');
             Route::put('categories/{category}', [CategoryController::class, 'update'])->name('store.categories.update');
             Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->name('store.categories.destroy');
+            Route::get('brands', [BrandController::class, 'index'])->middleware('permission:brands.view')->name('store.brands.index');
+            Route::get('brands/{brand}', [BrandController::class, 'show'])->middleware('permission:brands.view')->name('store.brands.show');
+            Route::post('brands', [BrandController::class, 'store'])->middleware('permission:brands.create')->name('store.brands.store');
+            Route::put('brands/{brand}', [BrandController::class, 'update'])->middleware('permission:brands.edit')->name('store.brands.update');
+            Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
 
             Route::get('inventory/movements', [InventoryController::class, 'index'])->name('store.inventory.movements');
             Route::post('inventory/adjust', [InventoryController::class, 'adjust'])->name('store.inventory.adjust');

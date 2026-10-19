@@ -23,6 +23,7 @@ class Product extends Model
     protected $fillable = [
         'store_id',
         'category_id',
+        'brand_id',
         'name',
         'sku',
         'barcode',
@@ -85,6 +86,11 @@ class Product extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
     }
 
     public function stockMeasurementUnit(): BelongsTo

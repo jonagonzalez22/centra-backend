@@ -77,6 +77,7 @@ class ProductResource extends JsonResource
             'is_sellable' => $this->is_sellable,
             'parent_product_id' => $this->parent_product_id,
             'category' => ProductCategoryResource::make($this->whenLoaded('category')),
+            'brand' => BrandResource::make($this->whenLoaded('brand')),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
         ];
