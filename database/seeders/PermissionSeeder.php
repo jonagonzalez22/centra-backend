@@ -63,6 +63,10 @@ class PermissionSeeder extends Seeder
             'brands.create',
             'brands.edit',
             'brands.delete',
+            'suppliers.view',
+            'suppliers.create',
+            'suppliers.edit',
+            'suppliers.delete',
 
             // Module: Commercial Groups
             'commercial_groups.view',
