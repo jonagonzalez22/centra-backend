@@ -108,6 +108,11 @@ class Product extends Model
         return $this->hasMany(Product::class, 'stock_source_product_id');
     }
 
+    public function supplierProducts(): HasMany
+    {
+        return $this->hasMany(SupplierProduct::class);
+    }
+
     public function parentProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'parent_product_id');

@@ -42,6 +42,7 @@ use App\Http\Controllers\Api\V1\Store\SaleHistoryController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
 use App\Http\Controllers\Api\V1\Store\StoreUserPermissionController;
 use App\Http\Controllers\Api\V1\Store\SupplierController;
+use App\Http\Controllers\Api\V1\Store\SupplierProductController;
 use App\Http\Controllers\Api\V1\Store\VehicleCatalogController;
 use App\Http\Controllers\Api\V1\Store\VehicleController;
 use Illuminate\Support\Facades\Route;
@@ -157,6 +158,10 @@ Route::prefix('v1')->group(function () {
             Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
             Route::middleware('feature:purchases')->group(function () {
                 Route::get('suppliers', [SupplierController::class, 'index'])->middleware('permission:suppliers.view');
+                Route::get('suppliers/{supplier}/products', [SupplierProductController::class, 'index'])->middleware('permission:suppliers.view');
+                Route::post('suppliers/{supplier}/products', [SupplierProductController::class, 'store'])->middleware('permission:suppliers.edit');
+                Route::put('suppliers/{supplier}/products/{supplierProduct}', [SupplierProductController::class, 'update'])->middleware('permission:suppliers.edit');
+                Route::delete('suppliers/{supplier}/products/{supplierProduct}', [SupplierProductController::class, 'destroy'])->middleware('permission:suppliers.edit');
                 Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->middleware('permission:suppliers.view');
                 Route::post('suppliers', [SupplierController::class, 'store'])->middleware('permission:suppliers.create');
                 Route::put('suppliers/{supplier}', [SupplierController::class, 'update'])->middleware('permission:suppliers.edit');
