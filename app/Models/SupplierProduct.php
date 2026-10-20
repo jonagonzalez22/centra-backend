@@ -23,7 +23,15 @@ class SupplierProduct extends Model
         'product_id',
         'supplier_code',
         'supplier_product_name',
+        'is_preferred',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_preferred' => 'boolean',
+        ];
+    }
 
     protected static function booted(): void
     {

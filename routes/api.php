@@ -160,6 +160,8 @@ Route::prefix('v1')->group(function () {
                 Route::get('suppliers', [SupplierController::class, 'index'])->middleware('permission:suppliers.view');
                 Route::get('suppliers/{supplier}/products', [SupplierProductController::class, 'index'])->middleware('permission:suppliers.view');
                 Route::post('suppliers/{supplier}/products', [SupplierProductController::class, 'store'])->middleware('permission:suppliers.edit');
+                Route::get('suppliers/{supplier}/products/candidates', [SupplierProductController::class, 'candidates'])->middleware('permission:suppliers.view');
+                Route::post('suppliers/{supplier}/products/bulk', [SupplierProductController::class, 'bulk'])->middleware('permission:suppliers.edit');
                 Route::put('suppliers/{supplier}/products/{supplierProduct}', [SupplierProductController::class, 'update'])->middleware('permission:suppliers.edit');
                 Route::delete('suppliers/{supplier}/products/{supplierProduct}', [SupplierProductController::class, 'destroy'])->middleware('permission:suppliers.edit');
                 Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->middleware('permission:suppliers.view');

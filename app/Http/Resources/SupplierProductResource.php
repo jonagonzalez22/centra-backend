@@ -13,6 +13,7 @@ class SupplierProductResource extends JsonResource
             'id' => $this->id,
             'supplier_code' => $this->supplier_code,
             'supplier_product_name' => $this->supplier_product_name,
+            'is_preferred' => $this->is_preferred,
             'product' => $this->whenLoaded('product', fn () => [
                 'id' => $this->product->id,
                 'name' => $this->product->name,

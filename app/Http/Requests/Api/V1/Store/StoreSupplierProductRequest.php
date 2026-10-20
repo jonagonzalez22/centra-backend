@@ -33,6 +33,7 @@ class StoreSupplierProductRequest extends FormRequest
             ],
             'supplier_code' => ['nullable', 'string', 'max:100'],
             'supplier_product_name' => ['nullable', 'string', 'max:255'],
+            'is_preferred' => ['sometimes', 'boolean'],
         ];
     }
 }

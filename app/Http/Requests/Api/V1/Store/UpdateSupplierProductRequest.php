@@ -28,6 +28,7 @@ class UpdateSupplierProductRequest extends FormRequest
             'product_id' => ['prohibited'],
             'supplier_code' => ['sometimes', 'nullable', 'string', 'max:100'],
             'supplier_product_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'is_preferred' => ['sometimes', 'boolean'],
         ];
     }
 }

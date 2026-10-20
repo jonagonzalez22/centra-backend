@@ -181,4 +181,202 @@ test('requires supplier permissions and the purchases feature', function () {
     $disabledSupplier = Supplier::create(['store_id' => $disabledStore->id, 'business_name' => 'Sin feature']);
     $this->actingAs($disabledUser, 'sanctum')->getJson("/api/v1/store/suppliers/{$disabledSupplier->id}/products")->assertForbidden();
     $this->actingAs($disabledUser, 'sanctum')->postJson("/api/v1/store/suppliers/{$disabledSupplier->id}/products")->assertForbidden();
+    $this->actingAs($disabledUser, 'sanctum')->getJson("/api/v1/store/suppliers/{$disabledSupplier->id}/products/candidates")->assertForbidden();
+    $this->actingAs($disabledUser, 'sanctum')->postJson("/api/v1/store/suppliers/{$disabledSupplier->id}/products/bulk", ['product_ids' => [productForSupplier($disabledStore, Category::factory()->belongsToStore($disabledStore)->create())->id]])->assertForbidden();
+});
+
+test('maintains at most one preferred supplier per product and allows clearing it', function () {
+    $product = productForSupplier($this->store, $this->category);
+    $otherProduct = productForSupplier($this->store, $this->category);
+    $otherSupplier = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Proveedor alternativo']);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products", ['product_id' => $product->id, 'is_preferred' => true])
+        ->assertCreated()
+        ->assertJsonPath('data.is_preferred', true);
+    $first = SupplierProduct::query()->where('supplier_id', $this->supplier->id)->where('product_id', $product->id)->firstOrFail();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/suppliers/{$otherSupplier->id}/products", ['product_id' => $product->id, 'is_preferred' => true])
+        ->assertCreated()
+        ->assertJsonPath('data.is_preferred', true);
+
+    $second = SupplierProduct::query()->where('supplier_id', $otherSupplier->id)->where('product_id', $product->id)->firstOrFail();
+    expect($first->fresh()->is_preferred)->toBeFalse()
+        ->and($second->fresh()->is_preferred)->toBeTrue();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson(supplierProduct($this->supplier->id, $first->id), ['is_preferred' => true])
+        ->assertOk()
+        ->assertJsonPath('data.is_preferred', true);
+    expect($first->fresh()->is_preferred)->toBeTrue()
+        ->and($second->fresh()->is_preferred)->toBeFalse();
+
+    SupplierProduct::create([
+        'store_id' => $this->store->id,
+        'supplier_id' => $this->supplier->id,
+        'product_id' => $otherProduct->id,
+        'is_preferred' => true,
+    ]);
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson(supplierProduct($this->supplier->id, $first->id), ['is_preferred' => false])
+        ->assertOk()
+        ->assertJsonPath('data.is_preferred', false);
+
+    expect(SupplierProduct::query()->where('product_id', $product->id)->where('is_preferred', true)->count())->toBe(0)
+        ->and(SupplierProduct::query()->where('product_id', $otherProduct->id)->where('is_preferred', true)->count())->toBe(1);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->putJson(supplierProduct($otherSupplier->id, $second->id), ['is_preferred' => true])
+        ->assertOk();
+    $this->actingAs($this->user, 'sanctum')->deleteJson(supplierProduct($otherSupplier->id, $second->id))->assertOk();
+    expect(SupplierProduct::query()->where('product_id', $product->id)->where('is_preferred', true)->count())->toBe(0);
+});
+
+test('bulk associates valid physical products, normalizes duplicate ids, and skips existing associations', function () {
+    $existing = productForSupplier($this->store, $this->category, ['is_sellable' => false]);
+    $first = productForSupplier($this->store, $this->category);
+    $second = productForSupplier($this->store, $this->category);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $existing->id]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products/bulk", [
+            'product_ids' => [$existing->id, $first->id, $first->id, $second->id],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.created_count', 2)
+        ->assertJsonPath('data.skipped_existing_count', 1);
+
+    expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->count())->toBe(3);
+});
+
+test('bulk supports one hundred products in a single operation', function () {
+    $products = collect(range(1, 100))->map(fn () => productForSupplier($this->store, $this->category));
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products/bulk", [
+            'product_ids' => $products->pluck('id')->all(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.created_count', 100)
+        ->assertJsonPath('data.skipped_existing_count', 0);
+
+    expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->count())->toBe(100);
+});
+
+test('bulk rejects inactive, shared-stock, and foreign products without creating partial associations', function () {
+    $valid = productForSupplier($this->store, $this->category);
+    $inactive = productForSupplier($this->store, $this->category, ['is_active' => false]);
+    $child = productForSupplier($this->store, $this->category, ['stock_source_product_id' => $valid->id, 'stock_consumption_quantity' => '1.0000']);
+    $purchases = Feature::query()->where('code', 'purchases')->firstOrFail();
+    $foreignPlan = Plan::factory()->create();
+    $foreignPlan->features()->attach($purchases->id);
+    $foreignStore = Store::factory()->create(['plan_id' => $foreignPlan->id]);
+    $foreignProduct = productForSupplier($foreignStore, Category::factory()->belongsToStore($foreignStore)->create());
+
+    foreach ([$inactive->id, $child->id, $foreignProduct->id] as $invalidId) {
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products/bulk", ['product_ids' => [$valid->id, $invalidId]])
+            ->assertUnprocessable();
+        expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->count())->toBe(0);
+    }
+});
+
+test('returns paginated candidates only for products not associated to the requested supplier', function () {
+    $associated = productForSupplier($this->store, $this->category, ['name' => 'Cloro asociado', 'sku' => 'ASO-001']);
+    $candidate = productForSupplier($this->store, $this->category, ['name' => 'Detergente candidato', 'sku' => 'DET-001', 'is_sellable' => false]);
+    $child = productForSupplier($this->store, $this->category, ['name' => 'Child', 'stock_source_product_id' => $candidate->id, 'stock_consumption_quantity' => '1.0000']);
+    $inactive = productForSupplier($this->store, $this->category, ['name' => 'Inactivo', 'is_active' => false]);
+    $purchases = Feature::query()->where('code', 'purchases')->firstOrFail();
+    $foreignPlan = Plan::factory()->create();
+    $foreignPlan->features()->attach($purchases->id);
+    $foreignStore = Store::factory()->create(['plan_id' => $foreignPlan->id]);
+    $foreignProduct = productForSupplier($foreignStore, Category::factory()->belongsToStore($foreignStore)->create());
+    $otherSupplier = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Otro proveedor']);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $associated->id]);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $otherSupplier->id, 'product_id' => $candidate->id]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates?q=DET-001&per_page=1")
+        ->assertOk()
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.id', $candidate->id)
+        ->assertJsonPath('data.items.0.is_sellable', false);
+
+    $response = $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates")
+        ->assertOk();
+    $ids = collect($response->json('data.items'))->pluck('id');
+    expect($ids)->not->toContain($associated->id)
+        ->and($ids)->toContain($candidate->id)
+        ->and($ids)->not->toContain($child->id)
+        ->and($ids)->not->toContain($inactive->id)
+        ->and($ids)->not->toContain($foreignProduct->id);
+});
+
+test('protects bulk and candidates with the existing supplier permissions and purchases feature', function () {
+    $product = productForSupplier($this->store, $this->category);
+    $viewOnly = User::factory()->create(['store_id' => $this->store->id]);
+    $viewOnly->assignRole('STORE_ADMIN');
+    $viewOnly->givePermissionTo('suppliers.view');
+    $editOnly = User::factory()->create(['store_id' => $this->store->id]);
+    $editOnly->assignRole('STORE_ADMIN');
+    $editOnly->givePermissionTo('suppliers.edit');
+
+    $this->actingAs($editOnly, 'sanctum')->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates")->assertForbidden();
+    $this->actingAs($viewOnly, 'sanctum')->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products/bulk", ['product_ids' => [$product->id]])->assertForbidden();
+});
+
+test('filters candidates by an inactive source supplier without affecting the default behavior', function () {
+    $source = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Proveedor origen', 'is_active' => false]);
+    $other = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Otro proveedor']);
+    $fromSource = productForSupplier($this->store, $this->category, ['name' => 'Cloro origen', 'sku' => 'ORI-001', 'is_sellable' => false]);
+    $fromOther = productForSupplier($this->store, $this->category, ['name' => 'Cloro otro', 'sku' => 'OTR-001']);
+    $alreadyTarget = productForSupplier($this->store, $this->category, ['name' => 'Cloro destino', 'sku' => 'DST-001']);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $source->id, 'product_id' => $fromSource->id]);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $other->id, 'product_id' => $fromOther->id]);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $source->id, 'product_id' => $alreadyTarget->id]);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $alreadyTarget->id]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates?source_supplier_id={$source->id}&search=ORI")
+        ->assertOk()
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.id', $fromSource->id);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates?source_supplier_id={$this->supplier->id}")
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('source_supplier_id');
+});
+
+test('bulk can make the target preferred while retaining source associations', function () {
+    $source = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Proveedor origen']);
+    $other = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Proveedor preferido actual']);
+    $newTarget = productForSupplier($this->store, $this->category);
+    $existingFalse = productForSupplier($this->store, $this->category);
+    $existingTrue = productForSupplier($this->store, $this->category);
+
+    foreach ([$newTarget, $existingFalse, $existingTrue] as $product) {
+        SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $source->id, 'product_id' => $product->id]);
+        SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $other->id, 'product_id' => $product->id, 'is_preferred' => true]);
+    }
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $existingFalse->id]);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $existingTrue->id, 'is_preferred' => true]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products/bulk", [
+            'product_ids' => [$newTarget->id, $existingFalse->id, $existingTrue->id],
+            'mark_as_preferred' => true,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.created_count', 1)
+        ->assertJsonPath('data.preferred_updated_count', 1)
+        ->assertJsonPath('data.skipped_existing_count', 1);
+
+    foreach ([$newTarget, $existingFalse, $existingTrue] as $product) {
+        expect(SupplierProduct::query()->where('product_id', $product->id)->where('supplier_id', $source->id)->exists())->toBeTrue()
+            ->and(SupplierProduct::query()->where('product_id', $product->id)->where('supplier_id', $this->supplier->id)->where('is_preferred', true)->exists())->toBeTrue()
+            ->and(SupplierProduct::query()->where('product_id', $product->id)->where('is_preferred', true)->count())->toBe(1);
+    }
 });
