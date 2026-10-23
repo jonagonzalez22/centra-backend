@@ -15,7 +15,9 @@ class InventoryMovementService
         User $user,
         string $type,
         int|string $quantity,
-        string $concept
+        string $concept,
+        ?string $referenceType = null,
+        ?string $referenceId = null,
     ): InventoryMovement {
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
@@ -33,10 +35,10 @@ class InventoryMovementService
                 : $quantity;
         }
 
-        return DB::transaction(function () use ($product, $user, $type, $quantity, $concept) {
+        return DB::transaction(function () use ($product, $user, $type, $quantity, $concept, $referenceType, $referenceId) {
             $product = Product::where('id', $product->id)->lockForUpdate()->first();
 
-            return $this->recordMovementForLockedProduct($product, $user, $type, $quantity, $concept);
+            return $this->recordMovementForLockedProduct($product, $user, $type, $quantity, $concept, $referenceType, $referenceId);
         });
     }
 
@@ -50,7 +52,9 @@ class InventoryMovementService
         User $user,
         string $type,
         int|string $quantity,
-        string $concept
+        string $concept,
+        ?string $referenceType = null,
+        ?string $referenceId = null,
     ): InventoryMovement {
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
@@ -92,6 +96,8 @@ class InventoryMovementService
             'previous_stock' => $previousStock,
             'current_stock' => $newStock,
             'concept' => $concept,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
         ]);
 
         $movement->load(['product', 'user']);

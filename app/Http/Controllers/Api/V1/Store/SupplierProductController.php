@@ -9,6 +9,7 @@ use App\Http\Requests\Api\V1\Store\UpdateSupplierProductRequest;
 use App\Http\Resources\SupplierProductCandidateResource;
 use App\Http\Resources\SupplierProductResource;
 use App\Models\Product;
+use App\Models\Purchase;
 use App\Models\Supplier;
 use App\Models\SupplierProduct;
 use Illuminate\Http\JsonResponse;
@@ -145,10 +146,18 @@ class SupplierProductController extends Controller
         if (! $supplierProductModel) {
             return $this->supplierProductNotFound();
         }
-        DB::transaction(function () use ($request, $supplierProductModel) {
-            $this->lockProductAssociations($request->user()->store_id, $supplierProductModel->product_id);
+        $result = DB::transaction(function () use ($request, $supplierProductModel) {
+            $storeId = $request->user()->store_id;
+            $this->lockProductAssociations($storeId, $supplierProductModel->product_id);
+            if ($this->hasDraftPurchaseItem($storeId, $supplierProductModel->supplier_id, $supplierProductModel->product_id)) {
+                return $this->validationResponse('supplier_product', 'No se puede desasociar este producto porque está incluido en una compra en borrador de este proveedor. Quitalo de la compra o cancelá el borrador antes de desasociarlo.');
+            }
             $supplierProductModel->delete();
         });
+
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
 
         return response()->json([
             'status' => 'success',
@@ -265,6 +274,7 @@ class SupplierProductController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
             'q' => ['nullable', 'string', 'max:255'],
             'source_supplier_id' => ['nullable', 'uuid'],
+            'include_associated' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -285,15 +295,39 @@ class SupplierProductController extends Controller
             }
         }
         $searchTerm = $request->input('search', $request->input('q'));
+        $includeAssociated = $request->boolean('include_associated');
         $candidates = Product::forStore($storeId)
+            ->select('products.*')
+            ->selectRaw(
+                'exists (select 1 from supplier_products where supplier_products.product_id = products.id and supplier_products.store_id = ? and supplier_products.supplier_id = ?) as is_associated',
+                [$storeId, $supplierModel->id]
+            )
+            ->selectRaw(
+                '(select id from supplier_products where supplier_products.product_id = products.id and supplier_products.store_id = ? and supplier_products.supplier_id = ? limit 1) as candidate_supplier_product_id',
+                [$storeId, $supplierModel->id]
+            )
+            ->selectRaw(
+                '(select supplier_code from supplier_products where supplier_products.product_id = products.id and supplier_products.store_id = ? and supplier_products.supplier_id = ? limit 1) as candidate_supplier_code',
+                [$storeId, $supplierModel->id]
+            )
+            ->selectRaw(
+                '(select supplier_product_name from supplier_products where supplier_products.product_id = products.id and supplier_products.store_id = ? and supplier_products.supplier_id = ? limit 1) as candidate_supplier_product_name',
+                [$storeId, $supplierModel->id]
+            )
+            ->selectRaw(
+                '(select is_preferred from supplier_products where supplier_products.product_id = products.id and supplier_products.store_id = ? and supplier_products.supplier_id = ? limit 1) as candidate_supplier_is_preferred',
+                [$storeId, $supplierModel->id]
+            )
             ->where('is_active', true)
             ->whereNull('stock_source_product_id')
-            ->whereNotExists(function ($query) use ($supplierModel, $storeId) {
-                $query->selectRaw('1')
-                    ->from('supplier_products')
-                    ->whereColumn('supplier_products.product_id', 'products.id')
-                    ->where('supplier_products.store_id', $storeId)
-                    ->where('supplier_products.supplier_id', $supplierModel->id);
+            ->when(! $includeAssociated, function ($query) use ($supplierModel, $storeId) {
+                $query->whereNotExists(function ($query) use ($supplierModel, $storeId) {
+                    $query->selectRaw('1')
+                        ->from('supplier_products')
+                        ->whereColumn('supplier_products.product_id', 'products.id')
+                        ->where('supplier_products.store_id', $storeId)
+                        ->where('supplier_products.supplier_id', $supplierModel->id);
+                });
             })
             ->when($sourceSupplier, function ($query) use ($sourceSupplier, $storeId) {
                 $query->whereExists(function ($sourceAssociations) use ($sourceSupplier, $storeId) {
@@ -386,5 +420,14 @@ class SupplierProductController extends Controller
             ->where('product_id', $productId)
             ->where('is_preferred', true)
             ->update(['is_preferred' => false]);
+    }
+
+    private function hasDraftPurchaseItem(string $storeId, string $supplierId, string $productId): bool
+    {
+        return Purchase::forStore($storeId)
+            ->where('supplier_id', $supplierId)
+            ->where('status', 'draft')
+            ->whereHas('items', fn ($items) => $items->where('product_id', $productId))
+            ->exists();
     }
 }

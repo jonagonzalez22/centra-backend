@@ -68,6 +68,14 @@ class PermissionSeeder extends Seeder
             'suppliers.edit',
             'suppliers.delete',
 
+            // Module: Purchases
+            'purchases.view',
+            'purchases.create',
+            'purchases.edit',
+            'purchases.receive',
+            'purchases.close',
+            'purchases.cancel',
+
             // Module: Commercial Groups
             'commercial_groups.view',
             'commercial_groups.create',

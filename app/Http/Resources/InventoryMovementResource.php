@@ -17,6 +17,8 @@ class InventoryMovementResource extends JsonResource
             'previous_stock' => QuantityMath::normalize($this->previous_stock),
             'current_stock' => QuantityMath::normalize($this->current_stock),
             'concept' => $this->concept,
+            'reference_type' => $this->reference_type,
+            'reference_id' => $this->reference_id,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'product' => [
                 'id' => $this->product->id,

@@ -9,6 +9,14 @@ return [
     'Punto de Venta' => [
         ['name' => 'pos.view', 'label' => 'Ver'],
     ],
+    'Compras' => [
+        ['name' => 'purchases.view', 'label' => 'Ver'],
+        ['name' => 'purchases.create', 'label' => 'Crear'],
+        ['name' => 'purchases.edit', 'label' => 'Editar'],
+        ['name' => 'purchases.receive', 'label' => 'Registrar recepciones'],
+        ['name' => 'purchases.close', 'label' => 'Cerrar compras parciales'],
+        ['name' => 'purchases.cancel', 'label' => 'Cancelar'],
+    ],
     'Historial de ventas' => [
         ['name' => 'sales_history.view', 'label' => 'Ver historial de ventas'],
         ['name' => 'sales_history.print', 'label' => 'Reimprimir comprobantes'],

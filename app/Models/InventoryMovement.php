@@ -10,58 +10,60 @@ use Illuminate\Support\Str;
 
 class InventoryMovement extends Model
 {
-  use HasFactory;
+    use HasFactory;
 
-  protected $keyType = 'string';
+    protected $keyType = 'string';
 
-  public $incrementing = false;
+    public $incrementing = false;
 
-  protected $fillable = [
-    'store_id',
-    'product_id',
-    'user_id',
-    'type',
-    'quantity',
-    'previous_stock',
-    'current_stock',
-    'concept',
-  ];
-
-  protected function casts(): array
-  {
-    return [
-      'quantity' => 'decimal:4',
-      'previous_stock' => 'decimal:4',
-      'current_stock' => 'decimal:4',
+    protected $fillable = [
+        'store_id',
+        'product_id',
+        'user_id',
+        'type',
+        'quantity',
+        'previous_stock',
+        'current_stock',
+        'concept',
+        'reference_type',
+        'reference_id',
     ];
-  }
 
-  protected static function booted(): void
-  {
-    static::creating(function ($model) {
-      if (! $model->id) {
-        $model->id = (string) Str::uuid();
-      }
-    });
-  }
+    protected function casts(): array
+    {
+        return [
+            'quantity' => 'decimal:4',
+            'previous_stock' => 'decimal:4',
+            'current_stock' => 'decimal:4',
+        ];
+    }
 
-  public function store(): BelongsTo
-  {
-    return $this->belongsTo(Store::class);
-  }
+    protected static function booted(): void
+    {
+        static::creating(function ($model) {
+            if (! $model->id) {
+                $model->id = (string) Str::uuid();
+            }
+        });
+    }
 
-  public function product(): BelongsTo
-  {
-    return $this->belongsTo(Product::class);
-  }
+    public function store(): BelongsTo
+    {
+        return $this->belongsTo(Store::class);
+    }
 
-  public function user(): BelongsTo
-  {
-    return $this->belongsTo(User::class);
-  }
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
 
-  public function scopeForStore(Builder $query, string $storeId): Builder
-  {
-    return $query->where('store_id', $storeId);
-  }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function scopeForStore(Builder $query, string $storeId): Builder
+    {
+        return $query->where('store_id', $storeId);
+    }
 }

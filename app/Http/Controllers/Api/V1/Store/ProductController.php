@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Store\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
 use App\Models\OperationItem;
 use App\Models\Product;
+use App\Models\PurchaseItem;
 use App\Models\RouteStopItem;
 use App\Services\ProductStockAssociationValidator;
 use App\Support\QuantityMath;
@@ -417,6 +418,13 @@ class ProductController extends Controller
                 ], 422);
             }
 
+            if ($measurementUnitChanged && $this->hasPendingPurchaseReceipts($product)) {
+                return $this->validationResponse(
+                    'stock_measurement_unit_id',
+                    'No se puede cambiar la unidad de medida porque el producto tiene cantidades pendientes de recibir en una compra.',
+                );
+            }
+
             if ($measurementUnitChanged && $this->cannotChangeStockMeasurementUnit($product)) {
                 return response()->json([
                     'status' => 'error',
@@ -475,6 +483,15 @@ class ProductController extends Controller
     {
         return QuantityMath::isPositive($product->stock_reserved)
             || $this->hasActiveCommercialCommitments($product);
+    }
+
+    private function hasPendingPurchaseReceipts(Product $product): bool
+    {
+        return PurchaseItem::query()
+            ->where('product_id', $product->id)
+            ->whereColumn('quantity_received', '<', 'quantity_ordered')
+            ->whereHas('purchase', fn ($query) => $query->whereIn('status', ['ordered', 'partially_received']))
+            ->exists();
     }
 
     private function hasActiveCommercialCommitments(Product $product): bool

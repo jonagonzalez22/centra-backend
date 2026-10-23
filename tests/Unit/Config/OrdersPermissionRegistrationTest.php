@@ -24,3 +24,11 @@ describe('Permissions Mapping', function () {
             ->and($mapping['orders'])->toBe('pos');
     });
 });
+
+test('purchases lifecycle permissions are registered in the catalog', function () {
+    $catalog = require __DIR__.'/../../../config/permissions_catalog.php';
+
+    expect($catalog)->toHaveKey('Compras')
+        ->and(collect($catalog['Compras'])->pluck('name')->all())
+        ->toContain('purchases.receive', 'purchases.close');
+});

@@ -4,6 +4,8 @@ use App\Models\Category;
 use App\Models\Feature;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\Purchase;
+use App\Models\PurchaseItem;
 use App\Models\Store;
 use App\Models\Supplier;
 use App\Models\SupplierProduct;
@@ -41,6 +43,34 @@ function productForSupplier(Store $store, Category $category, array $attributes 
         'category_id' => $category->id,
         ...$attributes,
     ]);
+}
+
+function purchaseWithProduct(Store $store, Supplier $supplier, Product $product, User $user, string $type = 'order', string $status = 'draft'): Purchase
+{
+    $purchase = Purchase::create([
+        'store_id' => $store->id,
+        'supplier_id' => $supplier->id,
+        'purchase_number' => 'OC-'.strtoupper(substr(str_replace('-', '', (string) \Illuminate\Support\Str::uuid()), 0, 6)),
+        'purchase_type' => $type,
+        'status' => $status,
+        'supplier_business_name' => $supplier->business_name,
+        'total' => '10.00',
+        'created_by' => $user->id,
+    ]);
+    PurchaseItem::create([
+        'purchase_id' => $purchase->id,
+        'product_id' => $product->id,
+        'product_name' => $product->name,
+        'product_sku' => $product->sku,
+        'measurement_unit_code' => 'unit',
+        'measurement_unit_symbol' => 'u',
+        'quantity_ordered' => '1.0000',
+        'quantity_received' => '0.0000',
+        'unit_price' => '10.00',
+        'subtotal' => '10.00',
+    ]);
+
+    return $purchase;
 }
 
 test('associates a physical product and normalizes optional supplier metadata', function () {
@@ -100,6 +130,51 @@ test('allows a supplier to provide multiple physical products and updates and de
     $this->actingAs($this->user, 'sanctum')->deleteJson(supplierProduct($this->supplier->id, $association->id))->assertOk();
     $this->assertDatabaseMissing('supplier_products', ['id' => $association->id]);
     expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->count())->toBe(1);
+});
+
+test('blocks supplier product removal when an order draft contains the product', function () {
+    $product = productForSupplier($this->store, $this->category);
+    $association = SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $product->id]);
+    $purchase = purchaseWithProduct($this->store, $this->supplier, $product, $this->user, 'order');
+
+    $this->actingAs($this->user, 'sanctum')->deleteJson(supplierProduct($this->supplier->id, $association->id))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.supplier_product.0', 'No se puede desasociar este producto porque está incluido en una compra en borrador de este proveedor. Quitalo de la compra o cancelá el borrador antes de desasociarlo.');
+
+    $this->assertDatabaseHas('supplier_products', ['id' => $association->id]);
+    $this->assertDatabaseHas('purchases', ['id' => $purchase->id, 'status' => 'draft']);
+});
+
+test('blocks supplier product removal when a direct draft contains the product', function () {
+    $product = productForSupplier($this->store, $this->category);
+    $association = SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $product->id]);
+    purchaseWithProduct($this->store, $this->supplier, $product, $this->user, 'direct');
+
+    $this->actingAs($this->user, 'sanctum')->deleteJson(supplierProduct($this->supplier->id, $association->id))->assertUnprocessable();
+    $this->assertDatabaseHas('supplier_products', ['id' => $association->id]);
+});
+
+test('does not block supplier product removal for another supplier draft or another product', function () {
+    $product = productForSupplier($this->store, $this->category);
+    $otherProduct = productForSupplier($this->store, $this->category);
+    $association = SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $product->id]);
+    $otherSupplier = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Otro proveedor']);
+    purchaseWithProduct($this->store, $otherSupplier, $product, $this->user);
+    purchaseWithProduct($this->store, $this->supplier, $otherProduct, $this->user);
+
+    $this->actingAs($this->user, 'sanctum')->deleteJson(supplierProduct($this->supplier->id, $association->id))->assertOk();
+    $this->assertDatabaseMissing('supplier_products', ['id' => $association->id]);
+});
+
+test('does not block supplier product removal for ordered or cancelled purchases', function () {
+    foreach (['ordered', 'cancelled'] as $status) {
+        $product = productForSupplier($this->store, $this->category);
+        $association = SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $product->id]);
+        purchaseWithProduct($this->store, $this->supplier, $product, $this->user, 'order', $status);
+
+        $this->actingAs($this->user, 'sanctum')->deleteJson(supplierProduct($this->supplier->id, $association->id))->assertOk();
+        $this->assertDatabaseMissing('supplier_products', ['id' => $association->id]);
+    }
 });
 
 test('rejects shared-stock children while allowing a non-sellable physical source', function () {
@@ -247,7 +322,15 @@ test('bulk associates valid physical products, normalizes duplicate ids, and ski
         ->assertJsonPath('data.created_count', 2)
         ->assertJsonPath('data.skipped_existing_count', 1);
 
-    expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->count())->toBe(3);
+    $newAssociation = SupplierProduct::query()
+        ->where('supplier_id', $this->supplier->id)
+        ->where('product_id', $first->id)
+        ->firstOrFail();
+
+    expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->count())->toBe(3)
+        ->and($newAssociation->supplier_code)->toBeNull()
+        ->and($newAssociation->supplier_product_name)->toBeNull()
+        ->and($newAssociation->is_preferred)->toBeFalse();
 });
 
 test('bulk supports one hundred products in a single operation', function () {
@@ -293,8 +376,22 @@ test('returns paginated candidates only for products not associated to the reque
     $foreignStore = Store::factory()->create(['plan_id' => $foreignPlan->id]);
     $foreignProduct = productForSupplier($foreignStore, Category::factory()->belongsToStore($foreignStore)->create());
     $otherSupplier = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Otro proveedor']);
-    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $associated->id]);
-    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $otherSupplier->id, 'product_id' => $candidate->id]);
+    SupplierProduct::create([
+        'store_id' => $this->store->id,
+        'supplier_id' => $this->supplier->id,
+        'product_id' => $associated->id,
+        'supplier_code' => 'ASO-500',
+        'supplier_product_name' => 'Cloro proveedor',
+        'is_preferred' => true,
+    ]);
+    SupplierProduct::create([
+        'store_id' => $this->store->id,
+        'supplier_id' => $otherSupplier->id,
+        'product_id' => $candidate->id,
+        'supplier_code' => 'OTRO-999',
+        'supplier_product_name' => 'Nombre de otro proveedor',
+        'is_preferred' => true,
+    ]);
 
     $this->actingAs($this->user, 'sanctum')
         ->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates?q=DET-001&per_page=1")
@@ -312,6 +409,20 @@ test('returns paginated candidates only for products not associated to the reque
         ->and($ids)->not->toContain($child->id)
         ->and($ids)->not->toContain($inactive->id)
         ->and($ids)->not->toContain($foreignProduct->id);
+
+    $allProducts = $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/suppliers/{$this->supplier->id}/products/candidates?include_associated=1")
+        ->assertOk();
+    $associationStates = collect($allProducts->json('data.items'))->keyBy('id');
+    expect($associationStates->get($associated->id)['is_associated'])->toBeTrue()
+        ->and($associationStates->get($candidate->id)['is_associated'])->toBeFalse()
+        ->and($associationStates->get($associated->id)['supplier_product']['id'])->toBeString()
+        ->and($associationStates->get($associated->id)['supplier_product']['supplier_code'])->toBe('ASO-500')
+        ->and($associationStates->get($associated->id)['supplier_product']['supplier_product_name'])->toBe('Cloro proveedor')
+        ->and($associationStates->get($associated->id)['supplier_product']['is_preferred'])->toBeTrue()
+        ->and($associationStates->get($candidate->id)['supplier_product'])->toBeNull()
+        ->and($associationStates)->not->toHaveKey($child->id)
+        ->and($associationStates)->not->toHaveKey($inactive->id);
 });
 
 test('protects bulk and candidates with the existing supplier permissions and purchases feature', function () {

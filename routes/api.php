@@ -36,6 +36,8 @@ use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMet
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
+use App\Http\Controllers\Api\V1\Store\PurchaseController;
+use App\Http\Controllers\Api\V1\Store\PurchaseReceiptController;
 use App\Http\Controllers\Api\V1\Store\RejectionReasonController;
 use App\Http\Controllers\Api\V1\Store\RouteController;
 use App\Http\Controllers\Api\V1\Store\SaleHistoryController;
@@ -157,6 +159,14 @@ Route::prefix('v1')->group(function () {
             Route::put('brands/{brand}', [BrandController::class, 'update'])->middleware('permission:brands.edit')->name('store.brands.update');
             Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
             Route::middleware('feature:purchases')->group(function () {
+                Route::get('purchases', [PurchaseController::class, 'index'])->middleware('permission:purchases.view');
+                Route::post('purchases', [PurchaseController::class, 'store'])->middleware('permission:purchases.create');
+                Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('permission:purchases.view');
+                Route::put('purchases/{purchase}', [PurchaseController::class, 'update'])->middleware('permission:purchases.edit');
+                Route::post('purchases/{purchase}/order', [PurchaseController::class, 'order'])->middleware('permission:purchases.edit');
+                Route::post('purchases/{purchase}/receipts', [PurchaseReceiptController::class, 'store'])->middleware('permission:purchases.receive');
+                Route::post('purchases/{purchase}/close', [PurchaseController::class, 'close'])->middleware('permission:purchases.close');
+                Route::post('purchases/{purchase}/cancel', [PurchaseController::class, 'cancel'])->middleware('permission:purchases.cancel');
                 Route::get('suppliers', [SupplierController::class, 'index'])->middleware('permission:suppliers.view');
                 Route::get('suppliers/{supplier}/products', [SupplierProductController::class, 'index'])->middleware('permission:suppliers.view');
                 Route::post('suppliers/{supplier}/products', [SupplierProductController::class, 'store'])->middleware('permission:suppliers.edit');
