@@ -62,7 +62,41 @@ class StoreProductRequest extends FormRequest
             'stock_consumption_quantity' => ['nullable', DecimalQuantity::positive()],
             'is_active' => ['nullable', 'boolean'],
             'is_sellable' => ['nullable', 'boolean'],
+            'suppliers' => ['sometimes', 'array'],
+            'suppliers.*.supplier_id' => [
+                'required',
+                'uuid',
+                Rule::exists('suppliers', 'id')->where(fn ($query) => $query
+                    ->where('store_id', $storeId)
+                    ->where('is_active', true)),
+            ],
+            'suppliers.*.supplier_code' => ['nullable', 'string', 'max:100'],
+            'suppliers.*.supplier_product_name' => ['nullable', 'string', 'max:255'],
+            'suppliers.*.is_preferred' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $suppliers = $this->input('suppliers', []);
+
+            if (! is_array($suppliers)) {
+                return;
+            }
+
+            $supplierIds = array_column($suppliers, 'supplier_id');
+            if (count($supplierIds) !== count(array_unique($supplierIds))) {
+                $validator->errors()->add('suppliers', 'No podés asociar el mismo proveedor más de una vez.');
+            }
+
+            $preferredCount = collect($suppliers)
+                ->filter(fn ($supplier) => filter_var($supplier['is_preferred'] ?? false, FILTER_VALIDATE_BOOLEAN))
+                ->count();
+            if ($preferredCount > 1) {
+                $validator->errors()->add('suppliers', 'Solo podés marcar un proveedor preferido por producto.');
+            }
+        });
     }
 
     public function messages(): array

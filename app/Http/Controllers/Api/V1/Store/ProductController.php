@@ -10,6 +10,8 @@ use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\PurchaseItem;
 use App\Models\RouteStopItem;
+use App\Models\Supplier;
+use App\Models\SupplierProduct;
 use App\Services\ProductStockAssociationValidator;
 use App\Support\QuantityMath;
 use Illuminate\Http\JsonResponse;
@@ -160,7 +162,13 @@ class ProductController extends Controller
      *       @OA\Property(property="stock_measurement_unit_id", type="string", format="uuid", nullable=true),
      *       @OA\Property(property="sale_quantity_step", type="string", pattern="^\\d+(?:\\.\\d{1,4})?$", example="1.0000", nullable=true),
      *       @OA\Property(property="is_active", type="boolean", example=true, nullable=true),
-     *       @OA\Property(property="is_sellable", type="boolean", example=true, nullable=true)
+     *       @OA\Property(property="is_sellable", type="boolean", example=true, nullable=true),
+     *       @OA\Property(property="suppliers", type="array", @OA\Items(
+     *         @OA\Property(property="supplier_id", type="string", format="uuid"),
+     *         @OA\Property(property="supplier_code", type="string", nullable=true),
+     *         @OA\Property(property="supplier_product_name", type="string", nullable=true),
+     *         @OA\Property(property="is_preferred", type="boolean", nullable=true)
+     *       ), nullable=true)
      *     )
      *   ),
      *
@@ -184,8 +192,10 @@ class ProductController extends Controller
     {
         $storeId = $request->user()->store_id;
         $validated = $request->validated();
+        $initialSuppliers = $validated['suppliers'] ?? [];
+        unset($validated['suppliers']);
 
-        return DB::transaction(function () use ($request, $storeId, $validated): JsonResponse {
+        return DB::transaction(function () use ($request, $storeId, $validated, $initialSuppliers): JsonResponse {
             $source = isset($validated['stock_source_product_id'])
                 ? Product::forStore($storeId)->whereKey($validated['stock_source_product_id'])->lockForUpdate()->first()
                 : null;
@@ -200,6 +210,22 @@ class ProductController extends Controller
             if ($associated && (! QuantityMath::isZero($validated['stock'] ?? '0') || ! QuantityMath::isZero($validated['stock_min'] ?? '0'))) {
                 return $this->validationResponse('stock', 'Un producto asociado debe crearse sin stock físico ni stock mínimo propios.');
             }
+            if ($associated && $initialSuppliers !== []) {
+                return $this->validationResponse('suppliers', 'Los productos con stock compartido no pueden asociarse como productos de compra. Seleccioná el producto que administra el stock físico.');
+            }
+
+            $supplierIds = collect($initialSuppliers)->pluck('supplier_id')->sort()->values()->all();
+            $suppliers = Supplier::forStore($storeId)
+                ->whereIn('id', $supplierIds)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            if ($suppliers->count() !== count($supplierIds)) {
+                return $this->validationResponse('suppliers', 'Uno o más proveedores no existen, no están activos o no pertenecen a tu tienda.');
+            }
+
             $product = new Product([
                 'store_id' => $storeId,
                 'name' => $validated['name'],
@@ -226,6 +252,17 @@ class ProductController extends Controller
                 return $this->validationResponse('stock_source_product_id', $exception->getMessage());
             }
             $product->save();
+
+            foreach ($initialSuppliers as $supplier) {
+                SupplierProduct::create([
+                    'store_id' => $storeId,
+                    'supplier_id' => $supplier['supplier_id'],
+                    'product_id' => $product->id,
+                    'supplier_code' => $supplier['supplier_code'] ?? null,
+                    'supplier_product_name' => $supplier['supplier_product_name'] ?? null,
+                    'is_preferred' => $supplier['is_preferred'] ?? false,
+                ]);
+            }
 
             $product->load(['category', 'brand', 'stockMeasurementUnit', 'stockSourceProduct.stockMeasurementUnit']);
 
