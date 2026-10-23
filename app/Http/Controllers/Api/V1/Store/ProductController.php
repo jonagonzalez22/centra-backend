@@ -323,6 +323,73 @@ class ProductController extends Controller
         ], 200);
     }
 
+    public function purchasePriceHistory(Request $request, string $product): JsonResponse
+    {
+        $storeId = $request->user()->store_id;
+
+        if (! Product::forStore($storeId)->whereKey($product)->exists()) {
+            abort(404);
+        }
+
+        $firstReceiptAt = '(select min(purchase_receipts.received_at) from purchase_receipts where purchase_receipts.store_id = purchases.store_id and purchase_receipts.purchase_id = purchases.id)';
+        $priceDate = "coalesce(purchases.ordered_at, {$firstReceiptAt}, purchases.created_at)";
+
+        $rankedHistory = PurchaseItem::query()
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->where('purchase_items.product_id', $product)
+            ->where('purchases.store_id', $storeId)
+            ->whereIn('purchases.status', ['ordered', 'partially_received', 'received', 'closed'])
+            ->select([
+                'purchases.supplier_id',
+                'purchases.supplier_business_name',
+                'purchases.purchase_number',
+                'purchases.id as purchase_id',
+                'purchase_items.unit_price',
+                DB::raw("{$priceDate} as purchase_date"),
+                DB::raw("row_number() over (partition by purchases.supplier_id order by {$priceDate} desc, purchases.id desc, purchase_items.id desc) as supplier_rank"),
+            ]);
+
+        $rows = PurchaseItem::query()
+            ->fromSub($rankedHistory, 'purchase_price_history')
+            ->where('supplier_rank', '<=', 5)
+            ->orderByDesc('purchase_date')
+            ->orderByDesc('purchase_id')
+            ->get();
+
+        $history = $rows
+            ->groupBy('supplier_id')
+            ->map(function ($supplierPrices) {
+                $first = $supplierPrices->first();
+
+                return [
+                    'supplier' => [
+                        'id' => $first->supplier_id,
+                        'business_name' => $first->supplier_business_name,
+                    ],
+                    'latest_date' => $first->purchase_date,
+                    'prices' => $supplierPrices->map(fn ($price) => [
+                        'purchase_id' => $price->purchase_id,
+                        'purchase_number' => $price->purchase_number,
+                        'date' => $price->purchase_date,
+                        'unit_price' => $price->unit_price,
+                    ])->values(),
+                ];
+            })
+            ->sortByDesc('latest_date')
+            ->values()
+            ->map(fn ($supplier) => [
+                'supplier' => $supplier['supplier'],
+                'prices' => $supplier['prices'],
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Historial de precios de compra obtenido exitosamente.',
+            'data' => $history,
+            'errors' => null,
+        ]);
+    }
+
     /**
      * Update the specified product.
      *

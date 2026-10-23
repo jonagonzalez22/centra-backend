@@ -160,6 +160,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
             Route::middleware('feature:purchases')->group(function () {
                 Route::get('purchases', [PurchaseController::class, 'index'])->middleware('permission:purchases.view');
+                Route::get('products/{product}/purchase-price-history', [ProductController::class, 'purchasePriceHistory'])->middleware('permission:purchases.view');
                 Route::post('purchases', [PurchaseController::class, 'store'])->middleware('permission:purchases.create');
                 Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('permission:purchases.view');
                 Route::put('purchases/{purchase}', [PurchaseController::class, 'update'])->middleware('permission:purchases.edit');
