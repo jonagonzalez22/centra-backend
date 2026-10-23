@@ -62,7 +62,7 @@ class InventoryController extends Controller
         $storeId = $request->user()->store_id;
 
         $query = InventoryMovement::forStore($storeId)
-            ->with(['product', 'user'])
+            ->with(['product.stockMeasurementUnit', 'user'])
             ->when($request->filled('product_id'), function ($query) use ($request) {
                 $query->where('product_id', $request->product_id);
             })

@@ -100,7 +100,7 @@ class InventoryMovementService
             'reference_id' => $referenceId,
         ]);
 
-        $movement->load(['product', 'user']);
+        $movement->load(['product.stockMeasurementUnit', 'user']);
 
         return $movement;
     }
@@ -154,7 +154,7 @@ class InventoryMovementService
             'current_stock' => $newStock,
             'concept' => $concept,
         ]);
-        $movement->load(['product', 'user']);
+        $movement->load(['product.stockMeasurementUnit', 'user']);
 
         return $movement;
     }

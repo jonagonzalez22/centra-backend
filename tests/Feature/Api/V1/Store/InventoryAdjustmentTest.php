@@ -2,6 +2,7 @@
 
 use App\Models\Category;
 use App\Models\InventoryMovement;
+use App\Models\MeasurementUnit;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
@@ -43,6 +44,25 @@ function adjustInventory(array $data): \Illuminate\Testing\TestResponse
 }
 
 describe('POST /api/v1/store/inventory/adjust', function () {
+    test('movements list exposes the product stock measurement unit', function () {
+        $measurementUnit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
+        $product = createProductForStore($this->store, $this->category, 10);
+        $product->update(['stock_measurement_unit_id' => $measurementUnit->id]);
+
+        adjustInventory([
+            'product_id' => $product->id,
+            'quantity' => '2.5000',
+            'type' => 'input',
+            'concept' => 'Ingreso en kilogramos',
+        ])->assertCreated();
+
+        $this->withHeader('Authorization', 'Bearer '.$this->token)
+            ->getJson('/api/v1/store/inventory/movements')
+            ->assertOk()
+            ->assertJsonPath('data.items.0.product.stock_measurement_unit.code', 'kg')
+            ->assertJsonPath('data.items.0.product.stock_measurement_unit.symbol', 'kg');
+    });
+
     test('input type with positive quantity succeeds and increases stock', function () {
         $product = createProductForStore($this->store, $this->category, 10);
         $previousStock = $product->stock;

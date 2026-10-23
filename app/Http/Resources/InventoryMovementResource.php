@@ -24,6 +24,9 @@ class InventoryMovementResource extends JsonResource
                 'id' => $this->product->id,
                 'name' => $this->product->name,
                 'sku' => $this->product->sku,
+                'stock_measurement_unit' => $this->product->relationLoaded('stockMeasurementUnit')
+                    ? MeasurementUnitResource::make($this->product->stockMeasurementUnit)
+                    : null,
             ],
             'user' => [
                 'id' => $this->user->id,
