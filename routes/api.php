@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\PurchaseController;
+use App\Http\Controllers\Api\V1\Store\PurchaseDocumentController;
 use App\Http\Controllers\Api\V1\Store\PurchaseReceiptController;
 use App\Http\Controllers\Api\V1\Store\RejectionReasonController;
 use App\Http\Controllers\Api\V1\Store\RouteController;
@@ -163,6 +164,10 @@ Route::prefix('v1')->group(function () {
                 Route::get('products/{product}/purchase-price-history', [ProductController::class, 'purchasePriceHistory'])->middleware('permission:purchases.view');
                 Route::post('purchases', [PurchaseController::class, 'store'])->middleware('permission:purchases.create');
                 Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('permission:purchases.view');
+                Route::get('purchases/{purchase}/documents', [PurchaseDocumentController::class, 'index'])->middleware('permission:purchases.view');
+                Route::post('purchases/{purchase}/documents', [PurchaseDocumentController::class, 'store'])->middleware('permission:purchases.edit');
+                Route::put('purchases/{purchase}/documents/{document}', [PurchaseDocumentController::class, 'update'])->middleware('permission:purchases.edit');
+                Route::delete('purchases/{purchase}/documents/{document}', [PurchaseDocumentController::class, 'destroy'])->middleware('permission:purchases.edit');
                 Route::put('purchases/{purchase}', [PurchaseController::class, 'update'])->middleware('permission:purchases.edit');
                 Route::post('purchases/{purchase}/order', [PurchaseController::class, 'order'])->middleware('permission:purchases.edit');
                 Route::post('purchases/{purchase}/receipts', [PurchaseReceiptController::class, 'store'])->middleware('permission:purchases.receive');

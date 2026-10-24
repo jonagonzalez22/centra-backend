@@ -6,6 +6,7 @@ use App\Models\InventoryMovement;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Purchase;
+use App\Models\PurchaseDocument;
 use App\Models\Supplier;
 use App\Models\SupplierProduct;
 use App\Models\User;
@@ -94,6 +95,50 @@ test('lists and scopes purchases with permissions and feature', function () {
     $viewOnly->assignRole('STORE_ADMIN');
     $viewOnly->givePermissionTo('purchases.view');
     $this->actingAs($viewOnly, 'sanctum')->postJson('/api/v1/store/purchases', purchasePayload($this->supplier, $product))->assertForbidden();
+});
+
+test('lists document counts and filters confirmed purchases by document presence', function () {
+    $makePurchase = function (string $number, string $status): Purchase {
+        return Purchase::query()->create([
+            'store_id' => $this->store->id,
+            'supplier_id' => $this->supplier->id,
+            'purchase_number' => $number,
+            'purchase_type' => 'order',
+            'status' => $status,
+            'supplier_business_name' => $this->supplier->business_name,
+            'total' => '10.00',
+            'created_by' => $this->user->id,
+        ]);
+    };
+    $draft = $makePurchase('OC-DRAFT', 'draft');
+    $withoutDocuments = $makePurchase('OC-WITHOUT', 'ordered');
+    $withOneDocument = $makePurchase('OC-ONE', 'received');
+    $cancelledWithDocuments = $makePurchase('OC-CANCELLED-WITH', 'cancelled');
+    $cancelledWithoutDocuments = $makePurchase('OC-CANCELLED-WITHOUT', 'cancelled');
+
+    foreach ([$withOneDocument, $cancelledWithDocuments, $cancelledWithDocuments] as $index => $purchase) {
+        PurchaseDocument::query()->create([
+            'store_id' => $this->store->id,
+            'purchase_id' => $purchase->id,
+            'type' => 'invoice',
+            'number' => 'DOC-'.($index + 1),
+            'issued_at' => '2026-10-24',
+            'total_amount' => '1.00',
+            'created_by' => $this->user->id,
+        ]);
+    }
+
+    $items = $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/store/purchases')
+        ->assertOk()->json('data.items');
+    expect(collect($items)->firstWhere('id', $draft->id)['documents_count'])->toBe(0)
+        ->and(collect($items)->firstWhere('id', $withOneDocument->id)['documents_count'])->toBe(1)
+        ->and(collect($items)->firstWhere('id', $cancelledWithDocuments->id)['documents_count'])->toBe(2);
+
+    $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/store/purchases?documents=with_documents')
+        ->assertOk()->assertJsonCount(2, 'data.items');
+    $without = $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/store/purchases?documents=without_documents')
+        ->assertOk()->json('data.items');
+    expect(collect($without)->pluck('id')->all())->toEqualCanonicalizing([$withoutDocuments->id, $cancelledWithoutDocuments->id]);
 });
 
 test('rejects inactive and foreign suppliers or products and keeps purchases store scoped', function () {

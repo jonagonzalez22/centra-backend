@@ -41,6 +41,11 @@ class Purchase extends Model
         return $this->hasMany(PurchaseReceipt::class)->orderBy('received_at')->orderBy('id');
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(PurchaseDocument::class)->orderByDesc('issued_at')->orderByDesc('created_at');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
