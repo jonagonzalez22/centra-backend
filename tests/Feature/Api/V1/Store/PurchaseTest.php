@@ -60,6 +60,17 @@ test('creates draft purchases with exact snapshots, totals, and no stock mutatio
     expect($product->fresh()->stock)->toBe($stock)->and(InventoryMovement::count())->toBe(0);
 });
 
+test('includes the current scoped supplier phone only in purchase detail', function () {
+    $product = purchasableProduct($this->store, $this->category, $this->supplier);
+    $this->supplier->update(['phone' => '+54 261 555-0100']);
+    $purchaseId = $this->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/store/purchases', purchasePayload($this->supplier, $product))
+        ->json('data.id');
+
+    $this->actingAs($this->user, 'sanctum')->getJson("/api/v1/store/purchases/{$purchaseId}")
+        ->assertOk()->assertJsonPath('data.supplier.phone', '+54 261 555-0100');
+});
+
 test('allows direct drafts and multiple items without requiring a preferred supplier', function () {
     $first = purchasableProduct($this->store, $this->category, $this->supplier, ['is_sellable' => false]);
     $second = purchasableProduct($this->store, $this->category, $this->supplier);

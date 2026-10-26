@@ -44,7 +44,13 @@ class PurchaseController extends Controller
 
     public function show(Request $request, string $purchase): JsonResponse
     {
-        $model = Purchase::forStore($request->user()->store_id)->with(['items', 'receipts.items', 'receipts.createdBy', 'documents.createdBy'])->find($purchase);
+        $model = Purchase::forStore($request->user()->store_id)->with([
+            'supplier' => fn ($query) => $query->where('store_id', $request->user()->store_id)->select(['id', 'store_id', 'phone']),
+            'items',
+            'receipts.items',
+            'receipts.createdBy',
+            'documents.createdBy',
+        ])->find($purchase);
         if (! $model) {
             abort(404);
         }
