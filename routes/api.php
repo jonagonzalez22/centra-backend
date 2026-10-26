@@ -164,6 +164,7 @@ Route::prefix('v1')->group(function () {
                 Route::get('products/{product}/purchase-price-history', [ProductController::class, 'purchasePriceHistory'])->middleware('permission:purchases.view');
                 Route::post('purchases', [PurchaseController::class, 'store'])->middleware('permission:purchases.create');
                 Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('permission:purchases.view');
+                Route::get('purchases/{purchase}/pdf', [PurchaseController::class, 'pdf'])->middleware('permission:purchases.view');
                 Route::get('purchases/{purchase}/documents', [PurchaseDocumentController::class, 'index'])->middleware('permission:purchases.view');
                 Route::post('purchases/{purchase}/documents', [PurchaseDocumentController::class, 'store'])->middleware('permission:purchases.edit');
                 Route::put('purchases/{purchase}/documents/{document}', [PurchaseDocumentController::class, 'update'])->middleware('permission:purchases.edit');

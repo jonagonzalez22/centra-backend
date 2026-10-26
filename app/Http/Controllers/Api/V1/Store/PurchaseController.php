@@ -8,13 +8,16 @@ use App\Http\Requests\Api\V1\Store\UpdatePurchaseRequest;
 use App\Http\Resources\PurchaseListResource;
 use App\Http\Resources\PurchaseResource;
 use App\Models\Purchase;
+use App\Models\Store;
+use App\Services\PurchaseOrderPdfService;
 use App\Services\PurchaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 class PurchaseController extends Controller
 {
-    public function __construct(private readonly PurchaseService $purchaseService) {}
+    public function __construct(private readonly PurchaseService $purchaseService, private readonly PurchaseOrderPdfService $purchaseOrderPdfService) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -47,6 +50,16 @@ class PurchaseController extends Controller
         }
 
         return response()->json(['status' => 'success', 'message' => 'Compra obtenida exitosamente.', 'data' => new PurchaseResource($model), 'errors' => null]);
+    }
+
+    public function pdf(Request $request, string $purchase): Response
+    {
+        $model = Purchase::forStore($request->user()->store_id)->with('items')->find($purchase);
+        if (! $model) {
+            abort(404);
+        }
+
+        return $this->purchaseOrderPdfService->download($model, Store::findOrFail($request->user()->store_id));
     }
 
     public function update(UpdatePurchaseRequest $request, string $purchase): JsonResponse
