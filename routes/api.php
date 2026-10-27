@@ -254,6 +254,12 @@ Route::prefix('v1')->group(function () {
                 Route::put('orders/{id}', [OrderController::class, 'update'])
                     ->middleware('permission:orders.edit')
                     ->name('store.orders.update-items');
+                Route::post('orders/{id}/items', [OrderController::class, 'addItem'])
+                    ->middleware('permission:orders.edit')
+                    ->name('store.orders.items.store');
+                Route::patch('orders/{id}/items/{item}/price-list', [OrderController::class, 'changeItemPriceList'])
+                    ->middleware('permission:orders.edit')
+                    ->name('store.orders.items.price-list.update');
                 Route::post('orders/{order}/payments', [OrderPaymentController::class, 'store'])
                     ->middleware('permission:orders.collect')
                     ->name('store.orders.payments.store');

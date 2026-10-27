@@ -9566,8 +9566,10 @@
                                                     "example": 1
                                                 },
                                                 "price": {
+                                                    "description": "Legacy; el backend usa Product.price.",
                                                     "type": "number",
-                                                    "example": 100
+                                                    "example": 100,
+                                                    "nullable": true
                                                 },
                                                 "tax_amount": {
                                                     "type": "number",
@@ -9575,8 +9577,15 @@
                                                     "nullable": true
                                                 },
                                                 "discount_amount": {
+                                                    "description": "Legacy; el backend calcula el descuento.",
                                                     "type": "number",
                                                     "example": 0,
+                                                    "nullable": true
+                                                },
+                                                "price_list_id": {
+                                                    "description": "Null representa Común.",
+                                                    "type": "string",
+                                                    "format": "uuid",
                                                     "nullable": true
                                                 }
                                             },
@@ -12799,6 +12808,18 @@
                                                     "type": "string",
                                                     "format": "uuid"
                                                 },
+                                                "operation_item_id": {
+                                                    "description": "Identidad estable para una línea existente.",
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "nullable": true
+                                                },
+                                                "price_list_id": {
+                                                    "description": "Null representa Común.",
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "nullable": true
+                                                },
                                                 "quantity": {
                                                     "type": "integer",
                                                     "minimum": 1,
@@ -12937,6 +12958,122 @@
                     },
                     "404": {
                         "description": "Pedido no encontrado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/orders/{id}/items": {
+            "post": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Agregar cantidad a una combinación comercial de pedido",
+                "operationId": "d9f80d5d08f8df1de28dd8c080af8a9a",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "product_id",
+                                    "quantity"
+                                ],
+                                "properties": {
+                                    "product_id": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                    },
+                                    "quantity": {
+                                        "type": "string",
+                                        "example": "1.0000"
+                                    },
+                                    "price_list_id": {
+                                        "description": "Null representa Común.",
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Ítem agregado"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/orders/{id}/items/{item}/price-list": {
+            "patch": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Cambiar PriceList de una línea de pedido",
+                "operationId": "2287b8ca9fec20989a09dff1d4110243",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "price_list_id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Lista de precios actualizada"
                     }
                 },
                 "security": [
@@ -18582,6 +18719,19 @@
                                     "type": "number",
                                     "format": "float"
                                 },
+                                "price_list_id": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "nullable": true
+                                },
+                                "price_list_name": {
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "discount_percentage": {
+                                    "type": "number",
+                                    "format": "float"
+                                },
                                 "discount_amount": {
                                     "type": "number",
                                     "format": "float"
@@ -18894,6 +19044,19 @@
                         "format": "float"
                     },
                     "subtotal": {
+                        "type": "number",
+                        "format": "float"
+                    },
+                    "price_list_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "price_list_name": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "discount_percentage": {
                         "type": "number",
                         "format": "float"
                     },

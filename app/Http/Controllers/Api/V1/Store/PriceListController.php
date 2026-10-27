@@ -178,6 +178,15 @@ class PriceListController extends Controller
             return $this->notFound();
         }
 
+        if ($list->operationItems()->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'La lista de precios tiene uso histórico y no puede eliminarse. Podés desactivarla en su lugar.',
+                'data' => null,
+                'errors' => ['price_list' => ['La lista fue utilizada por operaciones históricas. Desactívala en lugar de eliminarla.']],
+            ], 422);
+        }
+
         $list->delete();
 
         return response()->json([

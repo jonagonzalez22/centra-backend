@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
 use App\Models\OperationItem;
+use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\MoneyMath;
@@ -286,6 +287,70 @@ class OrderItemEditService
         });
     }
 
+    /** Add quantity to a commercial identity, retaining its existing snapshots. */
+    public function addItem(CommercialOperation $operation, array $data, User $user): OperationItem
+    {
+        return DB::transaction(function () use ($operation, $data, $user): OperationItem {
+            $order = CommercialOperation::forStore($user->store_id)->whereKey($operation->id)->lockForUpdate()->firstOrFail();
+            $this->assertEditableOrder($order);
+
+            $product = Product::forStore($order->store_id)->whereKey($data['product_id'])
+                ->with('stockMeasurementUnit')->lockForUpdate()->first();
+            if (! $product || ! $product->is_active || ! $product->is_sellable) {
+                throw ValidationException::withMessages(['product_id' => ['El producto no está disponible para aumentar o agregar al pedido.']]);
+            }
+            if ($quantityError = $product->commercialQuantityError($data['quantity'])) {
+                throw ValidationException::withMessages(['quantity' => [$quantityError]]);
+            }
+            if ($product->stock_source_product_id !== null) {
+                $source = Product::forStore($order->store_id)->whereKey($product->stock_source_product_id)->lockForUpdate()->firstOrFail();
+                $product->setRelation('stockSourceProduct', $source);
+            }
+
+            $priceList = $this->activePriceList($order, $data['price_list_id'] ?? null);
+            $quantity = QuantityMath::normalize($data['quantity']);
+            $line = OperationItem::where('operation_id', $order->id)->where('product_id', $product->id)
+                ->when($priceList, fn ($query) => $query->where('price_list_id', $priceList->id), fn ($query) => $query->whereNull('price_list_id'))
+                ->where('quantity', '>', 0)->lockForUpdate()->first();
+
+            $consumption = $this->stockConsumptionResolver->resolve($product);
+            $physicalQuantity = QuantityMath::multiply($quantity, $consumption->consumptionFactor);
+            $available = QuantityMath::subtract($consumption->stockProduct->stock, $consumption->stockProduct->stock_reserved);
+            if (QuantityMath::compare($available, $physicalQuantity) < 0) {
+                throw ValidationException::withMessages(['quantity' => ["No hay stock disponible suficiente para aumentar {$consumption->stockProduct->name}."]]);
+            }
+
+            if ($line) {
+                $newQuantity = QuantityMath::add($line->quantity, $quantity);
+                $subtotal = MoneyMath::multiplyQuantityByPrice($newQuantity, $line->price);
+                $line->update([
+                    'quantity' => $newQuantity,
+                    'subtotal' => $subtotal,
+                    'tax_amount' => MoneyMath::proportional($line->tax_amount, $newQuantity, $line->quantity),
+                    'discount_amount' => MoneyMath::percentage($subtotal, $line->discount_percentage),
+                ]);
+            } else {
+                $subtotal = MoneyMath::multiplyQuantityByPrice($quantity, $product->price);
+                $line = OperationItem::create([
+                    'operation_id' => $order->id, 'product_id' => $product->id, 'product_name' => $product->name,
+                    'price_list_id' => $priceList?->id, 'price_list_name' => $priceList?->name,
+                    'discount_percentage' => $priceList?->discount_percentage ?? '0.00',
+                    ...$this->stockConsumptionResolver->operationItemSnapshot($product),
+                    'measurement_unit_code' => $product->stockMeasurementUnit->code,
+                    'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
+                    'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
+                    'quantity' => $quantity, 'price' => $product->price, 'subtotal' => $subtotal,
+                    'tax_amount' => '0.00', 'discount_amount' => MoneyMath::percentage($subtotal, $priceList?->discount_percentage ?? '0'),
+                ]);
+            }
+
+            $consumption->stockProduct->update(['stock_reserved' => QuantityMath::add($consumption->stockProduct->stock_reserved, $physicalQuantity)]);
+            $this->commercialOperationService->recalculateTotals($order);
+
+            return $line->fresh();
+        });
+    }
+
     private function changeDeliveryDate(CommercialOperation $order, ?string $requestedDeliveryDate, ?string $reason): string
     {
         if ($requestedDeliveryDate === null) {
@@ -307,6 +372,7 @@ class OrderItemEditService
     {
         $sourceItem = $order->items()
             ->where('product_id', $product->id)
+            ->whereNull('price_list_id')
             ->where('quantity', '>', 0)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -316,6 +382,17 @@ class OrderItemEditService
         $quantity = QuantityMath::normalize($quantity);
         $sourceQuantity = $sourceItem ? QuantityMath::normalize($sourceItem->quantity) : null;
         $price = $sourceItem?->price ?? $product->price;
+
+        if ($sourceItem) {
+            $sourceItem->update([
+                'quantity' => QuantityMath::add($sourceQuantity, $quantity),
+                'subtotal' => MoneyMath::multiplyQuantityByPrice(QuantityMath::add($sourceQuantity, $quantity), $sourceItem->price),
+                'tax_amount' => MoneyMath::proportional($sourceItem->tax_amount, QuantityMath::add($sourceQuantity, $quantity), $sourceQuantity),
+                'discount_amount' => MoneyMath::proportional($sourceItem->discount_amount, QuantityMath::add($sourceQuantity, $quantity), $sourceQuantity),
+            ]);
+
+            return;
+        }
 
         OperationItem::create([
             'operation_id' => $order->id,
@@ -335,6 +412,83 @@ class OrderItemEditService
                 ? MoneyMath::proportional($sourceItem->discount_amount, $quantity, $sourceQuantity)
                 : '0.00',
         ]);
+    }
+
+    /**
+     * Changes only the discount condition of an existing order line. The base
+     * price snapshot is never reread from Product. Callers must expose this
+     * through an editable-order endpoint when the line selector UX is added.
+     */
+    public function changePriceList(CommercialOperation $operation, OperationItem $item, ?string $priceListId, User $user): OperationItem
+    {
+        return DB::transaction(function () use ($operation, $item, $priceListId, $user): OperationItem {
+            $order = CommercialOperation::forStore($user->store_id)->whereKey($operation->id)->lockForUpdate()->firstOrFail();
+            $line = OperationItem::where('operation_id', $order->id)->whereKey($item->id)->lockForUpdate()->firstOrFail();
+            $this->assertEditableOrder($order);
+
+            $priceList = $this->activePriceList($order, $priceListId);
+
+            $sameList = $priceList?->id === $line->price_list_id;
+            if ($sameList) {
+                return $line;
+            }
+
+            $collision = OperationItem::where('operation_id', $order->id)
+                ->where('product_id', $line->product_id)
+                ->when($priceList, fn ($q) => $q->where('price_list_id', $priceList->id), fn ($q) => $q->whereNull('price_list_id'))
+                ->whereKeyNot($line->id)->lockForUpdate()->first();
+
+            if ($collision) {
+                $newQuantity = QuantityMath::add($collision->quantity, $line->quantity);
+                $collision->update([
+                    'quantity' => $newQuantity,
+                    'subtotal' => MoneyMath::multiplyQuantityByPrice($newQuantity, $collision->price),
+                    'tax_amount' => MoneyMath::add($collision->tax_amount, $line->tax_amount),
+                    'discount_amount' => MoneyMath::percentage(MoneyMath::multiplyQuantityByPrice($newQuantity, $collision->price), $collision->discount_percentage),
+                ]);
+                $line->delete();
+                $this->commercialOperationService->recalculateTotals($order);
+
+                return $collision->fresh();
+            }
+
+            $subtotal = MoneyMath::multiplyQuantityByPrice($line->quantity, $line->price);
+            $line->update([
+                'price_list_id' => $priceList?->id,
+                'price_list_name' => $priceList?->name,
+                'discount_percentage' => $priceList?->discount_percentage ?? '0.00',
+                'subtotal' => $subtotal,
+                'discount_amount' => MoneyMath::percentage($subtotal, $priceList?->discount_percentage ?? '0'),
+            ]);
+            $this->commercialOperationService->recalculateTotals($order);
+
+            return $line->fresh();
+        });
+    }
+
+    private function assertEditableOrder(CommercialOperation $order): void
+    {
+        $order->setRelation('items', $order->items()->with('product')->lockForUpdate()->get());
+        $editability = $this->orderEditabilityService->describe($order);
+        if (! $editability['editable']) {
+            throw ValidationException::withMessages(['order' => [$this->editabilityMessage($editability['block_reason'])]]);
+        }
+    }
+
+    private function activePriceList(CommercialOperation $order, ?string $priceListId): ?PriceList
+    {
+        if ($priceListId === null) {
+            return null;
+        }
+        $priceList = PriceList::forStore($order->store_id)->whereKey($priceListId)->lockForUpdate()->first();
+        if (! $priceList) {
+            throw ValidationException::withMessages(['price_list_id' => ['La lista de precios no existe o no pertenece a tu tienda.']]);
+        }
+        if (! $priceList->is_active) {
+            throw ValidationException::withMessages(['price_list_id' => ['La lista de precios está inactiva.']]);
+        }
+
+        return $priceList;
     }
 
     /**

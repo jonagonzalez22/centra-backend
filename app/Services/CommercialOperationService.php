@@ -6,6 +6,7 @@ use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
 use App\Models\Customer;
 use App\Models\OperationItem;
+use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
@@ -152,7 +153,10 @@ class CommercialOperationService
                 $customerDisplayName = $customer->display_name;
             }
 
-            usort($items, fn ($a, $b) => strcmp($a['product_id'], $b['product_id']));
+            $items = $this->consolidateCommercialItems($items);
+            usort($items, fn (array $a, array $b) => [$a['product_id'], $a['price_list_id'] ?? ''] <=> [$b['product_id'], $b['price_list_id'] ?? '']);
+
+            $priceLists = $this->lockAndValidatePriceLists($items, $storeId);
 
             $stockContext = $this->lockAndValidateProducts($items, $storeId);
             $products = $stockContext['products'];
@@ -164,9 +168,11 @@ class CommercialOperationService
 
             foreach ($items as $index => $item) {
                 $quantity = QuantityMath::normalize($item['quantity']);
-                $itemSubtotal = MoneyMath::multiplyQuantityByPrice($quantity, (string) $item['price']);
+                $product = $products[$index];
+                $priceList = ($item['price_list_id'] ?? null) === null ? null : $priceLists->get($item['price_list_id']);
+                $itemSubtotal = MoneyMath::multiplyQuantityByPrice($quantity, $product->price);
                 $itemTax = MoneyMath::normalize((string) ($item['tax_amount'] ?? 0));
-                $itemDiscount = MoneyMath::normalize((string) ($item['discount_amount'] ?? 0));
+                $itemDiscount = MoneyMath::percentage($itemSubtotal, $priceList?->discount_percentage ?? '0');
                 $itemTotal = MoneyMath::subtract(MoneyMath::add($itemSubtotal, $itemTax), $itemDiscount);
 
                 $subtotal = MoneyMath::add($subtotal, $itemSubtotal);
@@ -221,24 +227,25 @@ class CommercialOperationService
 
             foreach ($items as $index => $item) {
                 $product = $products[$index];
-                $itemSubtotal = MoneyMath::multiplyQuantityByPrice(
-                    QuantityMath::normalize($item['quantity']),
-                    (string) $item['price']
-                );
+                $priceList = ($item['price_list_id'] ?? null) === null ? null : $priceLists->get($item['price_list_id']);
+                $itemSubtotal = MoneyMath::multiplyQuantityByPrice(QuantityMath::normalize($item['quantity']), $product->price);
 
                 OperationItem::create([
                     'operation_id' => $operation->id,
                     'product_id' => $item['product_id'],
                     'product_name' => $product->name,
+                    'price_list_id' => $priceList?->id,
+                    'price_list_name' => $priceList?->name,
+                    'discount_percentage' => $priceList?->discount_percentage ?? '0.00',
                     ...$this->stockConsumptionResolver->operationItemSnapshot($product),
                     'measurement_unit_code' => $product->stockMeasurementUnit->code,
                     'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
                     'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
                     'quantity' => $item['quantity'],
-                    'price' => $item['price'],
+                    'price' => $product->price,
                     'subtotal' => $itemSubtotal,
                     'tax_amount' => MoneyMath::normalize((string) ($item['tax_amount'] ?? 0)),
-                    'discount_amount' => MoneyMath::normalize((string) ($item['discount_amount'] ?? 0)),
+                    'discount_amount' => MoneyMath::percentage($itemSubtotal, $priceList?->discount_percentage ?? '0'),
                 ]);
             }
 
@@ -354,6 +361,48 @@ class CommercialOperationService
                 throw ValidationException::withMessages($errors);
             }
         }
+    }
+
+    /**
+     * Coalesce only equal commercial identities. A null list is deliberately
+     * distinct from a real 0% list.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array<int, array<string, mixed>>
+     */
+    private function consolidateCommercialItems(array $items): array
+    {
+        $consolidated = [];
+        foreach ($items as $item) {
+            $key = $item['product_id'].'|'.($item['price_list_id'] ?? '__common__');
+            if (isset($consolidated[$key])) {
+                $consolidated[$key]['quantity'] = QuantityMath::add($consolidated[$key]['quantity'], $item['quantity']);
+
+                continue;
+            }
+            $consolidated[$key] = $item;
+        }
+
+        return array_values($consolidated);
+    }
+
+    /** @return \Illuminate\Support\Collection<string, PriceList> */
+    private function lockAndValidatePriceLists(array $items, string $storeId): \Illuminate\Support\Collection
+    {
+        $ids = collect($items)->pluck('price_list_id')->filter()->unique()->sort()->values();
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        $lists = PriceList::forStore($storeId)->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        if ($lists->count() !== $ids->count()) {
+            throw ValidationException::withMessages(['items' => ['Una o más listas de precios no existen o no pertenecen a tu tienda.']]);
+        }
+        if ($lists->contains(fn (PriceList $list): bool => ! $list->is_active)) {
+            throw ValidationException::withMessages(['items' => ['Una lista de precios inactiva no puede aplicarse a nuevos productos.']]);
+        }
+
+        return $lists;
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Feature;
+use App\Models\OperationItem;
 use App\Models\Plan;
 use App\Models\PriceList;
 use App\Models\Store;
@@ -124,6 +125,18 @@ test('shows updates and deletes only price lists from the authenticated store', 
         ->deleteJson("/api/v1/store/price-lists/{$priceList->id}")
         ->assertOk();
     $this->assertDatabaseMissing('price_lists', ['id' => $priceList->id]);
+});
+
+test('does not delete a list used by an operation and instructs to deactivate it', function () {
+    $priceList = PriceList::factory()->create(['store_id' => $this->store->id]);
+    OperationItem::factory()->create(['price_list_id' => $priceList->id]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->deleteJson("/api/v1/store/price-lists/{$priceList->id}")
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.price_list.0', 'La lista fue utilizada por operaciones históricas. Desactívala en lugar de eliminarla.');
+
+    expect($priceList->fresh())->not->toBeNull();
 });
 
 test('price list routes require the pos feature and their corresponding permissions', function () {

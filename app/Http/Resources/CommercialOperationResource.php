@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\OperationItem;
+use App\Support\MoneyMath;
 use App\Support\OperationItemCommercialConfiguration;
 use App\Support\QuantityMath;
 use Illuminate\Http\Request;
@@ -205,6 +206,9 @@ class CommercialOperationResource extends JsonResource
                         'quantity' => $group['quantity'],
                         'price' => (float) $source->price,
                         'subtotal' => round($group['subtotal'], 2),
+                        'price_list_id' => $source->price_list_id,
+                        'price_list_name' => $source->price_list_name,
+                        'discount_percentage' => (float) $source->discount_percentage,
                         'tax_amount' => round($group['tax_amount'], 2),
                         'discount_amount' => round($group['discount_amount'], 2),
                         'stock_measurement_unit' => $group['configuration']['stock_measurement_unit'],
@@ -227,6 +231,9 @@ class CommercialOperationResource extends JsonResource
         array $secondConfiguration
     ): bool {
         return $firstConfiguration === $secondConfiguration
+            && $first->price_list_id === $second->price_list_id
+            && $first->price_list_name === $second->price_list_name
+            && MoneyMath::compare($first->discount_percentage, $second->discount_percentage) === 0
             && $this->amountInCents($first->price) === $this->amountInCents($second->price)
             && bccomp(
                 bcmul((string) $this->amountInCents($first->tax_amount), QuantityMath::normalize($second->quantity), 8),

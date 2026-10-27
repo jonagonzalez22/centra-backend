@@ -162,9 +162,10 @@ class CommercialOperationController extends Controller
      *
      *           @OA\Property(property="product_id", type="string", format="uuid"),
      *           @OA\Property(property="quantity", type="integer", example=1),
-     *           @OA\Property(property="price", type="number", example=100.00),
+     *           @OA\Property(property="price", type="number", example=100.00, nullable=true, description="Legacy; el backend usa Product.price."),
      *           @OA\Property(property="tax_amount", type="number", example=21.00, nullable=true),
-     *           @OA\Property(property="discount_amount", type="number", example=0, nullable=true)
+     *           @OA\Property(property="discount_amount", type="number", example=0, nullable=true, description="Legacy; el backend calcula el descuento."),
+     *           @OA\Property(property="price_list_id", type="string", format="uuid", nullable=true, description="Null representa Común.")
      *         )
      *       ),
      *       @OA\Property(property="payments", type="array",

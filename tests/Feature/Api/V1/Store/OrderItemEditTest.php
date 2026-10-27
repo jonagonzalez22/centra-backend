@@ -12,6 +12,7 @@ use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\PaymentMethod;
 use App\Models\Plan;
+use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
@@ -255,12 +256,39 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         expect($this->productA->fresh()->stock_reserved)->toBe('12.0000');
         $lines = OperationItem::where('operation_id', $order->id)->orderBy('created_at')->get();
-        expect($lines)->toHaveCount(2)
-            ->and($lines->last()->quantity)->toBe('2.0000')
-            ->and((float) $lines->last()->price)->toBe(120.0)
-            ->and((float) $lines->last()->tax_amount)->toBe(2.0)
-            ->and((float) $lines->last()->discount_amount)->toBe(1.0);
+        expect($lines)->toHaveCount(1)
+            ->and($lines->sole()->quantity)->toBe('12.0000')
+            ->and((float) $lines->sole()->price)->toBe(120.0)
+            ->and((float) $lines->sole()->tax_amount)->toBe(12.0)
+            ->and((float) $lines->sole()->discount_amount)->toBe(6.0);
         expect(CommercialOperationEvent::where('operation_id', $order->id)->where('event_type', 'order_edited')->exists())->toBeTrue();
+    });
+
+    test('adds and changes a price-list line through its stable operation item identity', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        $wholesale = PriceList::factory()->create(['store_id' => $this->store->id, 'name' => 'Mayorista', 'discount_percentage' => '10.00']);
+        $common = editableOrderLine($order, $this->productA, 1, 100);
+
+        $this->actingAs($this->user, 'sanctum')
+            ->postJson("/api/v1/store/orders/{$order->id}/items", [
+                'product_id' => $this->productA->id,
+                'quantity' => '1',
+                'price_list_id' => $wholesale->id,
+            ])
+            ->assertOk()
+            ->assertJsonCount(2, 'data.items');
+
+        $this->actingAs($this->user, 'sanctum')
+            ->patchJson("/api/v1/store/orders/{$order->id}/items/{$common->id}/price-list", [
+                'price_list_id' => $wholesale->id,
+            ])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items');
+
+        $line = OperationItem::where('operation_id', $order->id)->sole();
+        expect($line->quantity)->toBe('2.0000')
+            ->and($line->price_list_id)->toBe($wholesale->id)
+            ->and($line->discount_amount)->toBe('20.00');
     });
 
     test('reduces an editable quantity and releases the matching reservation', function () {

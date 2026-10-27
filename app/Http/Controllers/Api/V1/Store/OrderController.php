@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Store\AddOrderItemRequest;
+use App\Http\Requests\Api\V1\Store\ChangeOrderItemPriceListRequest;
 use App\Http\Requests\Api\V1\Store\ListOrdersRequest;
 use App\Http\Requests\Api\V1\Store\UpdateOrderRequest;
 use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
 use App\Http\Resources\OrderEditabilityResource;
 use App\Models\CommercialOperation;
+use App\Models\OperationItem;
 use App\Services\OrderEditabilityService;
 use App\Services\OrderHistoryBuilder;
 use App\Services\OrderItemEditService;
@@ -290,6 +293,8 @@ class OrderController extends Controller
      *         type="object",
      *         required={"product_id", "quantity"},
      *         @OA\Property(property="product_id", type="string", format="uuid"),
+     *         @OA\Property(property="operation_item_id", type="string", format="uuid", nullable=true, description="Identidad estable para una línea existente."),
+     *         @OA\Property(property="price_list_id", type="string", format="uuid", nullable=true, description="Null representa Común."),
      *         @OA\Property(property="quantity", type="integer", minimum=1, example=10)
      *       )),
      *       @OA\Property(property="requested_delivery_date", type="string", format="date", example="2026-09-20", description="Requiere reason cuando cambia."),
@@ -361,5 +366,63 @@ class OrderController extends Controller
             'data' => CommercialOperationResource::make($operation),
             'errors' => null,
         ]);
+    }
+
+    /**
+     * @OA\Post(
+     *   path="/store/orders/{id}/items", summary="Agregar cantidad a una combinación comercial de pedido",
+     *   tags={"Store - Pedidos"}, security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\RequestBody(required=true, @OA\JsonContent(required={"product_id", "quantity"},
+     *
+     *     @OA\Property(property="product_id", type="string", format="uuid"),
+     *     @OA\Property(property="quantity", type="string", example="1.0000"),
+     *     @OA\Property(property="price_list_id", type="string", format="uuid", nullable=true, description="Null representa Común.")
+     *   )), @OA\Response(response=200, description="Ítem agregado")
+     * )
+     */
+    public function addItem(AddOrderItemRequest $request, OrderItemEditService $itemEditService, string $id): JsonResponse
+    {
+        $order = CommercialOperation::forStore($request->user()->store_id)->where('type', 'order')->find($id);
+        if (! $order) {
+            return response()->json(['status' => 'error', 'message' => 'Pedido no encontrado.', 'data' => null, 'errors' => ['id' => ['El pedido no existe o no pertenece a tu tienda.']]], 404);
+        }
+        $itemEditService->addItem($order, $request->validated(), $request->user());
+
+        return $this->orderResponse($order->fresh(), 'Ítem agregado al pedido exitosamente.');
+    }
+
+    /**
+     * @OA\Patch(
+     *   path="/store/orders/{id}/items/{item}/price-list", summary="Cambiar PriceList de una línea de pedido",
+     *   tags={"Store - Pedidos"}, security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *   @OA\Parameter(name="item", in="path", required=true, @OA\Schema(type="string", format="uuid")),
+     *
+     *   @OA\RequestBody(required=true, @OA\JsonContent(@OA\Property(property="price_list_id", type="string", format="uuid", nullable=true))),
+     *
+     *   @OA\Response(response=200, description="Lista de precios actualizada")
+     * )
+     */
+    public function changeItemPriceList(ChangeOrderItemPriceListRequest $request, OrderItemEditService $itemEditService, string $id, string $item): JsonResponse
+    {
+        $order = CommercialOperation::forStore($request->user()->store_id)->where('type', 'order')->find($id);
+        $operationItem = $order ? OperationItem::where('operation_id', $order->id)->find($item) : null;
+        if (! $order || ! $operationItem) {
+            return response()->json(['status' => 'error', 'message' => 'Ítem del pedido no encontrado.', 'data' => null, 'errors' => ['item' => ['El ítem no existe o no pertenece al pedido.']]], 404);
+        }
+        $itemEditService->changePriceList($order, $operationItem, $request->validated('price_list_id'), $request->user());
+
+        return $this->orderResponse($order->fresh(), 'Lista de precios del ítem actualizada exitosamente.');
+    }
+
+    private function orderResponse(CommercialOperation $operation, string $message): JsonResponse
+    {
+        $operation->load(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod', 'payments.cashSession', 'payments.registeredBy', 'events.user', 'routeStops.items.product', 'routeStops.route'])->loadSum('payments', 'amount');
+
+        return response()->json(['status' => 'success', 'message' => $message, 'data' => CommercialOperationResource::make($operation), 'errors' => null]);
     }
 }

@@ -73,9 +73,12 @@ class StoreCommercialOperationRequest extends FormRequest
                 }),
             ],
             'items.*.quantity' => ['required', DecimalQuantity::positive()],
-            'items.*.price' => ['required', 'numeric', 'min:0'],
+            // Legacy POS clients still send price/discount_amount. They are accepted
+            // during the transition but deliberately ignored by the service.
+            'items.*.price' => ['nullable', 'numeric', 'min:0'],
             'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.price_list_id' => ['nullable', 'uuid'],
             'payments' => ['nullable', 'array'],
             'payments.*.store_payment_method_id' => [
                 'required',
@@ -105,7 +108,6 @@ class StoreCommercialOperationRequest extends FormRequest
             'items.*.product_id.required' => 'El ID del producto es obligatorio.',
             'items.*.product_id.exists' => 'El producto no existe o no pertenece a tu tienda.',
             'items.*.quantity.required' => 'La cantidad es obligatoria.',
-            'items.*.price.required' => 'El precio del producto es obligatorio.',
             'items.*.price.numeric' => 'El precio debe ser un número válido.',
             'items.*.price.min' => 'El precio no puede ser negativo.',
             'payments.*.store_payment_method_id.required' => 'El medio de pago es obligatorio.',

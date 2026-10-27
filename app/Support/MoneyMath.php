@@ -71,6 +71,15 @@ final class MoneyMath
         return self::roundHalfUp(bcmul($perUnit, QuantityMath::normalize($part), 8), self::SCALE);
     }
 
+    /** Calculate a percentage of a monetary amount with HALF_UP cent rounding. */
+    public static function percentage(int|string $amount, int|string $percentage): string
+    {
+        $percentage = self::normalize($percentage);
+        $raw = bcdiv(bcmul(self::normalize($amount), $percentage, 8), '100', 8);
+
+        return self::roundHalfUp($raw, self::SCALE);
+    }
+
     /**
      * Round a decimal string with HALF_UP semantics without converting through float.
      */

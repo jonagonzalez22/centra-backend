@@ -17,3 +17,8 @@ test('it compares and bounds monetary values without float arithmetic', function
         ->and(MoneyMath::min('10.00', '9.99'))->toBe('9.99')
         ->and(MoneyMath::max('10.00', '9.99'))->toBe('10.00');
 });
+
+test('it calculates percentage discounts with half-up cent rounding', function () {
+    expect(MoneyMath::percentage('10000.00', '10.00'))->toBe('1000.00')
+        ->and(MoneyMath::percentage('1.00', '100.00'))->toBe('1.00');
+});

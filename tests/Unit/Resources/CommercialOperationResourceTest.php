@@ -8,6 +8,7 @@ use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
+use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
@@ -99,6 +100,21 @@ describe('CommercialOperationResource', function () {
 
         $listData = CommercialOperationListResource::make($operation->load('items'))->toArray(new Request);
         expect($listData['items_count'])->toBe(1);
+    });
+
+    test('keeps common and a real zero percent price list as separate lines', function () {
+        [$operation, $product] = commercialOperationWithProductItems([
+            ['quantity' => 1, 'price' => 4800],
+            ['quantity' => 1, 'price' => 4800],
+        ], 9600);
+        $list = PriceList::factory()->create(['store_id' => $operation->store_id, 'name' => 'Convenio', 'discount_percentage' => '0.00']);
+        $listed = $operation->items()->orderBy('created_at')->get();
+        $listed->last()->update(['price_list_id' => $list->id, 'price_list_name' => 'Convenio', 'discount_percentage' => '0.00']);
+
+        $data = CommercialOperationResource::make($operation->fresh()->load('items.product.stockMeasurementUnit'))->toArray(new Request);
+
+        expect($data['items'])->toHaveCount(2)
+            ->and(collect($data['items'])->pluck('price_list_id')->all())->toContain(null, $list->id);
     });
 });
 

@@ -18,6 +18,9 @@ class OperationItem extends Model
     protected $fillable = [
         'operation_id',
         'product_id',
+        'price_list_id',
+        'price_list_name',
+        'discount_percentage',
         'product_name',
         // Physical stock-consumption snapshots captured when the line is created.
         'stock_source_product_id',
@@ -38,6 +41,7 @@ class OperationItem extends Model
         'stock_consumption_quantity' => 'decimal:4',
         'quantity' => 'decimal:4',
         'price' => 'decimal:2',
+        'discount_percentage' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
@@ -51,6 +55,11 @@ class OperationItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function priceList(): BelongsTo
+    {
+        return $this->belongsTo(PriceList::class);
     }
 
     public function stockSourceProduct(): BelongsTo
