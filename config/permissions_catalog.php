@@ -24,6 +24,12 @@ return [
     'Ventas' => [
         ['name' => 'sales.cancel', 'label' => 'Cancelar ventas'],
     ],
+    'Listas de precios' => [
+        ['name' => 'price_lists.view', 'label' => 'Ver'],
+        ['name' => 'price_lists.create', 'label' => 'Crear'],
+        ['name' => 'price_lists.edit', 'label' => 'Editar'],
+        ['name' => 'price_lists.delete', 'label' => 'Eliminar'],
+    ],
     'Inventario' => [
         ['name' => 'inventory.view', 'label' => 'Ver'],
         ['name' => 'inventory.create', 'label' => 'Crear'],

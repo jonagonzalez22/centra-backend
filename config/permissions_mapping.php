@@ -4,6 +4,7 @@ return [
     'orders' => 'pos',
     'sales' => 'pos',
     'sales_history' => 'pos',
+    'price_lists' => 'pos',
     'store_users' => 'multi_user',
     'customer_addresses' => 'customers',
     'customer_contacts' => 'customers',

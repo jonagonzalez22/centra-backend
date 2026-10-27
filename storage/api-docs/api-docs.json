@@ -13379,6 +13379,354 @@
                 ]
             }
         },
+        "/store/price-lists": {
+            "get": {
+                "tags": [
+                    "Store - Listas de precios"
+                ],
+                "summary": "Listar listas de precios",
+                "description": "Retorna las listas de precios de la tienda autenticada.",
+                "operationId": "priceListIndex",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "is_active",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Listas de precios obtenidas correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Listas de precios obtenidas exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/PriceList"
+                                                    }
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 15
+                                                },
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "example": null,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Store - Listas de precios"
+                ],
+                "summary": "Crear lista de precios",
+                "operationId": "priceListStore",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "discount_percentage"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 100,
+                                        "example": "Mayorista"
+                                    },
+                                    "discount_percentage": {
+                                        "type": "string",
+                                        "format": "decimal",
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "example": "10.00"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Lista de precios creada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Lista de precios creada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/PriceList"
+                                        },
+                                        "errors": {
+                                            "example": null,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/price-lists/{price_list}": {
+            "get": {
+                "tags": [
+                    "Store - Listas de precios"
+                ],
+                "summary": "Obtener lista de precios",
+                "operationId": "priceListShow",
+                "parameters": [
+                    {
+                        "name": "price_list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lista de precios obtenida correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Lista de precios obtenida exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/PriceList"
+                                        },
+                                        "errors": {
+                                            "example": null,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Lista de precios no encontrada"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Store - Listas de precios"
+                ],
+                "summary": "Actualizar lista de precios",
+                "operationId": "priceListUpdate",
+                "parameters": [
+                    {
+                        "name": "price_list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 100,
+                                        "example": "Distribuidor"
+                                    },
+                                    "discount_percentage": {
+                                        "type": "string",
+                                        "format": "decimal",
+                                        "maximum": 100,
+                                        "minimum": 0,
+                                        "example": "15.00"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Lista de precios actualizada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Lista de precios actualizada exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/PriceList"
+                                        },
+                                        "errors": {
+                                            "example": null,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Store - Listas de precios"
+                ],
+                "summary": "Eliminar lista de precios",
+                "operationId": "priceListDestroy",
+                "parameters": [
+                    {
+                        "name": "price_list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lista de precios eliminada correctamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Lista de precios eliminada exitosamente."
+                                        },
+                                        "data": {
+                                            "example": null,
+                                            "nullable": true
+                                        },
+                                        "errors": {
+                                            "example": null,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/products": {
             "get": {
                 "tags": [
@@ -20657,6 +21005,41 @@
                 },
                 "type": "object"
             },
+            "PriceList": {
+                "title": "PriceList",
+                "description": "Lista de precios de una tienda basada en un porcentaje de descuento",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Mayorista"
+                    },
+                    "discount_percentage": {
+                        "type": "string",
+                        "format": "decimal",
+                        "maximum": 100,
+                        "minimum": 0,
+                        "example": "10.00"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-10-27 12:00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-10-27 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
             "Reconciliation": {
                 "title": "Reconciliation",
                 "description": "Resumen de conciliación de una ruta de entrega",
@@ -21254,6 +21637,10 @@
         {
             "name": "Store - Usuarios",
             "description": "Store - Usuarios"
+        },
+        {
+            "name": "Store - Listas de precios",
+            "description": "Store - Listas de precios"
         },
         {
             "name": "Store - Logística",

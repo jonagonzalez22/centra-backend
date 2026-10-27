@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\V1\Store\OrderController;
 use App\Http\Controllers\Api\V1\Store\OrderPaymentController;
 use App\Http\Controllers\Api\V1\Store\PaymentMethodController as StorePaymentMethodController;
 use App\Http\Controllers\Api\V1\Store\PermissionCatalogController;
+use App\Http\Controllers\Api\V1\Store\PriceListController;
 use App\Http\Controllers\Api\V1\Store\ProductController;
 use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\PurchaseController;
@@ -204,6 +205,14 @@ Route::prefix('v1')->group(function () {
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('store.products.destroy');
 
             Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
+
+            Route::middleware('feature:pos')->group(function () {
+                Route::get('price-lists', [PriceListController::class, 'index'])->middleware('permission:price_lists.view')->name('store.price-lists.index');
+                Route::get('price-lists/{price_list}', [PriceListController::class, 'show'])->middleware('permission:price_lists.view')->name('store.price-lists.show');
+                Route::post('price-lists', [PriceListController::class, 'store'])->middleware('permission:price_lists.create')->name('store.price-lists.store');
+                Route::put('price-lists/{price_list}', [PriceListController::class, 'update'])->middleware('permission:price_lists.edit')->name('store.price-lists.update');
+                Route::delete('price-lists/{price_list}', [PriceListController::class, 'destroy'])->middleware('permission:price_lists.delete')->name('store.price-lists.destroy');
+            });
 
             Route::middleware('feature:cash')->group(function () {
                 Route::get('cash/current', [CashSessionController::class, 'current'])->name('store.cash.current');

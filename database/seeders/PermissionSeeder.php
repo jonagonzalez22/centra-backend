@@ -76,6 +76,12 @@ class PermissionSeeder extends Seeder
             'purchases.close',
             'purchases.cancel',
 
+            // Module: Price Lists
+            'price_lists.view',
+            'price_lists.create',
+            'price_lists.edit',
+            'price_lists.delete',
+
             // Module: Customers
             'customers.view',
             'customers.create',
