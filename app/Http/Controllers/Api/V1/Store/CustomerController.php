@@ -74,7 +74,7 @@ class CustomerController extends Controller
         $storeId = $request->user()->store_id;
 
         $customers = Customer::forStore($storeId)
-            ->with(['documentType', 'commercialGroup'])
+            ->with(['documentType'])
             ->withExists([
                 'addresses as has_location' => function ($query) {
                     $query->whereNotNull('latitude')->whereNotNull('longitude');
@@ -135,7 +135,6 @@ class CustomerController extends Controller
                 new OA\Property(property: 'company_name', type: 'string', nullable: true, example: 'Pérez S.A.'),
                 new OA\Property(property: 'document_type_id', type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440000'),
                 new OA\Property(property: 'document_number', type: 'string', example: '20-12345678-5'),
-                new OA\Property(property: 'commercial_group_id', type: 'string', format: 'uuid', nullable: true, example: '550e8400-e29b-41d4-a716-446655440001'),
                 new OA\Property(property: 'status', type: 'string', enum: ['active', 'inactive'], example: 'active'),
                 new OA\Property(property: 'notes', type: 'string', nullable: true, example: 'Cliente frecuente'),
             ]
@@ -183,12 +182,11 @@ class CustomerController extends Controller
             'company_name' => $request->company_name,
             'document_type_id' => $request->document_type_id,
             'document_number' => $request->document_number,
-            'commercial_group_id' => $request->commercial_group_id,
             'status' => $request->status ?? 'active',
             'notes' => $request->notes,
         ]);
 
-        $customer->load(['documentType', 'commercialGroup']);
+        $customer->load(['documentType']);
 
         return response()->json([
             'status' => 'success',
@@ -250,7 +248,7 @@ class CustomerController extends Controller
         $storeId = $request->user()->store_id;
 
         $customer = Customer::forStore($storeId)
-            ->with(['documentType', 'commercialGroup'])
+            ->with(['documentType'])
             ->find($id);
 
         if (! $customer) {
@@ -295,7 +293,6 @@ class CustomerController extends Controller
                 new OA\Property(property: 'company_name', type: 'string', nullable: true, example: 'Pérez S.A.'),
                 new OA\Property(property: 'document_type_id', type: 'string', format: 'uuid'),
                 new OA\Property(property: 'document_number', type: 'string', example: '27-12345678-5'),
-                new OA\Property(property: 'commercial_group_id', type: 'string', format: 'uuid', nullable: true),
                 new OA\Property(property: 'status', type: 'string', enum: ['active', 'inactive']),
                 new OA\Property(property: 'notes', type: 'string', nullable: true),
             ]
@@ -341,7 +338,7 @@ class CustomerController extends Controller
         $storeId = $request->user()->store_id;
 
         $customer = Customer::forStore($storeId)
-            ->with(['documentType', 'commercialGroup'])
+            ->with(['documentType'])
             ->find($id);
 
         if (! $customer) {

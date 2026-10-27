@@ -21,7 +21,6 @@ class Customer extends Model
     protected $fillable = [
         'store_id',
         'customer_code',
-        'commercial_group_id',
         'display_name',
         'first_name',
         'last_name',
@@ -53,11 +52,6 @@ class Customer extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
-    }
-
-    public function commercialGroup(): BelongsTo
-    {
-        return $this->belongsTo(CommercialGroup::class);
     }
 
     public function documentType(): BelongsTo

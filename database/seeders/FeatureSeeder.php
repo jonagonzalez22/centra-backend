@@ -17,7 +17,7 @@ class FeatureSeeder extends Seeder
             ['code' => 'route_mapping', 'name' => 'Hoja de Rutas', 'description' => 'Armado automático de rutas por mapas.'],
             ['code' => 'messaging', 'name' => 'Central de Mensajería', 'description' => 'Envío de notificaciones a clientes.'],
             ['code' => 'multi_user', 'name' => 'Multi-Usuario', 'description' => 'Creación de múltiples cuentas de empleados.'],
-            ['code' => 'customers', 'name' => 'Clientes', 'description' => 'Gestión de grupos comerciales y módulo de clientes.'],
+            ['code' => 'customers', 'name' => 'Clientes', 'description' => 'Gestión del módulo de clientes.'],
             ['code' => 'store_settings', 'name' => 'Configuraciones de tienda', 'description' => 'Acceso a las configuraciones operativas propias de una tienda.'],
             ['code' => 'payment_methods', 'name' => 'Métodos de pago', 'description' => 'Modulo para metodos de pagos.'],
             ['code' => 'orders', 'name' => 'Ordenes', 'description' => 'Gestion de ordenes.'],

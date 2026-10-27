@@ -43,12 +43,6 @@ return [
         ['name' => 'customers.edit', 'label' => 'Editar'],
         ['name' => 'customers.delete', 'label' => 'Eliminar'],
     ],
-    'Grupos Comerciales' => [
-        ['name' => 'commercial_groups.view', 'label' => 'Ver'],
-        ['name' => 'commercial_groups.create', 'label' => 'Crear'],
-        ['name' => 'commercial_groups.edit', 'label' => 'Editar'],
-        ['name' => 'commercial_groups.delete', 'label' => 'Eliminar'],
-    ],
     'Direcciones de Clientes' => [
         ['name' => 'customer_addresses.view', 'label' => 'Ver'],
         ['name' => 'customer_addresses.create', 'label' => 'Crear'],

@@ -35,9 +35,6 @@ class CustomerSchema
     #[OA\Property(example: '20-12345678-5')]
     public string $document_number;
 
-    #[OA\Property(ref: '#/components/schemas/CommercialGroup', nullable: true)]
-    public ?object $commercial_group;
-
     #[OA\Property(example: 'active', enum: ['active', 'inactive'])]
     public string $status;
 

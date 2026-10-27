@@ -18,7 +18,6 @@ class CustomerResource extends JsonResource
             'company_name' => $this->company_name,
             'document_type' => DocumentTypeResource::make($this->whenLoaded('documentType')),
             'document_number' => $this->document_number,
-            'commercial_group' => CommercialGroupResource::make($this->whenLoaded('commercialGroup')),
             'status' => $this->status,
             'has_location' => (bool) $this->has_location,
             'blocked_at' => $this->blocked_at?->format('Y-m-d H:i:s'),

@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\CommercialGroup;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\DocumentType;
@@ -417,41 +416,6 @@ test('user without customers feature gets 403', function () {
         ->getJson('/api/v1/store/customers');
 
     $response->assertStatus(403);
-});
-
-test('creates customer with commercial group', function () {
-    $commercialGroup = CommercialGroup::factory()->forStore($this->store)->create();
-
-    $data = [
-        'display_name' => 'Juan Pérez',
-        'document_type_id' => $this->documentType->id,
-        'document_number' => '20-12345678-5',
-        'commercial_group_id' => $commercialGroup->id,
-    ];
-
-    $response = $this->withHeader('Authorization', "Bearer $this->token")
-        ->postJson('/api/v1/store/customers', $data);
-
-    $response->assertStatus(201)
-        ->assertJsonPath('data.commercial_group.id', $commercialGroup->id);
-});
-
-test('fails with commercial group from another store', function () {
-    $otherStore = Store::factory()->create();
-    $otherGroup = CommercialGroup::factory()->forStore($otherStore)->create();
-
-    $data = [
-        'display_name' => 'Juan Pérez',
-        'document_type_id' => $this->documentType->id,
-        'document_number' => '20-12345678-5',
-        'commercial_group_id' => $otherGroup->id,
-    ];
-
-    $response = $this->withHeader('Authorization', "Bearer $this->token")
-        ->postJson('/api/v1/store/customers', $data);
-
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['commercial_group_id']);
 });
 
 test('normalizes document_number removing non-numeric characters', function () {

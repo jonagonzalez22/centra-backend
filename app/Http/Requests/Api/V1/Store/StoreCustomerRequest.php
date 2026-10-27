@@ -43,13 +43,6 @@ class StoreCustomerRequest extends FormRequest
                     }
                 },
             ],
-            'commercial_group_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('commercial_groups', 'id')->where(function ($query) use ($storeId) {
-                    return $query->where('store_id', $storeId);
-                }),
-            ],
             'status' => ['nullable', 'string', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
         ];
@@ -68,8 +61,6 @@ class StoreCustomerRequest extends FormRequest
             'document_type_id.exists' => 'El tipo de documento no existe.',
             'document_number.required' => 'El número de documento es obligatorio.',
             'document_number.max' => 'El número de documento no puede exceder los 50 caracteres.',
-            'commercial_group_id.uuid' => 'El ID del grupo comercial debe ser un UUID válido.',
-            'commercial_group_id.exists' => 'El grupo comercial no existe o no pertenece a tu tienda.',
             'status.in' => 'El estado debe ser activo o inactivo.',
         ];
     }

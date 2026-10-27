@@ -19,7 +19,6 @@ use App\Http\Controllers\Api\V1\GeocodingController;
 use App\Http\Controllers\Api\V1\Store\BrandController;
 use App\Http\Controllers\Api\V1\Store\CashSessionController;
 use App\Http\Controllers\Api\V1\Store\CategoryController;
-use App\Http\Controllers\Api\V1\Store\CommercialGroupController;
 use App\Http\Controllers\Api\V1\Store\CommercialOperationController;
 use App\Http\Controllers\Api\V1\Store\CommercialProductCatalogController;
 use App\Http\Controllers\Api\V1\Store\CommercialProductDetailController;
@@ -266,12 +265,6 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::middleware('feature:customers')->group(function () {
-                Route::get('commercial-groups', [CommercialGroupController::class, 'index'])->name('store.commercial-groups.index');
-                Route::get('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'show'])->name('store.commercial-groups.show');
-                Route::post('commercial-groups', [CommercialGroupController::class, 'store'])->name('store.commercial-groups.store');
-                Route::put('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'update'])->name('store.commercial-groups.update');
-                Route::delete('commercial-groups/{commercial_group}', [CommercialGroupController::class, 'destroy'])->name('store.commercial-groups.destroy');
-
                 Route::get('customers', [CustomerController::class, 'index'])->name('store.customers.index');
                 Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('store.customers.show');
                 Route::post('customers', [CustomerController::class, 'store'])->name('store.customers.store');

@@ -9384,534 +9384,6 @@
                 ]
             }
         },
-        "/store/commercial-groups": {
-            "get": {
-                "tags": [
-                    "Store - Grupos Comerciales"
-                ],
-                "summary": "Listar grupos comerciales",
-                "description": "Retorna la lista paginada de grupos comerciales de la tienda del usuario autenticado.",
-                "operationId": "commercialGroupIndex",
-                "parameters": [
-                    {
-                        "name": "name",
-                        "in": "query",
-                        "description": "Filtrar por nombre (búsqueda parcial)",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "example": "VIP"
-                        }
-                    },
-                    {
-                        "name": "per_page",
-                        "in": "query",
-                        "description": "Resultados por página (default: 15)",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 15
-                        }
-                    },
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "Número de página",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "example": 1
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Listado de grupos comerciales obtenido correctamente",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/ApiResponse"
-                                        },
-                                        {
-                                            "properties": {
-                                                "status": {
-                                                    "example": "success"
-                                                },
-                                                "message": {
-                                                    "example": "Grupos comerciales obtenidos exitosamente."
-                                                },
-                                                "data": {
-                                                    "properties": {
-                                                        "items": {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "$ref": "#/components/schemas/CommercialGroup"
-                                                            }
-                                                        },
-                                                        "total": {
-                                                            "type": "integer",
-                                                            "example": 10
-                                                        },
-                                                        "per_page": {
-                                                            "type": "integer",
-                                                            "example": 15
-                                                        },
-                                                        "current_page": {
-                                                            "type": "integer",
-                                                            "example": 1
-                                                        },
-                                                        "last_page": {
-                                                            "type": "integer",
-                                                            "example": 1
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                },
-                                                "errors": {
-                                                    "example": null,
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "No autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Plan no incluye la funcionalidad",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            },
-            "post": {
-                "tags": [
-                    "Store - Grupos Comerciales"
-                ],
-                "summary": "Crear grupo comercial",
-                "description": "Crea un nuevo grupo comercial en la tienda del usuario autenticado.",
-                "operationId": "commercialGroupStore",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "name"
-                                ],
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "example": "Clientes VIP"
-                                    },
-                                    "description": {
-                                        "type": "string",
-                                        "example": "Grupo con descuentos especiales",
-                                        "nullable": true
-                                    },
-                                    "settings": {
-                                        "type": "object",
-                                        "example": "{\"discount_percent\": 10}",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "201": {
-                        "description": "Grupo comercial creado correctamente",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/ApiResponse"
-                                        },
-                                        {
-                                            "properties": {
-                                                "data": {
-                                                    "$ref": "#/components/schemas/CommercialGroup"
-                                                },
-                                                "errors": {
-                                                    "example": null,
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "No autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Plan no incluye la funcionalidad",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Error de validación",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/store/commercial-groups/{id}": {
-            "get": {
-                "tags": [
-                    "Store - Grupos Comerciales"
-                ],
-                "summary": "Obtener grupo comercial por ID",
-                "description": "Retorna un grupo comercial específico de la tienda del usuario autenticado.",
-                "operationId": "commercialGroupShow",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ID del grupo comercial",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid",
-                            "example": "550e8400-e29b-41d4-a716-446655440000"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Grupo comercial obtenido correctamente",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/ApiResponse"
-                                        },
-                                        {
-                                            "properties": {
-                                                "status": {
-                                                    "example": "success"
-                                                },
-                                                "message": {
-                                                    "example": "Grupo comercial obtenido exitosamente."
-                                                },
-                                                "data": {
-                                                    "$ref": "#/components/schemas/CommercialGroup"
-                                                },
-                                                "errors": {
-                                                    "example": null,
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "No autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Plan no incluye la funcionalidad",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Grupo comercial no encontrado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            },
-            "put": {
-                "tags": [
-                    "Store - Grupos Comerciales"
-                ],
-                "summary": "Actualizar grupo comercial",
-                "description": "Actualiza un grupo comercial existente de la tienda del usuario autenticado.",
-                "operationId": "commercialGroupUpdate",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ID del grupo comercial",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "example": "Clientes Premium"
-                                    },
-                                    "description": {
-                                        "type": "string",
-                                        "example": "Descripción actualizada",
-                                        "nullable": true
-                                    },
-                                    "settings": {
-                                        "type": "object",
-                                        "example": "{\"discount_percent\": 15}",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Grupo comercial actualizado correctamente",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/ApiResponse"
-                                        },
-                                        {
-                                            "properties": {
-                                                "data": {
-                                                    "$ref": "#/components/schemas/CommercialGroup"
-                                                },
-                                                "errors": {
-                                                    "example": null,
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "No autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Plan no incluye la funcionalidad",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Grupo comercial no encontrado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Error de validación",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            },
-            "delete": {
-                "tags": [
-                    "Store - Grupos Comerciales"
-                ],
-                "summary": "Eliminar grupo comercial",
-                "description": "Elimina un grupo comercial por ID.",
-                "operationId": "commercialGroupDestroy",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ID del grupo comercial a eliminar",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Grupo comercial eliminado correctamente",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/ApiResponse"
-                                        },
-                                        {
-                                            "properties": {
-                                                "status": {
-                                                    "example": "success"
-                                                },
-                                                "message": {
-                                                    "example": "Grupo comercial eliminado correctamente."
-                                                },
-                                                "data": {
-                                                    "example": null,
-                                                    "nullable": true
-                                                },
-                                                "errors": {
-                                                    "example": null,
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "No autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Plan no incluye la funcionalidad",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Grupo comercial no encontrado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ApiResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
         "/store/operations": {
             "get": {
                 "tags": [
@@ -12228,12 +11700,6 @@
                                         "type": "string",
                                         "example": "20-12345678-5"
                                     },
-                                    "commercial_group_id": {
-                                        "type": "string",
-                                        "format": "uuid",
-                                        "example": "550e8400-e29b-41d4-a716-446655440001",
-                                        "nullable": true
-                                    },
                                     "status": {
                                         "type": "string",
                                         "enum": [
@@ -12461,11 +11927,6 @@
                                     "document_number": {
                                         "type": "string",
                                         "example": "27-12345678-5"
-                                    },
-                                    "commercial_group_id": {
-                                        "type": "string",
-                                        "format": "uuid",
-                                        "nullable": true
                                     },
                                     "status": {
                                         "type": "string",
@@ -13969,6 +13430,26 @@
                         }
                     },
                     {
+                        "name": "is_sellable",
+                        "in": "query",
+                        "description": "Filtrar por disponibilidad para venta",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "stock_type",
+                        "in": "query",
+                        "description": "Filtrar por tipo de stock",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "own",
+                                "shared"
+                            ]
+                        }
+                    },
+                    {
                         "name": "sort_by",
                         "in": "query",
                         "description": "Campo por el cual ordenar",
@@ -14136,12 +13617,6 @@
                                         "example": "100.0000",
                                         "nullable": true
                                     },
-                                    "stock_reserved": {
-                                        "type": "string",
-                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
-                                        "example": "0.0000",
-                                        "nullable": true
-                                    },
                                     "stock_min": {
                                         "type": "string",
                                         "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
@@ -14162,6 +13637,36 @@
                                     "is_active": {
                                         "type": "boolean",
                                         "example": true,
+                                        "nullable": true
+                                    },
+                                    "is_sellable": {
+                                        "type": "boolean",
+                                        "example": true,
+                                        "nullable": true
+                                    },
+                                    "suppliers": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "supplier_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "supplier_code": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "supplier_product_name": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "is_preferred": {
+                                                    "type": "boolean",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
                                         "nullable": true
                                     }
                                 },
@@ -14335,12 +13840,6 @@
                                         "example": "150.0000",
                                         "nullable": true
                                     },
-                                    "stock_reserved": {
-                                        "type": "string",
-                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
-                                        "example": "10.0000",
-                                        "nullable": true
-                                    },
                                     "stock_min": {
                                         "type": "string",
                                         "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
@@ -14486,6 +13985,14 @@
                             "type": "string",
                             "maxLength": 255,
                             "minLength": 2
+                        }
+                    },
+                    {
+                        "name": "for_stock_source",
+                        "in": "query",
+                        "description": "Incluye fuentes de stock activas, incluso si no están disponibles para venta",
+                        "schema": {
+                            "type": "boolean"
                         }
                     }
                 ],
@@ -16073,8 +15580,9 @@
                                                     "example": "550e8400-e29b-41d4-a716-446655440000"
                                                 },
                                                 "quantity_planned": {
-                                                    "type": "integer",
-                                                    "example": 5
+                                                    "type": "string",
+                                                    "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                                    "example": "1.2500"
                                                 }
                                             },
                                             "type": "object"
@@ -16948,8 +16456,9 @@
                                         "example": "returned"
                                     },
                                     "quantity_to_resolve": {
-                                        "type": "integer",
-                                        "example": 2
+                                        "type": "string",
+                                        "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                        "example": "0.2500"
                                     },
                                     "notes": {
                                         "type": "string",
@@ -17076,8 +16585,9 @@
                                                     ]
                                                 },
                                                 "quantity_to_resolve": {
-                                                    "type": "integer",
-                                                    "minimum": 1
+                                                    "type": "string",
+                                                    "pattern": "^\\\\d+(?:\\\\.\\\\d{1,4})?$",
+                                                    "example": "0.2500"
                                                 },
                                                 "notes": {
                                                     "type": "string",
@@ -18619,10 +18129,9 @@
                     "has_pending_delivery": {
                         "type": "boolean"
                     },
-                    "pending_delivery_quantity": {
-                        "type": "string",
-                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
-                        "example": "2.0000"
+                    "pending_delivery_items_count": {
+                        "type": "integer",
+                        "example": 2
                     }
                 },
                 "type": "object"
@@ -18732,6 +18241,26 @@
                                 "tax_amount": {
                                     "type": "number",
                                     "format": "float"
+                                },
+                                "measurement_unit": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "string",
+                                            "example": "kg"
+                                        },
+                                        "symbol": {
+                                            "type": "string",
+                                            "example": "kg"
+                                        }
+                                    },
+                                    "type": "object",
+                                    "nullable": true
+                                },
+                                "sale_quantity_step": {
+                                    "type": "string",
+                                    "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                                    "example": "0.2500",
+                                    "nullable": true
                                 }
                             },
                             "type": "object"
@@ -19027,6 +18556,26 @@
                     "discount_amount": {
                         "type": "number",
                         "format": "float"
+                    },
+                    "stock_measurement_unit": {
+                        "properties": {
+                            "code": {
+                                "type": "string",
+                                "example": "kg"
+                            },
+                            "symbol": {
+                                "type": "string",
+                                "example": "kg"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "sale_quantity_step": {
+                        "type": "string",
+                        "pattern": "^\\\\d+\\\\.\\\\d{4}$",
+                        "example": "0.2500",
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -19177,12 +18726,24 @@
                     "stock_measurement_unit": {
                         "$ref": "#/components/schemas/MeasurementUnitResource"
                     },
+                    "stock_source_product": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "stock_consumption_quantity": {
+                        "type": "string",
+                        "example": "5.0000",
+                        "nullable": true
+                    },
                     "sale_quantity_step": {
                         "type": "string",
                         "pattern": "^\\\\d+\\\\.\\\\d{4}$",
                         "example": "1.0000"
                     },
                     "is_active": {
+                        "type": "boolean"
+                    },
+                    "is_sellable": {
                         "type": "boolean"
                     },
                     "parent_product_id": {
@@ -19221,6 +18782,23 @@
                     },
                     "sku": {
                         "type": "string"
+                    },
+                    "commercial_available_quantity": {
+                        "type": "string",
+                        "example": "10.0000"
+                    },
+                    "stock_source_product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "stock_measurement_unit": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/MeasurementUnitResource"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -20270,50 +19848,6 @@
                 },
                 "type": "object"
             },
-            "CommercialGroup": {
-                "title": "CommercialGroup",
-                "description": "Representación de un grupo comercial",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "example": "550e8400-e29b-41d4-a716-446655440000"
-                    },
-                    "store_id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "example": "550e8400-e29b-41d4-a716-446655440001"
-                    },
-                    "name": {
-                        "type": "string",
-                        "example": "Clientes VIP"
-                    },
-                    "description": {
-                        "type": "string",
-                        "example": "Grupo de clientes con descuentos preferenciales",
-                        "nullable": true
-                    },
-                    "settings": {
-                        "properties": {
-                            "discount_percent": {
-                                "type": "number",
-                                "example": 10
-                            }
-                        },
-                        "type": "object",
-                        "nullable": true
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "example": "2026-06-30 12:00:00"
-                    },
-                    "updated_at": {
-                        "type": "string",
-                        "example": "2026-06-30 12:00:00"
-                    }
-                },
-                "type": "object"
-            },
             "CustomerAddress": {
                 "title": "CustomerAddress",
                 "description": "Representación de una dirección de cliente",
@@ -20490,14 +20024,6 @@
                     "document_number": {
                         "type": "string",
                         "example": "20-12345678-5"
-                    },
-                    "commercial_group": {
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/CommercialGroup"
-                            }
-                        ],
-                        "nullable": true
                     },
                     "status": {
                         "type": "string",
@@ -21688,10 +21214,6 @@
         {
             "name": "Store - Categorías",
             "description": "Store - Categorías"
-        },
-        {
-            "name": "Store - Grupos Comerciales",
-            "description": "Store - Grupos Comerciales"
         },
         {
             "name": "Store - Operaciones Comerciales",

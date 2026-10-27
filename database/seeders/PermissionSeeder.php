@@ -76,12 +76,6 @@ class PermissionSeeder extends Seeder
             'purchases.close',
             'purchases.cancel',
 
-            // Module: Commercial Groups
-            'commercial_groups.view',
-            'commercial_groups.create',
-            'commercial_groups.edit',
-            'commercial_groups.delete',
-
             // Module: Customers
             'customers.view',
             'customers.create',
