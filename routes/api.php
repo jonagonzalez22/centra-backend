@@ -207,6 +207,7 @@ Route::prefix('v1')->group(function () {
             Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
 
             Route::middleware('feature:pos')->group(function () {
+                Route::get('price-lists/active', [PriceListController::class, 'active'])->name('store.price-lists.active');
                 Route::get('price-lists', [PriceListController::class, 'index'])->middleware('permission:price_lists.view')->name('store.price-lists.index');
                 Route::get('price-lists/{price_list}', [PriceListController::class, 'show'])->middleware('permission:price_lists.view')->name('store.price-lists.show');
                 Route::post('price-lists', [PriceListController::class, 'store'])->middleware('permission:price_lists.create')->name('store.price-lists.store');
@@ -257,6 +258,10 @@ Route::prefix('v1')->group(function () {
                 Route::post('orders/{id}/items', [OrderController::class, 'addItem'])
                     ->middleware('permission:orders.edit')
                     ->name('store.orders.items.store');
+                Route::patch('orders/{id}/items/{item}', [OrderController::class, 'updateItemQuantity'])
+                    ->middleware('permission:orders.edit')->name('store.orders.items.update');
+                Route::delete('orders/{id}/items/{item}', [OrderController::class, 'deleteItem'])
+                    ->middleware('permission:orders.edit')->name('store.orders.items.delete');
                 Route::patch('orders/{id}/items/{item}/price-list', [OrderController::class, 'changeItemPriceList'])
                     ->middleware('permission:orders.edit')
                     ->name('store.orders.items.price-list.update');

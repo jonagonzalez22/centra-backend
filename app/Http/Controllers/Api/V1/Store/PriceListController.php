@@ -14,6 +14,34 @@ use OpenApi\Attributes as OA;
 class PriceListController extends Controller
 {
     #[OA\Get(
+        path: '/store/price-lists/active',
+        summary: 'Obtener listas activas para selección operativa',
+        description: 'Devuelve únicamente las listas activas pertenecientes a la Store autenticada. Está destinado a selección operativa en POS y no requiere permisos administrativos price_lists.*.',
+        operationId: 'priceListActive',
+        security: [['sanctum' => []]],
+        tags: ['Store - Listas de precios']
+    )]
+    #[OA\Response(response: 200, description: 'Listas activas de la Store autenticada', content: new OA\JsonContent(properties: [
+        new OA\Property(property: 'status', type: 'string', example: 'success'),
+        new OA\Property(property: 'message', type: 'string', example: 'Listas de precios activas obtenidas exitosamente.'),
+        new OA\Property(property: 'data', properties: [
+            new OA\Property(property: 'items', type: 'array', items: new OA\Items(ref: '#/components/schemas/PriceList')),
+        ], type: 'object'),
+        new OA\Property(property: 'errors', type: 'object', nullable: true, example: null),
+    ]))]
+    public function active(Request $request): JsonResponse
+    {
+        $items = PriceList::forStore($request->user()->store_id)->where('is_active', true)->orderBy('name')->get();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Listas de precios activas obtenidas exitosamente.',
+            'data' => ['items' => PriceListResource::collection($items)],
+            'errors' => null,
+        ]);
+    }
+
+    #[OA\Get(
         path: '/store/price-lists',
         summary: 'Listar listas de precios',
         description: 'Retorna las listas de precios de la tienda autenticada.',

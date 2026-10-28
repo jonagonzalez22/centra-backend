@@ -48,6 +48,20 @@ test('lists price lists by store with search and active filters', function () {
         ->assertJsonPath('data.items.0.name', 'Inactiva');
 });
 
+test('active selector lists only active store lists without administrative permissions', function () {
+    PriceList::factory()->create(['store_id' => $this->store->id, 'name' => 'Activa']);
+    PriceList::factory()->create(['store_id' => $this->store->id, 'name' => 'Inactiva', 'is_active' => false]);
+    PriceList::factory()->create(['name' => 'Ajena']);
+    Role::firstOrCreate(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    $cashier = User::factory()->create(['store_id' => $this->store->id]);
+    $cashier->assignRole('STORE_USER');
+
+    $this->actingAs($cashier, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.name', 'Activa');
+});
+
 test('creates price lists with exact decimal percentages and defaults active', function () {
     $this->actingAs($this->user, 'sanctum')
         ->postJson('/api/v1/store/price-lists', ['name' => '  Revendedor  ', 'discount_percentage' => '7.5'])

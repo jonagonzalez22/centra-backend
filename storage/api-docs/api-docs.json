@@ -13083,6 +13083,119 @@
                 ]
             }
         },
+        "/store/orders/{id}/items/{item}": {
+            "delete": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Eliminar una línea de pedido",
+                "description": "La línea se elimina de manera inequívoca mediante operation_item_id y el pedido se recalcula.",
+                "operationId": "7910bd144aa67c352aa615bd31f8b81c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del pedido",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "description": "operation_item_id perteneciente al pedido",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Línea eliminada y pedido recalculado"
+                    },
+                    "404": {
+                        "description": "Pedido o línea inexistente o fuera de alcance de la Store"
+                    },
+                    "422": {
+                        "description": "Estado de pedido o compromiso impide eliminar la línea"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "patch": {
+                "tags": [
+                    "Store - Pedidos"
+                ],
+                "summary": "Actualizar cantidad de una línea de pedido",
+                "description": "La línea se identifica exclusivamente por operation_item_id. Conserva los snapshots comerciales existentes; no utiliza el precio ni el descuento vivo.",
+                "operationId": "7b95a657fac9113777676004b12c6161",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID del pedido",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "description": "operation_item_id perteneciente al pedido",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "quantity"
+                                ],
+                                "properties": {
+                                    "quantity": {
+                                        "type": "string",
+                                        "example": "4.0000"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Cantidad actualizada y pedido recalculado"
+                    },
+                    "404": {
+                        "description": "Pedido o línea inexistente o fuera de alcance de la Store"
+                    },
+                    "422": {
+                        "description": "Cantidad o estado de pedido no editable"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/orders/{order}/payments": {
             "post": {
                 "tags": [
@@ -13507,6 +13620,59 @@
                     },
                     "403": {
                         "description": "No tenés permiso para acceder a este recurso"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/store/price-lists/active": {
+            "get": {
+                "tags": [
+                    "Store - Listas de precios"
+                ],
+                "summary": "Obtener listas activas para selección operativa",
+                "description": "Devuelve únicamente las listas activas pertenecientes a la Store autenticada. Está destinado a selección operativa en POS y no requiere permisos administrativos price_lists.*.",
+                "operationId": "priceListActive",
+                "responses": {
+                    "200": {
+                        "description": "Listas activas de la Store autenticada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Listas de precios activas obtenidas exitosamente."
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "items": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/PriceList"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "example": null,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
                     }
                 },
                 "security": [

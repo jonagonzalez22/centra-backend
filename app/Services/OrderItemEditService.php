@@ -351,6 +351,88 @@ class OrderItemEditService
         });
     }
 
+    public function updateItemQuantity(CommercialOperation $operation, OperationItem $item, int|string $quantity, User $user): OperationItem
+    {
+        return DB::transaction(function () use ($operation, $item, $quantity, $user): OperationItem {
+            $order = CommercialOperation::forStore($user->store_id)->whereKey($operation->id)->lockForUpdate()->firstOrFail();
+            $line = OperationItem::where('operation_id', $order->id)->whereKey($item->id)->lockForUpdate()->firstOrFail();
+            $this->assertEditableOrder($order);
+            $product = Product::forStore($order->store_id)->whereKey($line->product_id)->with('stockMeasurementUnit')->lockForUpdate()->firstOrFail();
+            $quantity = QuantityMath::normalize($quantity);
+            $oldQuantity = QuantityMath::normalize($line->quantity);
+            $delta = QuantityMath::subtract($quantity, $oldQuantity);
+            if (QuantityMath::isZero($delta)) {
+                return $line;
+            }
+            if (! $product->sale_quantity_step || ! QuantityMath::isMultipleOf($quantity, $product->sale_quantity_step)) {
+                throw ValidationException::withMessages(['quantity' => ['La cantidad no respeta el múltiplo de venta del producto.']]);
+            }
+            $editability = $this->orderEditabilityService->describe($order);
+            $minimum = collect($editability['items'])->firstWhere('product_id', $line->product_id)['minimum_quantity'] ?? '0';
+            $otherProductQuantity = $this->sumQuantities(
+                $order->items->where('product_id', $line->product_id)->where('id', '!=', $line->id)->pluck('quantity')->all()
+            );
+            if (QuantityMath::compare(QuantityMath::add($otherProductQuantity, $quantity), $minimum) < 0) {
+                throw ValidationException::withMessages(['quantity' => ["La cantidad no puede ser menor al mínimo editable de {$minimum}."]]);
+            }
+            if (QuantityMath::isPositive($delta)) {
+                if ($line->price_list_id !== null) {
+                    $active = PriceList::forStore($order->store_id)->whereKey($line->price_list_id)->where('is_active', true)->exists();
+                    if (! $active) {
+                        throw ValidationException::withMessages(['price_list_id' => ['La lista de precios está inactiva y no admite nuevas cantidades.']]);
+                    }
+                }
+                if (! $product->is_active || ! $product->is_sellable) {
+                    throw ValidationException::withMessages(['quantity' => ['El producto no está disponible para aumentar el pedido.']]);
+                }
+            }
+            if ($product->stock_source_product_id !== null) {
+                $product->setRelation('stockSourceProduct', Product::forStore($order->store_id)->whereKey($product->stock_source_product_id)->lockForUpdate()->firstOrFail());
+            }
+            $consumption = $this->stockConsumptionResolver->resolve($product);
+            $physicalDelta = QuantityMath::multiply(QuantityMath::isPositive($delta) ? $delta : QuantityMath::subtract('0', $delta), $consumption->consumptionFactor);
+            if (QuantityMath::isPositive($delta)) {
+                $available = QuantityMath::subtract($consumption->stockProduct->stock, $consumption->stockProduct->stock_reserved);
+                if (QuantityMath::compare($available, $physicalDelta) < 0) {
+                    throw ValidationException::withMessages(['quantity' => ['No hay stock disponible suficiente.']]);
+                }
+                $consumption->stockProduct->update(['stock_reserved' => QuantityMath::add($consumption->stockProduct->stock_reserved, $physicalDelta)]);
+            } else {
+                $this->commercialOperationService->releaseReservedStockForPhysicalTotals($order->store_id, [$consumption->stockProduct->id => $physicalDelta]);
+            }
+            $subtotal = MoneyMath::multiplyQuantityByPrice($quantity, $line->price);
+            $line->update([
+                'quantity' => $quantity,
+                'subtotal' => $subtotal,
+                'discount_amount' => MoneyMath::percentage($subtotal, $line->discount_percentage ?? '0'),
+                'tax_amount' => QuantityMath::isPositive($quantity) ? MoneyMath::proportional($line->tax_amount, $quantity, $oldQuantity) : '0.00',
+            ]);
+            $this->commercialOperationService->recalculateTotals($order);
+
+            return $line->fresh();
+        });
+    }
+
+    public function deleteItem(CommercialOperation $operation, OperationItem $item, User $user): void
+    {
+        DB::transaction(function () use ($operation, $item, $user): void {
+            $order = CommercialOperation::forStore($user->store_id)->whereKey($operation->id)->lockForUpdate()->firstOrFail();
+            $line = OperationItem::where('operation_id', $order->id)->whereKey($item->id)->lockForUpdate()->firstOrFail();
+            $this->assertEditableOrder($order);
+            $editability = $this->orderEditabilityService->describe($order);
+            $minimum = collect($editability['items'])->firstWhere('product_id', $line->product_id)['minimum_quantity'] ?? '0';
+            $remainingProductQuantity = $this->sumQuantities(
+                $order->items->where('product_id', $line->product_id)->where('id', '!=', $line->id)->pluck('quantity')->all()
+            );
+            if (QuantityMath::compare($remainingProductQuantity, $minimum) < 0) {
+                throw ValidationException::withMessages(['item' => ['La línea tiene cantidades entregadas o comprometidas y no puede eliminarse.']]);
+            }
+            $this->commercialOperationService->releaseReservedStockForItemQuantities($order->store_id, [['item' => $line, 'quantity' => QuantityMath::normalize($line->quantity)]]);
+            $line->delete();
+            $this->commercialOperationService->recalculateTotals($order);
+        });
+    }
+
     private function changeDeliveryDate(CommercialOperation $order, ?string $requestedDeliveryDate, ?string $reason): string
     {
         if ($requestedDeliveryDate === null) {

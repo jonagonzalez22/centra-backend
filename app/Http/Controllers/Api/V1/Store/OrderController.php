@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\AddOrderItemRequest;
 use App\Http\Requests\Api\V1\Store\ChangeOrderItemPriceListRequest;
 use App\Http\Requests\Api\V1\Store\ListOrdersRequest;
+use App\Http\Requests\Api\V1\Store\UpdateOrderItemQuantityRequest;
 use App\Http\Requests\Api\V1\Store\UpdateOrderRequest;
 use App\Http\Resources\CommercialOperationListResource;
 use App\Http\Resources\CommercialOperationResource;
@@ -417,6 +418,62 @@ class OrderController extends Controller
         $itemEditService->changePriceList($order, $operationItem, $request->validated('price_list_id'), $request->user());
 
         return $this->orderResponse($order->fresh(), 'Lista de precios del ítem actualizada exitosamente.');
+    }
+
+    /**
+     * @OA\Patch(
+     *   path="/store/orders/{id}/items/{item}",
+     *   summary="Actualizar cantidad de una línea de pedido",
+     *   description="La línea se identifica exclusivamente por operation_item_id. Conserva los snapshots comerciales existentes; no utiliza el precio ni el descuento vivo.",
+     *   tags={"Store - Pedidos"}, security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID del pedido"),
+     *   @OA\Parameter(name="item", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="operation_item_id perteneciente al pedido"),
+     *
+     *   @OA\RequestBody(required=true, @OA\JsonContent(required={"quantity"}, @OA\Property(property="quantity", type="string", example="4.0000"))),
+     *
+     *   @OA\Response(response=200, description="Cantidad actualizada y pedido recalculado"),
+     *   @OA\Response(response=404, description="Pedido o línea inexistente o fuera de alcance de la Store"),
+     *   @OA\Response(response=422, description="Cantidad o estado de pedido no editable")
+     * )
+     */
+    public function updateItemQuantity(UpdateOrderItemQuantityRequest $request, OrderItemEditService $service, string $id, string $item): JsonResponse
+    {
+        $order = CommercialOperation::forStore($request->user()->store_id)->where('type', 'order')->find($id);
+        $line = $order ? OperationItem::where('operation_id', $order->id)->find($item) : null;
+        if (! $order || ! $line) {
+            return response()->json(['status' => 'error', 'message' => 'Ítem no encontrado.', 'data' => null, 'errors' => ['item' => ['La línea no pertenece al pedido indicado.']]], 404);
+        }
+        $service->updateItemQuantity($order, $line, $request->validated('quantity'), $request->user());
+
+        return $this->orderResponse($order->fresh(), 'Cantidad actualizada.');
+    }
+
+    /**
+     * @OA\Delete(
+     *   path="/store/orders/{id}/items/{item}",
+     *   summary="Eliminar una línea de pedido",
+     *   description="La línea se elimina de manera inequívoca mediante operation_item_id y el pedido se recalcula.",
+     *   tags={"Store - Pedidos"}, security={{"sanctum":{}}},
+     *
+     *   @OA\Parameter(name="id", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="ID del pedido"),
+     *   @OA\Parameter(name="item", in="path", required=true, @OA\Schema(type="string", format="uuid"), description="operation_item_id perteneciente al pedido"),
+     *
+     *   @OA\Response(response=200, description="Línea eliminada y pedido recalculado"),
+     *   @OA\Response(response=404, description="Pedido o línea inexistente o fuera de alcance de la Store"),
+     *   @OA\Response(response=422, description="Estado de pedido o compromiso impide eliminar la línea")
+     * )
+     */
+    public function deleteItem(Request $request, OrderItemEditService $service, string $id, string $item): JsonResponse
+    {
+        $order = CommercialOperation::forStore($request->user()->store_id)->where('type', 'order')->find($id);
+        $line = $order ? OperationItem::where('operation_id', $order->id)->find($item) : null;
+        if (! $order || ! $line) {
+            return response()->json(['status' => 'error', 'message' => 'Ítem no encontrado.', 'data' => null, 'errors' => ['item' => ['La línea no pertenece al pedido indicado.']]], 404);
+        }
+        $service->deleteItem($order, $line, $request->user());
+
+        return $this->orderResponse($order->fresh(), 'Ítem eliminado.');
     }
 
     private function orderResponse(CommercialOperation $operation, string $message): JsonResponse

@@ -291,6 +291,204 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
             ->and($line->discount_amount)->toBe('20.00');
     });
 
+    test('PATCH quantity mutates only the selected operation item and preserves pricing snapshots', function () {
+        $this->productA->update(['price' => '1000.00']);
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        $wholesale = PriceList::factory()->create([
+            'store_id' => $this->store->id,
+            'name' => 'Mayorista',
+            'discount_percentage' => '10.00',
+        ]);
+
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/orders/{$order->id}/items", [
+            'product_id' => $this->productA->id,
+            'quantity' => '2',
+            'price_list_id' => null,
+        ])->assertOk();
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/orders/{$order->id}/items", [
+            'product_id' => $this->productA->id,
+            'quantity' => '2',
+            'price_list_id' => $wholesale->id,
+        ])->assertOk();
+
+        $common = $order->items()->whereNull('price_list_id')->sole();
+        $discounted = $order->items()->where('price_list_id', $wholesale->id)->sole();
+        $this->productA->update(['price' => '1200.00']);
+        $wholesale->update(['name' => 'Mayorista actualizado', 'discount_percentage' => '15.00']);
+
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$common->id}", [
+            'quantity' => '3',
+        ])->assertOk()->assertJsonPath('data.subtotal', 5000)
+            ->assertJsonPath('data.discount', 200)
+            ->assertJsonPath('data.total', 4800);
+
+        expect($common->fresh()->quantity)->toBe('3.0000')
+            ->and($common->fresh()->price)->toBe('1000.00')
+            ->and($common->fresh()->discount_amount)->toBe('0.00')
+            ->and($discounted->fresh()->quantity)->toBe('2.0000')
+            ->and($discounted->fresh()->price)->toBe('1000.00')
+            ->and($discounted->fresh()->price_list_id)->toBe($wholesale->id)
+            ->and($discounted->fresh()->price_list_name)->toBe('Mayorista')
+            ->and($discounted->fresh()->discount_percentage)->toBe('10.00')
+            ->and($discounted->fresh()->discount_amount)->toBe('200.00');
+
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$discounted->id}", [
+            'quantity' => '3',
+        ])->assertOk()->assertJsonPath('data.subtotal', 6000)
+            ->assertJsonPath('data.discount', 300)
+            ->assertJsonPath('data.total', 5700);
+
+        expect($discounted->fresh()->quantity)->toBe('3.0000')
+            ->and($discounted->fresh()->price_list_name)->toBe('Mayorista')
+            ->and($discounted->fresh()->discount_percentage)->toBe('10.00')
+            ->and($discounted->fresh()->discount_amount)->toBe('300.00')
+            ->and($common->fresh()->quantity)->toBe('3.0000');
+    });
+
+    test('PATCH quantity rejects increases on inactive lists but permits decreases and common increases', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        $list = PriceList::factory()->create([
+            'store_id' => $this->store->id,
+            'name' => 'Mayorista',
+            'discount_percentage' => '10.00',
+        ]);
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/orders/{$order->id}/items", [
+            'product_id' => $this->productA->id, 'quantity' => '2', 'price_list_id' => $list->id,
+        ])->assertOk();
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/orders/{$order->id}/items", [
+            'product_id' => $this->productA->id, 'quantity' => '2', 'price_list_id' => null,
+        ])->assertOk();
+        $discounted = $order->items()->where('price_list_id', $list->id)->sole();
+        $common = $order->items()->whereNull('price_list_id')->sole();
+        $list->update(['is_active' => false]);
+
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$discounted->id}", [
+            'quantity' => '3',
+        ])->assertUnprocessable()->assertJsonValidationErrors('price_list_id');
+
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$discounted->id}", [
+            'quantity' => '1',
+        ])->assertOk();
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$common->id}", [
+            'quantity' => '3',
+        ])->assertOk();
+
+        expect($discounted->fresh()->quantity)->toBe('1.0000')
+            ->and($discounted->fresh()->price_list_name)->toBe('Mayorista')
+            ->and($discounted->fresh()->discount_percentage)->toBe('10.00')
+            ->and($discounted->fresh()->discount_amount)->toBe('10.00')
+            ->and($common->fresh()->quantity)->toBe('3.0000')
+            ->and($order->fresh()->discount)->toBe('10.00');
+    });
+
+    test('DELETE removes only the selected commercial line and recalculates totals', function () {
+        $this->productA->update(['price' => '1000.00']);
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        $list = PriceList::factory()->create([
+            'store_id' => $this->store->id,
+            'name' => 'Mayorista',
+            'discount_percentage' => '10.00',
+        ]);
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/orders/{$order->id}/items", [
+            'product_id' => $this->productA->id, 'quantity' => '1', 'price_list_id' => null,
+        ])->assertOk();
+        $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/orders/{$order->id}/items", [
+            'product_id' => $this->productA->id, 'quantity' => '2', 'price_list_id' => $list->id,
+        ])->assertOk();
+        $common = $order->items()->whereNull('price_list_id')->sole();
+        $discounted = $order->items()->where('price_list_id', $list->id)->sole();
+
+        $this->actingAs($this->user, 'sanctum')->deleteJson("/api/v1/store/orders/{$order->id}/items/{$common->id}")
+            ->assertOk()->assertJsonCount(1, 'data.items')
+            ->assertJsonPath('data.subtotal', 2000)
+            ->assertJsonPath('data.discount', 200)
+            ->assertJsonPath('data.total', 1800);
+
+        expect(OperationItem::whereKey($common->id)->exists())->toBeFalse()
+            ->and($discounted->fresh()->quantity)->toBe('2.0000')
+            ->and($discounted->fresh()->price_list_id)->toBe($list->id)
+            ->and($this->productA->fresh()->stock_reserved)->toBe('12.0000');
+    });
+
+    test('item endpoints reject cross-order, cross-store, missing and non-editable targets', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        $line = editableOrderLine($order, $this->productA, 2);
+        $anotherOrder = editableOrder($this->store, $this->user, $this->customer);
+        $anotherLine = editableOrderLine($anotherOrder, $this->productB, 1, 250);
+        $foreignStore = Store::factory()->create();
+        $foreignUser = User::factory()->create(['store_id' => $foreignStore->id]);
+        $foreignOrder = editableOrder(
+            $foreignStore,
+            $foreignUser,
+            Customer::factory()->create(['store_id' => $foreignStore->id])
+        );
+        $foreignProduct = Product::factory()->create(['store_id' => $foreignStore->id]);
+        $foreignLine = editableOrderLine($foreignOrder, $foreignProduct, 1);
+        $this->actingAs($this->user, 'sanctum');
+
+        $this->patchJson("/api/v1/store/orders/{$order->id}/items/{$anotherLine->id}", ['quantity' => '3'])->assertNotFound();
+        $this->deleteJson("/api/v1/store/orders/{$order->id}/items/{$foreignLine->id}")->assertNotFound();
+        $this->patchJson("/api/v1/store/orders/{$foreignOrder->id}/items/{$foreignLine->id}", ['quantity' => '2'])->assertNotFound();
+        $this->patchJson("/api/v1/store/orders/{$order->id}/items/00000000-0000-4000-8000-000000000000", ['quantity' => '3'])->assertNotFound();
+        $this->deleteJson('/api/v1/store/orders/00000000-0000-4000-8000-000000000000/items/'.$line->id)->assertNotFound();
+
+        $sale = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'type' => 'sale',
+            'status' => 'confirmed',
+        ]);
+        $saleLine = editableOrderLine($sale, $this->productA, 1);
+        $this->patchJson("/api/v1/store/orders/{$sale->id}/items/{$saleLine->id}", ['quantity' => '2'])->assertNotFound();
+        $this->deleteJson("/api/v1/store/orders/{$sale->id}/items/{$saleLine->id}")->assertNotFound();
+
+        $closedOrder = editableOrder($this->store, $this->user, $this->customer, ['status' => 'closed']);
+        $closedLine = editableOrderLine($closedOrder, $this->productB, 1, 250);
+        $this->patchJson("/api/v1/store/orders/{$closedOrder->id}/items/{$closedLine->id}", ['quantity' => '2'])
+            ->assertUnprocessable()->assertJsonValidationErrors('order');
+        $this->deleteJson("/api/v1/store/orders/{$closedOrder->id}/items/{$closedLine->id}")
+            ->assertUnprocessable()->assertJsonValidationErrors('order');
+    });
+
+    test('quantity endpoint preserves product-level delivery minimum across separate price-list lines', function () {
+        $order = editableOrder($this->store, $this->user, $this->customer, ['status' => 'partially_delivered']);
+        $wholesale = PriceList::factory()->create(['store_id' => $this->store->id, 'discount_percentage' => '10.00']);
+        $common = editableOrderLine($order, $this->productA, 2);
+        $common->update(['price_list_id' => null, 'discount_percentage' => '0.00']);
+        $discounted = editableOrderLine($order, $this->productA, 2);
+        $discounted->update([
+            'price_list_id' => $wholesale->id,
+            'price_list_name' => $wholesale->name,
+            'discount_percentage' => '10.00',
+            'discount_amount' => '20.00',
+        ]);
+        $this->productA->update(['stock_reserved' => '4.0000']);
+        editableOrderRouteItem($this->store, $this->user, $order, $this->productA, 'completed', 'completed', 2, 2, 2);
+
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$common->id}", [
+            'quantity' => '1',
+        ])->assertOk();
+
+        $this->actingAs($this->user, 'sanctum')->deleteJson("/api/v1/store/orders/{$order->id}/items/{$common->id}")
+            ->assertOk();
+
+        expect(OperationItem::whereKey($common->id)->exists())->toBeFalse()
+            ->and($discounted->fresh()->quantity)->toBe('2.0000')
+            ->and(OperationItem::where('operation_id', $order->id)->sum('quantity'))->toBe(2);
+    });
+
+    test('quantity endpoint rejects values outside the product sale quantity step', function () {
+        $this->productA->update(['sale_quantity_step' => '0.5000']);
+        $order = editableOrder($this->store, $this->user, $this->customer);
+        $line = editableOrderLine($order, $this->productA, 2);
+
+        $this->actingAs($this->user, 'sanctum')->patchJson("/api/v1/store/orders/{$order->id}/items/{$line->id}", [
+            'quantity' => '2.2500',
+        ])->assertUnprocessable()->assertJsonValidationErrors('quantity');
+
+        expect($line->fresh()->quantity)->toBe('2.0000');
+    });
+
     test('reduces an editable quantity and releases the matching reservation', function () {
         $order = editableOrder($this->store, $this->user, $this->customer);
         editableOrderLine($order, $this->productA, 10);
