@@ -9,6 +9,7 @@ use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\PaymentMethod;
 use App\Models\Plan;
+use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\StorePaymentMethod;
@@ -385,6 +386,49 @@ describe('GET /api/v1/store/operations/{id}/receipt', function () {
             ->assertJsonPath('data.items.0.measurement_unit.code', 'kg')
             ->assertJsonPath('data.items.0.measurement_unit.symbol', 'kg')
             ->assertJsonPath('data.items.0.sale_quantity_step', '0.2500');
+    });
+
+    test('uses persisted price-list snapshots in a historical receipt after the live list changes', function () {
+        $priceList = PriceList::factory()->create([
+            'store_id' => $this->store->id,
+            'name' => 'Mayorista',
+            'discount_percentage' => '10.00',
+        ]);
+        $operation = CommercialOperation::factory()->create([
+            'store_id' => $this->store->id,
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'type' => 'sale',
+            'subtotal' => '1200.00',
+            'tax' => '0.00',
+            'discount' => '120.00',
+            'total' => '1080.00',
+        ]);
+        OperationItem::factory()->create([
+            'operation_id' => $operation->id,
+            'product_id' => $this->product->id,
+            'product_name' => 'Esponja cocina',
+            'quantity' => '2.0000',
+            'price' => '600.00',
+            'subtotal' => '1200.00',
+            'price_list_id' => $priceList->id,
+            'price_list_name' => 'Mayorista',
+            'discount_percentage' => '10.00',
+            'discount_amount' => '120.00',
+            'tax_amount' => '0.00',
+        ]);
+
+        $priceList->update(['name' => 'Lista actualizada', 'discount_percentage' => '25.00', 'is_active' => false]);
+        $this->product->update(['price' => '999.00']);
+
+        getOperationReceipt($operation->id)
+            ->assertOk()
+            ->assertJsonPath('data.items.0.unit_price', 600)
+            ->assertJsonPath('data.items.0.subtotal', 1200)
+            ->assertJsonPath('data.items.0.price_list_name', 'Mayorista')
+            ->assertJsonPath('data.items.0.discount_percentage', 10)
+            ->assertJsonPath('data.items.0.discount_amount', 120)
+            ->assertJsonPath('data.totals.total', 1080);
     });
 
     test('falls back to the current product commercial configuration for a pre-B6 receipt item', function () {
