@@ -4,7 +4,9 @@ use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\CustomerContact;
+use App\Models\DeliveryRejectionReason;
 use App\Models\DeliveryRoute;
+use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
 use App\Models\OperationPayment;
 use App\Models\Plan;
@@ -299,6 +301,41 @@ test('driver stops show includes is_extra as false in items', function () {
     foreach ($items as $item) {
         expect($item['is_extra'])->toBe(false);
     }
+});
+
+test('driver stops show includes the persisted partial-delivery rejection reason per item', function () {
+    $data = createDriverTestData($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    $item = $data['items'][0];
+    $reason = DeliveryRejectionReason::create([
+        'store_id' => $this->store->id,
+        'code' => 'customer_rejected',
+        'label' => 'Mercadería rechazada por el cliente',
+        'is_active' => true,
+        'suggest_extra_sale' => false,
+    ]);
+    DeliveryRouteEvent::create([
+        'store_id' => $this->store->id,
+        'route_id' => $data['route']->id,
+        'user_id' => $this->driver->id,
+        'event_type' => 'stop_completed',
+        'from_status' => 'arrived',
+        'to_status' => 'completed',
+        'metadata' => [
+            'stop_id' => $stop->id,
+            'items' => [[
+                'route_stop_item_id' => $item->id,
+                'rejection_reason_id' => $reason->id,
+            ]],
+        ],
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}");
+
+    $response->assertOk()
+        ->assertJsonPath('data.items.0.rejection_reason.id', $reason->id)
+        ->assertJsonPath('data.items.0.rejection_reason.label', $reason->label);
 });
 
 test('driver stops show returns 404 for stop not assigned to driver', function () {

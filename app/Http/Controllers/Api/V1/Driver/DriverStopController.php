@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Driver;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DriverStopResource;
+use App\Models\DeliveryRejectionReason;
 use App\Models\RouteStop;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,7 +34,9 @@ class DriverStopController extends Controller
      *     @OA\Response(
      *         response=200,
      *         description="Detalle de la parada",
+     *
      *         @OA\JsonContent(
+     *
      *             @OA\Property(property="status", type="string", example="success"),
      *             @OA\Property(property="data", type="object",
      *                 @OA\Property(property="id", type="string", format="uuid"),
@@ -56,6 +59,10 @@ class DriverStopController extends Controller
      *                     @OA\Property(property="quantity_planned", type="integer"),
      *                     @OA\Property(property="quantity_loaded", type="integer"),
      *                     @OA\Property(property="quantity_delivered", type="integer"),
+     *                     @OA\Property(property="rejection_reason", type="object", nullable=true,
+     *                         @OA\Property(property="id", type="string", format="uuid"),
+     *                         @OA\Property(property="label", type="string")
+     *                     ),
      *                     @OA\Property(property="original_route_stop_id", type="string", format="uuid", nullable=true),
      *                     @OA\Property(property="is_extra", type="boolean"),
      *                     @OA\Property(property="notes", type="string", nullable=true)
@@ -76,6 +83,7 @@ class DriverStopController extends Controller
      *             @OA\Property(property="errors", type="null")
      *         )
      *     ),
+     *
      *     @OA\Response(response=403, description="Stop not assigned to this driver"),
      *     @OA\Response(response=404, description="Stop not found")
      * )
@@ -91,7 +99,7 @@ class DriverStopController extends Controller
             'order.items',
             'items.product.stockMeasurementUnit',
             'collections.storePaymentMethod.paymentMethod',
-            'route',
+            'route.events',
         ])->find($stopId);
 
         if (! $stop) {
@@ -111,6 +119,34 @@ class DriverStopController extends Controller
                 'data' => null,
                 'errors' => ['error' => ['Parada no asignada a este conductor.']],
             ], 404);
+        }
+
+        $reasonIdsByItem = [];
+        foreach ($stop->route->events as $event) {
+            if (! in_array($event->event_type, ['stop_completed', 'stop_failed'], true)
+                || ($event->metadata['stop_id'] ?? null) !== $stop->id) {
+                continue;
+            }
+
+            foreach ($event->metadata['items'] ?? [] as $item) {
+                if (! empty($item['rejection_reason_id'])) {
+                    $reasonIdsByItem[$item['route_stop_item_id']] = $item['rejection_reason_id'];
+                }
+            }
+        }
+
+        $reasonsById = DeliveryRejectionReason::forStore($stop->route->store_id)
+            ->whereIn('id', array_values($reasonIdsByItem))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($stop->items as $item) {
+            $reasonId = $reasonIdsByItem[$item->id] ?? null;
+            $reason = $reasonId ? $reasonsById->get($reasonId) : null;
+            $item->setAttribute('persisted_rejection_reason', $reason ? [
+                'id' => $reason->id,
+                'label' => $reason->label,
+            ] : null);
         }
 
         return response()->json([

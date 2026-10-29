@@ -35,6 +35,7 @@ class DriverStopItemResource extends JsonResource
             'quantity_loaded' => QuantityMath::normalize($this->quantity_loaded),
             'quantity_delivered' => QuantityMath::normalize($this->quantity_delivered),
             'quantity_released_for_extra_sale' => QuantityMath::normalize($this->quantity_released_for_extra_sale),
+            'rejection_reason' => $this->persisted_rejection_reason,
             'unit_price' => $unitPrice,
             'original_route_stop_id' => $this->original_route_stop_id,
             'is_extra' => false, // lectura-only: no se crean extras desde la app driver
