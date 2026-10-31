@@ -67,6 +67,11 @@ class RouteStopCollection extends Model
         return $this->belongsTo(User::class, 'declared_by');
     }
 
+    public function operationPayment(): BelongsTo
+    {
+        return $this->belongsTo(OperationPayment::class, 'operation_payment_id');
+    }
+
     public function verifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by');

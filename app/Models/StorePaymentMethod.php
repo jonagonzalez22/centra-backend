@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StorePaymentMethod extends Model
 {
@@ -41,6 +42,11 @@ class StorePaymentMethod extends Model
     public function paymentMethod(): BelongsTo
     {
         return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function operationPayments(): HasMany
+    {
+        return $this->hasMany(OperationPayment::class);
     }
 
     public function scopeForStore(Builder $query, string $storeId): Builder

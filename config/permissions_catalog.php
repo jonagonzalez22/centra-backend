@@ -67,6 +67,9 @@ return [
         ['name' => 'cash.submit', 'label' => 'Enviar a arqueo'],
         ['name' => 'cash.close', 'label' => 'Cerrar'],
     ],
+    'Pagos recibidos' => [
+        ['name' => 'payments.view', 'label' => 'Ver pagos recibidos'],
+    ],
     'Métodos de pago' => [
         ['name' => 'store_payment_methods.view', 'label' => 'Ver'],
         ['name' => 'store_payment_methods.configure', 'label' => 'Configurar'],

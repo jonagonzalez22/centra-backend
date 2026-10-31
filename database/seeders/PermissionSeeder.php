@@ -115,6 +115,9 @@ class PermissionSeeder extends Seeder
             'cash.submit',
             'cash.close',
 
+            // Module: Received Payments
+            'payments.view',
+
             // Module: Vehicles
             'vehicles.view',
             'vehicles.create',

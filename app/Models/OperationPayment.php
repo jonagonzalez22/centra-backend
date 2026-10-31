@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class OperationPayment extends Model
 {
@@ -57,5 +58,10 @@ class OperationPayment extends Model
     public function reversedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reversed_by');
+    }
+
+    public function routeStopCollection(): HasOne
+    {
+        return $this->hasOne(RouteStopCollection::class, 'operation_payment_id');
     }
 }

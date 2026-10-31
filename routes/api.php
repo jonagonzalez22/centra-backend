@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\V1\Store\ProductSearchController;
 use App\Http\Controllers\Api\V1\Store\PurchaseController;
 use App\Http\Controllers\Api\V1\Store\PurchaseDocumentController;
 use App\Http\Controllers\Api\V1\Store\PurchaseReceiptController;
+use App\Http\Controllers\Api\V1\Store\ReceivedPaymentController;
 use App\Http\Controllers\Api\V1\Store\RejectionReasonController;
 use App\Http\Controllers\Api\V1\Store\RouteController;
 use App\Http\Controllers\Api\V1\Store\SaleHistoryController;
@@ -159,6 +160,12 @@ Route::prefix('v1')->group(function () {
             Route::post('brands', [BrandController::class, 'store'])->middleware('permission:brands.create')->name('store.brands.store');
             Route::put('brands/{brand}', [BrandController::class, 'update'])->middleware('permission:brands.edit')->name('store.brands.update');
             Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
+            Route::get('received-payments', [ReceivedPaymentController::class, 'index'])
+                ->middleware('permission:payments.view')
+                ->name('store.received-payments.index');
+            Route::get('received-payments/filter-options', [ReceivedPaymentController::class, 'filterOptions'])
+                ->middleware('permission:payments.view')
+                ->name('store.received-payments.filter-options');
             Route::middleware('feature:purchases')->group(function () {
                 Route::get('purchases', [PurchaseController::class, 'index'])->middleware('permission:purchases.view');
                 Route::get('products/{product}/purchase-price-history', [ProductController::class, 'purchasePriceHistory'])->middleware('permission:purchases.view');
