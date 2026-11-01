@@ -485,6 +485,33 @@ test('driver stops show includes correct order economic info with partial paymen
     expect($response->json('data.order.pending_amount'))->toEqual(1500.00);
 });
 
+test('driver stops show ignores reversed payments in order economic info', function () {
+    $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
+    $order = CommercialOperation::factory()->forStore($this->store)->forCustomer($customer)->order()
+        ->create(['total' => 1800.00]);
+    OperationPayment::factory()->forOperation($order)->create(['amount' => 300.00, 'status' => 'active']);
+    OperationPayment::factory()->forOperation($order)->create(['amount' => 500.00, 'status' => 'reversed']);
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $this->vehicle->id,
+        'driver_id' => $this->driver->id,
+        'status' => 'dispatched',
+    ]);
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $order->id,
+        'sequence' => 1,
+        'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}")
+        ->assertOk();
+
+    expect($response->json('data.order.paid_amount'))->toEqual(300.00)
+        ->and($response->json('data.order.pending_amount'))->toEqual(1500.00);
+});
+
 test('driver stops show includes correct order economic info with full payment', function () {
     $customer = Customer::factory()->for($this->store)->create(['display_name' => 'Test Customer']);
 

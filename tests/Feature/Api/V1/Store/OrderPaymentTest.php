@@ -4,6 +4,7 @@ use App\Models\CashSession;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\Feature;
+use App\Models\OperationPayment;
 use App\Models\PaymentMethod;
 use App\Models\Plan;
 use App\Models\RouteStopCollection;
@@ -122,6 +123,32 @@ test('rejects overpayment atomically', function () {
     $this->assertDatabaseCount('operation_payments', 0);
     expect((float) $this->session->fresh()->expected_amount)->toBe(20000.0);
     $this->assertDatabaseCount('commercial_operation_events', 0);
+});
+
+test('reversed payments do not reduce the available balance for a new payment', function () {
+    OperationPayment::factory()->create([
+        'operation_id' => $this->order->id,
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'cash_session_id' => $this->session->id,
+        'registered_by' => $this->user->id,
+        'amount' => 4000,
+        'status' => 'active',
+    ]);
+    OperationPayment::factory()->create([
+        'operation_id' => $this->order->id,
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'cash_session_id' => $this->session->id,
+        'registered_by' => $this->user->id,
+        'amount' => 3000,
+        'status' => 'reversed',
+    ]);
+
+    postOrderPayment($this->order->id, [
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'amount' => 11600,
+    ])->assertCreated()
+        ->assertJsonPath('data.paid_amount', 15600)
+        ->assertJsonPath('data.pending_amount', 0);
 });
 
 test('requires current user open cash session', function () {

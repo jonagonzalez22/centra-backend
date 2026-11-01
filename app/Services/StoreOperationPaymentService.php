@@ -32,7 +32,7 @@ class StoreOperationPaymentService
             }
 
             $operation->payments()->orderBy('id')->lockForUpdate()->get();
-            $paidInCents = (int) round((float) $operation->payments()->sum('amount') * 100);
+            $paidInCents = (int) round((float) $operation->activePayments()->sum('amount') * 100);
             $totalInCents = (int) round((float) $operation->total * 100);
             $amountInCents = (int) round((float) $data['amount'] * 100);
             $pendingInCents = max(0, $totalInCents - $paidInCents);

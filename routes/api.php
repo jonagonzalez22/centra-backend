@@ -166,6 +166,9 @@ Route::prefix('v1')->group(function () {
             Route::get('received-payments/filter-options', [ReceivedPaymentController::class, 'filterOptions'])
                 ->middleware('permission:payments.view')
                 ->name('store.received-payments.filter-options');
+            Route::post('received-payments/{payment}/reverse', [ReceivedPaymentController::class, 'reverse'])
+                ->middleware('permission:payments.reverse')
+                ->name('store.received-payments.reverse');
             Route::middleware('feature:purchases')->group(function () {
                 Route::get('purchases', [PurchaseController::class, 'index'])->middleware('permission:purchases.view');
                 Route::get('products/{product}/purchase-price-history', [ProductController::class, 'purchasePriceHistory'])->middleware('permission:purchases.view');

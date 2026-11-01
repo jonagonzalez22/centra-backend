@@ -117,6 +117,7 @@ class PermissionSeeder extends Seeder
 
             // Module: Received Payments
             'payments.view',
+            'payments.reverse',
 
             // Module: Vehicles
             'vehicles.view',

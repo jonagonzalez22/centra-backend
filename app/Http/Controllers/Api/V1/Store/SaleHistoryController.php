@@ -30,7 +30,7 @@ class SaleHistoryController extends Controller
             $request->user()
         );
         $sale->load(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod']);
-        $sale->loadSum('payments', 'amount');
+        $sale->loadSum('activePayments', 'amount');
 
         return response()->json([
             'status' => 'success',
@@ -49,7 +49,7 @@ class SaleHistoryController extends Controller
         $sales = CommercialOperation::forStore($storeId)
             ->byType('sale')
             ->with(['customer', 'user', 'items', 'payments.storePaymentMethod'])
-            ->withSum('payments', 'amount')
+            ->withSum('activePayments', 'amount')
             ->when($request->filled('status'), fn ($query) => $query->byStatus($request->status))
             ->when($request->filled('operation_number'), fn ($query) => $query->where('operation_number', 'like', trim($request->operation_number).'%'))
             ->when($request->filled('date_from') || $request->filled('date_to'), fn ($query) => $query->betweenDates($request->date_from, $request->date_to))
@@ -80,7 +80,7 @@ class SaleHistoryController extends Controller
             return $this->notFound();
         }
 
-        $sale->loadSum('payments', 'amount');
+        $sale->loadSum('activePayments', 'amount');
         $sale->setAttribute('history', $this->cancellationHistory($sale));
 
         return response()->json([

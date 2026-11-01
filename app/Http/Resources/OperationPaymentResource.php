@@ -13,6 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  *   @OA\Property(property="id", type="string", format="uuid"),
  *   @OA\Property(property="amount", type="number", format="float"),
+ *   @OA\Property(property="status", type="string", enum={"active", "reversed"}),
  *   @OA\Property(property="reference", type="string", nullable=true),
  *   @OA\Property(property="payment_details", type="object", nullable=true),
  *   @OA\Property(property="created_at", type="string", format="date-time"),
@@ -39,6 +40,7 @@ class OperationPaymentResource extends JsonResource
         return [
             'id' => $this->id,
             'amount' => (float) $this->amount,
+            'status' => $this->status,
             'reference' => $this->reference,
             'payment_details' => $this->payment_details,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),

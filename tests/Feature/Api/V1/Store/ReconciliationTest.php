@@ -826,6 +826,35 @@ test('verify collection rolls back and preserves original status', function () {
     expect(OperationPayment::where('operation_id', $order->id)->count())->toBe(1);
 });
 
+test('a declared collection can be verified after a manual payment is reversed', function () {
+    [$route, $stop, $product, $item, $order] = recRouteForReconciliation($this->store);
+    $method = recStorePaymentMethod($this->store);
+    $manualPayment = OperationPayment::create([
+        'operation_id' => $order->id,
+        'store_payment_method_id' => $method->id,
+        'amount' => 1000,
+        'status' => 'active',
+        'payment_details' => ['origin' => 'manual_collection'],
+    ]);
+    $collection = recCreateCollection($stop, $this->store, [
+        'store_payment_method_id' => $method->id,
+        'declared_by' => $this->user->id,
+        'amount' => 100,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collections/{$collection->id}/verify")
+        ->assertUnprocessable();
+    expect($collection->fresh()->status)->toBe('declared');
+
+    $manualPayment->update(['status' => 'reversed', 'reversed_at' => now(), 'reversed_by' => $this->user->id]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/collections/{$collection->id}/verify")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'verified');
+});
+
 // 21. completed route cannot be reconciled again
 test('completed route cannot be reconciled again', function () {
     [$route, $stop, $product, $item] = recRouteForReconciliation($this->store);

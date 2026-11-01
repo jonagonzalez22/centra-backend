@@ -607,7 +607,7 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
             'store_id' => $this->store->id,
             'payment_method_id' => $paymentMethod->id,
         ]);
-        OperationPayment::factory()->create([
+        $payment = OperationPayment::factory()->create([
             'operation_id' => $order->id,
             'store_payment_method_id' => $storePaymentMethod->id,
             'amount' => 600,
@@ -621,6 +621,10 @@ describe('PUT /api/v1/store/orders/{order} — item editing', function () {
 
         updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 6)])->assertOk();
         expect((float) $order->fresh()->total)->toBe(600.0);
+
+        $payment->update(['status' => 'reversed']);
+        updateEditableOrder($this->user, $order, [orderPayloadItem($this->productA, 5)])->assertOk();
+        expect((float) $order->fresh()->total)->toBe(500.0);
     });
 
     test('blocks terminal statuses and active extra sales but not completed allocations', function (string $status) {

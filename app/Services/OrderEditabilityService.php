@@ -57,7 +57,7 @@ class OrderEditabilityService
             'editable' => $editable,
             'block_reason' => $blockReason,
             'block_message' => $this->blockMessage($blockReason),
-            'paid_amount' => (float) $order->payments()->sum('amount'),
+            'paid_amount' => (float) $order->activePayments()->sum('amount'),
             'delivery_date_editable' => $deliveryDateBlockReason === null,
             'delivery_date_block_reason' => $deliveryDateBlockReason,
             'delivery_date_block_message' => $this->deliveryDateBlockMessage($deliveryDateBlockReason),

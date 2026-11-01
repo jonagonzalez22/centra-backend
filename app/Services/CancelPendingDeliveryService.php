@@ -67,7 +67,7 @@ class CancelPendingDeliveryService
             }
 
             $operation->refresh();
-            $paidInCents = (int) round((float) $operation->payments()->sum('amount') * 100);
+            $paidInCents = (int) round((float) $operation->activePayments()->sum('amount') * 100);
             $newTotalInCents = (int) round((float) $operation->total * 100);
             if ($newTotalInCents < $paidInCents) {
                 throw ValidationException::withMessages([

@@ -115,14 +115,14 @@ class OrderController extends Controller
         if ($request->has('has_pending_balance')) {
             $operator = $request->boolean('has_pending_balance') ? '>' : '<=';
             $query->whereRaw(
-                "commercial_operations.total {$operator} (SELECT COALESCE(SUM(operation_payments.amount), 0) FROM operation_payments WHERE operation_payments.operation_id = commercial_operations.id)"
+                "commercial_operations.total {$operator} (SELECT COALESCE(SUM(operation_payments.amount), 0) FROM operation_payments WHERE operation_payments.operation_id = commercial_operations.id AND operation_payments.status = 'active')"
             );
         }
 
         $query->orderBy('requested_delivery_date', 'asc')
             ->orderBy('operation_number', 'asc');
 
-        $query->withSum('payments', 'amount');
+        $query->withSum('activePayments', 'amount');
 
         $operations = $query->paginate($request->per_page ?? 20);
 
@@ -185,7 +185,7 @@ class OrderController extends Controller
                 'routeStops.items.product',
                 'routeStops.route',
             ])
-            ->withSum('payments', 'amount')
+            ->withSum('activePayments', 'amount')
             ->find($id);
 
         if (! $operation) {
@@ -358,7 +358,7 @@ class OrderController extends Controller
             'events.user',
             'routeStops.items.product',
             'routeStops.route',
-        ])->loadSum('payments', 'amount');
+        ])->loadSum('activePayments', 'amount');
         $historyBuilder->attach($operation, $storeId);
 
         return response()->json([
@@ -478,7 +478,7 @@ class OrderController extends Controller
 
     private function orderResponse(CommercialOperation $operation, string $message): JsonResponse
     {
-        $operation->load(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod', 'payments.cashSession', 'payments.registeredBy', 'events.user', 'routeStops.items.product', 'routeStops.route'])->loadSum('payments', 'amount');
+        $operation->load(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod', 'payments.cashSession', 'payments.registeredBy', 'events.user', 'routeStops.items.product', 'routeStops.route'])->loadSum('activePayments', 'amount');
 
         return response()->json(['status' => 'success', 'message' => $message, 'data' => CommercialOperationResource::make($operation), 'errors' => null]);
     }

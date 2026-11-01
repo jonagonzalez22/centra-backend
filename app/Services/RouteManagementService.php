@@ -1281,7 +1281,7 @@ class RouteManagementService
                     'operation_number' => $stop->order->operation_number,
                     'customer_name' => $stop->order->customer?->display_name ?? $stop->order->customer?->name,
                     'total_amount' => (float) $stop->order->total,
-                    'paid_amount' => (float) ($stop->order->payments?->sum('amount') ?? 0),
+                    'paid_amount' => (float) ($stop->order->payments?->where('status', 'active')->sum('amount') ?? 0),
                 ];
                 $stopOrderData['pending_balance'] = $stopOrderData['total_amount'] - $stopOrderData['paid_amount'];
             }

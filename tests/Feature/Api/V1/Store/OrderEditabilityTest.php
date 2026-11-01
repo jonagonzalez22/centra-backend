@@ -320,7 +320,7 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             ->assertJsonPath('data.block_reason', null);
     });
 
-    test('returns the sum of the order payments', function () {
+    test('returns only active order payments', function () {
         $order = orderEditabilityOrder($this->store, $this->user, $this->customer);
         orderEditabilityItem($order, $this->product, 10);
         $paymentMethod = PaymentMethod::factory()->create();
@@ -332,6 +332,12 @@ describe('GET /api/v1/store/orders/{order}/editability', function () {
             'operation_id' => $order->id,
             'store_payment_method_id' => $storePaymentMethod->id,
             'amount' => 6000,
+        ]);
+        OperationPayment::factory()->create([
+            'operation_id' => $order->id,
+            'store_payment_method_id' => $storePaymentMethod->id,
+            'amount' => 3000,
+            'status' => 'reversed',
         ]);
 
         $response = getOrderEditability($this->user, $order->id)->assertOk();

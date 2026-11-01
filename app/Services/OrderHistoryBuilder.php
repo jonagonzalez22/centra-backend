@@ -94,6 +94,7 @@ class OrderHistoryBuilder
             'order_cancelled' => 'Pedido cancelado',
             'remaining_delivery_cancelled' => 'Remanente cancelado',
             'payment_registered' => 'Pago registrado',
+            'payment_reversed' => 'Pago anulado',
             'order_edited' => 'Pedido editado',
         ];
 
@@ -117,7 +118,9 @@ class OrderHistoryBuilder
                 'observation' => $event->observation,
                 'items' => $event->metadata['items'] ?? null,
                 'totals' => $event->metadata['totals'] ?? null,
-                'payment' => $event->event_type === 'payment_registered' ? $event->metadata : null,
+                'payment' => in_array($event->event_type, ['payment_registered', 'payment_reversed'], true)
+                    ? $event->metadata
+                    : null,
             ],
             'sort_order' => 10,
         ];

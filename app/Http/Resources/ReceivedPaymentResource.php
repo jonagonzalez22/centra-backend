@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\OperationPayment;
+use App\Services\PaymentReversalEligibility;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,6 +15,12 @@ class ReceivedPaymentResource extends JsonResource
         $routeCollection = $this->routeStopCollection;
         $origin = $this->origin();
         $customer = $this->operation?->customer;
+        $reversal = app(PaymentReversalEligibility::class)->evaluate(
+            $this->resource,
+            $this->operation,
+            $this->cashSession,
+            $routeCollection !== null,
+        );
 
         return [
             'id' => $this->id,
@@ -38,6 +45,7 @@ class ReceivedPaymentResource extends JsonResource
                 'display_name' => $customer?->display_name ?? $this->operation?->customer_display_name,
             ],
             'origin' => $origin,
+            'reversal' => $reversal,
             'registered_by' => $this->user($this->registeredBy),
             'reversed_by' => $this->user($this->reversedBy),
             'route' => $origin === 'route_collection' && $routeCollection ? [

@@ -15,7 +15,7 @@ class DriverStopResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $notificationWindow = (new RouteStopService())->calculateNotificationWindow($this->resource);
+        $notificationWindow = (new RouteStopService)->calculateNotificationWindow($this->resource);
         $timezone = $this->resource->route?->store?->timezone ?? config('app.timezone', 'UTC');
 
         // Build contact info from loaded relations
@@ -58,7 +58,7 @@ class DriverStopResource extends JsonResource
                     $order = $this->order;
                     $total = (float) $order->total;
                     $paidAmount = $order->relationLoaded('payments')
-                        ? (float) $order->payments->sum('amount')
+                        ? (float) $order->payments->where('status', 'active')->sum('amount')
                         : 0.0;
                     $pendingAmount = max(0, $total - $paidAmount);
 

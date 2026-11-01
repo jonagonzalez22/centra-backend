@@ -44,6 +44,7 @@ class CommercialOperationListResource extends JsonResource
     public function toArray(Request $request): array
     {
         $deliverySummary = app(\App\Services\DeliverySummaryService::class)->summarize($this->resource);
+        $paidAmount = $this->paid_amount;
 
         return [
             'id' => $this->id,
@@ -54,8 +55,8 @@ class CommercialOperationListResource extends JsonResource
             'delivery_time_from' => null,
             'delivery_time_to' => null,
             'total' => (float) $this->total,
-            'paid_amount' => (float) ($this->payments_sum_amount ?? 0),
-            'pending_amount' => max(0, (float) $this->total - (float) ($this->payments_sum_amount ?? 0)),
+            'paid_amount' => $paidAmount,
+            'pending_amount' => max(0, (float) $this->total - $paidAmount),
             'items_count' => $this->whenLoaded(
                 'items',
                 fn () => $this->items

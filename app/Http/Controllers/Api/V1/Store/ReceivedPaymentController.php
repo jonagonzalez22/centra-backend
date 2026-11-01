@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\ListReceivedPaymentsRequest;
+use App\Http\Requests\Api\V1\Store\ReverseOperationPaymentRequest;
 use App\Http\Resources\ReceivedPaymentResource;
 use App\Models\OperationPayment;
 use App\Models\RouteStopCollection;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
+use App\Services\PaymentReversalService;
 use App\Services\ReceivedPaymentQueryService;
 use Illuminate\Http\JsonResponse;
 
@@ -75,6 +77,45 @@ class ReceivedPaymentController extends Controller
                 'current_page' => $payments->currentPage(),
                 'last_page' => $payments->lastPage(),
             ],
+            'errors' => null,
+        ]);
+    }
+
+    public function reverse(
+        ReverseOperationPaymentRequest $request,
+        string $payment,
+        PaymentReversalService $service
+    ): JsonResponse {
+        $paymentExists = OperationPayment::query()
+            ->whereKey($payment)
+            ->whereHas('operation', fn ($query) => $query->forStore($request->user()->store_id))
+            ->exists();
+
+        if (! $paymentExists) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Pago recibido no encontrado.',
+                'data' => null,
+                'errors' => ['payment' => ['El pago no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        $reversedPayment = $service->reverse($payment, $request->validated(), $request->user());
+        $reversedPayment->load([
+            'operation.customer',
+            'cashSession',
+            'storePaymentMethod.paymentMethod',
+            'registeredBy',
+            'reversedBy',
+            'routeStopCollection.routeStop.route.driver',
+            'routeStopCollection.declaredBy',
+            'routeStopCollection.verifiedBy',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pago anulado exitosamente.',
+            'data' => ReceivedPaymentResource::make($reversedPayment),
             'errors' => null,
         ]);
     }

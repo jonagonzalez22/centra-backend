@@ -339,6 +339,24 @@ describe('GET /api/v1/store/orders — Orders List', function () {
             ->not->toContain($paid->id, $open->id);
     });
 
+    test('pending balance filter ignores reversed payments', function () {
+        $order = createOrderForStore($this->store, ['total' => 1000, 'status' => 'delivered']);
+        $method = StorePaymentMethod::factory()->forStore($this->store)->create();
+        OperationPayment::factory()->create([
+            'operation_id' => $order->id,
+            'store_payment_method_id' => $method->id,
+            'amount' => 1000,
+            'status' => 'reversed',
+        ]);
+
+        $response = listOrders(['status' => 'delivered', 'has_pending_balance' => true]);
+        $item = collect($response->json('data.items'))->firstWhere('id', $order->id);
+
+        expect($item)->not->toBeNull()
+            ->and((float) $item['paid_amount'])->toBe(0.0)
+            ->and((float) $item['pending_amount'])->toBe(1000.0);
+    });
+
     test('pending amount never becomes negative', function () {
         $order = createOrderForStore($this->store, ['total' => 500]);
         $method = StorePaymentMethod::factory()->forStore($this->store)->create();

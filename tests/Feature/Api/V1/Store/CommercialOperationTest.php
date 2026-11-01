@@ -108,6 +108,27 @@ function makePaymentMethodForStore(Store $store): StorePaymentMethod
     ]);
 }
 
+test('commercial operation current payment metrics ignore reversed payments', function () {
+    $operation = createOperationForStore($this->store, ['total' => 1000]);
+    $method = makePaymentMethodForStore($this->store);
+
+    OperationPayment::factory()->create([
+        'operation_id' => $operation->id,
+        'store_payment_method_id' => $method->id,
+        'amount' => 400,
+        'status' => 'active',
+    ]);
+    OperationPayment::factory()->create([
+        'operation_id' => $operation->id,
+        'store_payment_method_id' => $method->id,
+        'amount' => 300,
+        'status' => 'reversed',
+    ]);
+
+    expect($operation->fresh()->paid_amount)->toBe(400.0)
+        ->and($operation->fresh()->pending_balance)->toBe(600.0);
+});
+
 describe('GET /api/v1/store/operations', function () {
     test('returns operations for the authenticated user store', function () {
         $operation = createOperationForStore($this->store, [
@@ -321,6 +342,7 @@ describe('GET /api/v1/store/operations/{id}/receipt', function () {
             'operation_id' => $operation->id,
             'store_payment_method_id' => $storeTransferMethod->id,
             'amount' => 9150,
+            'status' => 'reversed',
         ]);
 
         $this->customer->update(['display_name' => 'Nombre cambiado después de cobrar']);
@@ -352,12 +374,14 @@ describe('GET /api/v1/store/operations/{id}/receipt', function () {
             ->assertJsonPath('data.totals.tax', 150)
             ->assertJsonPath('data.totals.discount', 1000)
             ->assertJsonPath('data.totals.total', 29150)
-            ->assertJsonPath('data.totals.paid_amount', 29150)
-            ->assertJsonPath('data.totals.pending_amount', 0)
+            ->assertJsonPath('data.totals.paid_amount', 20000)
+            ->assertJsonPath('data.totals.pending_amount', 9150)
             ->assertJsonPath('data.payments.0.method_name', 'Efectivo')
             ->assertJsonPath('data.payments.0.amount', 20000)
+            ->assertJsonPath('data.payments.0.status', 'active')
             ->assertJsonPath('data.payments.1.method_name', 'Transferencia bancaria')
             ->assertJsonPath('data.payments.1.amount', 9150)
+            ->assertJsonPath('data.payments.1.status', 'reversed')
             ->assertJsonCount(2, 'data.payments');
     });
 

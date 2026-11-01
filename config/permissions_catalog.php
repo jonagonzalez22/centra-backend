@@ -69,6 +69,7 @@ return [
     ],
     'Pagos recibidos' => [
         ['name' => 'payments.view', 'label' => 'Ver pagos recibidos'],
+        ['name' => 'payments.reverse', 'label' => 'Anular pagos recibidos'],
     ],
     'Métodos de pago' => [
         ['name' => 'store_payment_methods.view', 'label' => 'Ver'],

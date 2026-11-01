@@ -110,7 +110,9 @@ test('cancels a confirmed sale, restores stock, reverses payments and adjusts ca
     $this->actingAs($this->user, 'sanctum')
         ->putJson("/api/v1/store/sales/{$sale->id}/cancel", ['reason_code' => 'pricing_error'])
         ->assertOk()
-        ->assertJsonPath('data.status', 'cancelled');
+        ->assertJsonPath('data.status', 'cancelled')
+        ->assertJsonPath('data.paid_amount', 0)
+        ->assertJsonPath('data.pending_amount', 100);
 
     expect($product->fresh()->stock)->toBe('10.0000')
         ->and($product->fresh()->stock_reserved)->toBe('1.0000')

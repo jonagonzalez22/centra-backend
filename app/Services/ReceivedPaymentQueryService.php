@@ -17,6 +17,7 @@ class ReceivedPaymentQueryService
             ->whereHas('operation', fn (Builder $query) => $query->forStore($storeId))
             ->with([
                 'operation.customer',
+                'cashSession',
                 'storePaymentMethod.paymentMethod',
                 'registeredBy',
                 'reversedBy',

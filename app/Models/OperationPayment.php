@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +35,14 @@ class OperationPayment extends Model
         'reversed_at' => 'datetime',
         'payment_details' => 'array',
     ];
+
+    /**
+     * Payments that currently affect a commercial balance.
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', 'active');
+    }
 
     public function operation(): BelongsTo
     {

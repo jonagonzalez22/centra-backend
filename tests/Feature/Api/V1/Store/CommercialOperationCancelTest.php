@@ -9,11 +9,14 @@ use App\Models\Customer;
 use App\Models\DeliveryRoute;
 use App\Models\Feature;
 use App\Models\OperationItem;
+use App\Models\OperationPayment;
+use App\Models\PaymentMethod;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
 use App\Models\Store;
+use App\Models\StorePaymentMethod;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -145,6 +148,47 @@ describe('Cancelar pendiente', function () {
             'user_id' => $user->id,
             'new_status' => 'delivered',
         ]);
+    });
+
+    it('does not treat reversed payments as confirmed when cancelling pending delivery', function () {
+        $user = makeAuthUserCancel($this->store, 'STORE_ADMIN', ['orders.edit']);
+        $order = makeOrderForCancel($this->store, [
+            'status' => 'partially_delivered',
+            'subtotal' => 200,
+            'total' => 200,
+        ]);
+        $item = OperationItem::factory()->create([
+            'operation_id' => $order->id,
+            'product_id' => $this->product->id,
+            'product_name' => $this->product->name,
+            'quantity' => 2,
+            'price' => 100,
+            'subtotal' => 200,
+        ]);
+        $route = DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'status' => 'completed']);
+        $stop = RouteStop::factory()->create(['route_id' => $route->id, 'order_id' => $order->id, 'status' => 'completed']);
+        RouteStopItem::factory()->create([
+            'route_stop_id' => $stop->id,
+            'product_id' => $this->product->id,
+            'quantity_planned' => 2,
+            'quantity_loaded' => 2,
+            'quantity_delivered' => 1,
+        ]);
+        $method = StorePaymentMethod::factory()->create([
+            'store_id' => $this->store->id,
+            'payment_method_id' => PaymentMethod::factory()->create()->id,
+        ]);
+        OperationPayment::factory()->create([
+            'operation_id' => $order->id,
+            'store_payment_method_id' => $method->id,
+            'amount' => 200,
+            'status' => 'reversed',
+        ]);
+
+        cancelPendingDelivery($user, $order->id)->assertOk();
+
+        expect($item->fresh()->quantity)->toBe('1.0000')
+            ->and((float) $order->fresh()->total)->toBeLessThan(200.0);
     });
 
     it('releases a shared-stock child pending quantity from its operation-item source snapshot', function () {

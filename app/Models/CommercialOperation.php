@@ -79,6 +79,14 @@ class CommercialOperation extends Model
         return $this->hasMany(OperationPayment::class, 'operation_id');
     }
 
+    /**
+     * Historical payments remain available through payments().
+     */
+    public function activePayments(): HasMany
+    {
+        return $this->hasMany(OperationPayment::class, 'operation_id')->active();
+    }
+
     public function events(): HasMany
     {
         return $this->hasMany(CommercialOperationEvent::class, 'operation_id');
@@ -130,11 +138,15 @@ class CommercialOperation extends Model
     }
 
     /**
-     * Sum of all recorded payments for this operation.
+     * Sum of payments that currently affect this operation's balance.
      */
     public function getPaidAmountAttribute(): float
     {
-        return (float) $this->payments()->sum('amount');
+        if (array_key_exists('active_payments_sum_amount', $this->attributes)) {
+            return (float) $this->attributes['active_payments_sum_amount'];
+        }
+
+        return (float) $this->activePayments()->sum('amount');
     }
 
     /**

@@ -73,7 +73,7 @@ class CommercialOperationReceiptResource extends JsonResource
         $store = $this->store;
         $timezone = $store?->timezone ?: config('app.timezone', 'UTC');
         $customerDisplayName = $this->customer_display_name ?? $this->customer?->display_name;
-        $paidAmount = round((float) $this->payments->sum('amount'), 2);
+        $paidAmount = round((float) $this->payments->where('status', 'active')->sum('amount'), 2);
 
         return [
             'store' => [
@@ -127,6 +127,7 @@ class CommercialOperationReceiptResource extends JsonResource
                 'method_name' => $payment->storePaymentMethod?->custom_name
                     ?? $payment->storePaymentMethod?->paymentMethod?->name,
                 'amount' => (float) $payment->amount,
+                'status' => $payment->status,
             ])->values(),
         ];
     }

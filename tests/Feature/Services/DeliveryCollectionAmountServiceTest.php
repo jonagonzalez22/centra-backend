@@ -285,6 +285,22 @@ test('declared collections reduce operational amount while verified and rejected
         ->and($amounts['amount_to_collect_now'])->toBe(2500.0);
 });
 
+test('reversed operation payments do not reduce the amount collectible on delivery', function () {
+    [, $item] = amountServiceLine($this, 5, 5000);
+    $paymentMethod = StorePaymentMethod::factory()->for($this->store)->create();
+    OperationPayment::factory()->create([
+        'operation_id' => $this->order->id,
+        'store_payment_method_id' => $paymentMethod->id,
+        'amount' => 1000,
+        'status' => 'reversed',
+    ]);
+
+    $amounts = calculateAmounts($this, [$item->id => 5]);
+
+    expect($amounts['verified_paid_amount'])->toBe(0.0)
+        ->and($amounts['amount_to_collect_now'])->toBe(5000.0);
+});
+
 test('clamps collectible value to commercial total and never returns a negative amount', function () {
     [, $item] = amountServiceLine($this, 5, 7500);
     $paymentMethod = StorePaymentMethod::factory()->for($this->store)->create();

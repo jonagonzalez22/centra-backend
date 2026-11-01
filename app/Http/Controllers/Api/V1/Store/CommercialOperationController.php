@@ -49,7 +49,7 @@ class CommercialOperationController extends Controller
             'items.product',
             'payments.storePaymentMethod.paymentMethod',
             'events.user',
-        ])->loadSum('payments', 'amount');
+        ])->loadSum('activePayments', 'amount');
         $historyBuilder->attach($operation, $storeId);
 
         return response()->json([
@@ -104,7 +104,7 @@ class CommercialOperationController extends Controller
 
         $query = CommercialOperation::forStore($storeId)
             ->with(['customer', 'user', 'items', 'payments.storePaymentMethod'])
-            ->withSum('payments', 'amount')
+            ->withSum('activePayments', 'amount')
             ->when($request->filled('type'), function ($query) use ($request) {
                 $query->byType($request->type);
             })
@@ -208,7 +208,7 @@ class CommercialOperationController extends Controller
             $operation->load([
                 'customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod',
                 'payments.cashSession', 'payments.registeredBy',
-            ])->loadSum('payments', 'amount');
+            ])->loadSum('activePayments', 'amount');
 
             return response()->json([
                 'status' => 'success',
@@ -254,7 +254,7 @@ class CommercialOperationController extends Controller
 
         $operation = CommercialOperation::forStore($storeId)
             ->with(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod'])
-            ->withSum('payments', 'amount')
+            ->withSum('activePayments', 'amount')
             ->find($id);
 
         if (! $operation) {

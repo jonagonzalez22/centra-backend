@@ -162,7 +162,7 @@ class DeliveryCollectionAmountService
 
     private function verifiedPayments(string $orderId, bool $lockForUpdate): string
     {
-        $query = OperationPayment::where('operation_id', $orderId);
+        $query = OperationPayment::where('operation_id', $orderId)->active();
 
         if ($lockForUpdate) {
             return $this->sumMoney($query->lockForUpdate()->get(['amount'])->pluck('amount')->all());

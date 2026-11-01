@@ -68,6 +68,7 @@ class CommercialOperationResource extends JsonResource
         // Legacy or partial snapshots fall back to the current Product config.
         // Loading it here keeps that fallback free of per-line queries.
         $this->resource->loadMissing('items.product.stockMeasurementUnit');
+        $paidAmount = $this->paid_amount;
 
         return [
             'id' => $this->id,
@@ -81,8 +82,8 @@ class CommercialOperationResource extends JsonResource
             'tax' => (float) $this->tax,
             'discount' => (float) $this->discount,
             'total' => (float) $this->total,
-            'paid_amount' => (float) ($this->payments_sum_amount ?? 0),
-            'pending_amount' => max(0, (float) $this->total - (float) ($this->payments_sum_amount ?? 0)),
+            'paid_amount' => $paidAmount,
+            'pending_amount' => max(0, (float) $this->total - $paidAmount),
             'completed_at' => $this->completed_at?->format('Y-m-d H:i:s'),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),

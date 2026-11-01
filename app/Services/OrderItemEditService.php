@@ -190,7 +190,7 @@ class OrderItemEditService
                 : $this->changeDeliveryDate($order, $requestedDeliveryDate, $reason);
 
             $order->payments()->orderBy('id')->lockForUpdate()->get();
-            $paidInCents = (int) round((float) $order->payments()->sum('amount') * 100);
+            $paidInCents = (int) round((float) $order->activePayments()->sum('amount') * 100);
             $previousTotal = (float) $order->total;
 
             $additionalReservations = [];

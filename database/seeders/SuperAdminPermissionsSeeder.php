@@ -53,6 +53,7 @@ class SuperAdminPermissionsSeeder extends Seeder
             'vehicles.delete',
             'drivers.view',
             'payments.view',
+            'payments.reverse',
             'logistics.routes.view',
             'logistics.routes.manage',
             'logistics.routes.plan',
