@@ -14979,6 +14979,83 @@
                 ]
             }
         },
+        "/store/reports/summary": {
+            "get": {
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Obtener resumen de informes",
+                "description": "Devuelve el resumen comercial y operativo de la tienda autenticada para un período determinado.\nEl resumen corresponde exclusivamente a la tienda asociada al usuario autenticado.\nLas métricas bajo metrics pertenecen al período; current representa estado actual.",
+                "operationId": "7fd8339e26eca44b368015a813bc1cd0",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "description": "Fecha inicial del período en la zona horaria de la tienda.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date",
+                            "example": "2026-11-01"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "description": "Fecha final inclusiva del período en la zona horaria de la tienda. Debe ser igual o posterior a date_from.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "date",
+                            "example": "2026-11-30"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resumen de informes obtenido exitosamente",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "success"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Resumen de informes obtenido exitosamente."
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/ReportsSummary"
+                                        },
+                                        "errors": {
+                                            "type": "null",
+                                            "example": null
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No autenticado"
+                    },
+                    "403": {
+                        "description": "La feature reports no está disponible en el plan o el usuario no tiene una tienda operativa."
+                    },
+                    "422": {
+                        "description": "Parámetros de fecha inválidos: date_from y date_to son obligatorios, deben tener formato YYYY-MM-DD y date_to no puede ser anterior a date_from."
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/routes/eligible-orders": {
             "get": {
                 "tags": [
@@ -21521,6 +21598,124 @@
                 },
                 "type": "object"
             },
+            "ReportsSummary": {
+                "title": "ReportsSummary",
+                "description": "Resumen comercial y operativo de la tienda autenticada. Las métricas corresponden al período solicitado; current representa estado actual.",
+                "properties": {
+                    "period": {
+                        "description": "Período solicitado, interpretado en la zona horaria de la tienda.",
+                        "properties": {
+                            "date_from": {
+                                "description": "Fecha inicial solicitada.",
+                                "type": "string",
+                                "format": "date",
+                                "example": "2026-11-01"
+                            },
+                            "date_to": {
+                                "description": "Fecha final solicitada.",
+                                "type": "string",
+                                "format": "date",
+                                "example": "2026-11-30"
+                            },
+                            "timezone": {
+                                "description": "Zona horaria utilizada para interpretar el período.",
+                                "type": "string",
+                                "example": "America/Argentina/Mendoza"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "metrics": {
+                        "description": "Métricas del período solicitado.",
+                        "properties": {
+                            "pos_sales": {
+                                "properties": {
+                                    "amount": {
+                                        "description": "Importe total de ventas de mostrador confirmadas creadas durante el período.",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 1850000
+                                    },
+                                    "count": {
+                                        "description": "Cantidad de ventas de mostrador confirmadas creadas durante el período.",
+                                        "type": "integer",
+                                        "example": 74
+                                    },
+                                    "average_ticket": {
+                                        "description": "Importe promedio por venta de mostrador durante el período.",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 25000
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "orders_taken": {
+                                "properties": {
+                                    "amount": {
+                                        "description": "Importe total vigente de pedidos no cancelados creados durante el período.",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 930000
+                                    },
+                                    "count": {
+                                        "description": "Cantidad de pedidos no cancelados creados durante el período.",
+                                        "type": "integer",
+                                        "example": 21
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "collected": {
+                                "properties": {
+                                    "amount": {
+                                        "description": "Importe total de pagos activos registrados durante el período. Los pagos revertidos no se incluyen.",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 2420000
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "current": {
+                        "description": "Estado actual de la tienda; no depende del período solicitado.",
+                        "properties": {
+                            "pending_balance": {
+                                "properties": {
+                                    "amount": {
+                                        "description": "Saldo pendiente vigente de operaciones comerciales actualmente cobrables. Representa estado actual y no está limitado por el período solicitado.",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 470000
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "inventory_alerts": {
+                                "description": "Alertas de inventario actuales; no dependen del período solicitado.",
+                                "properties": {
+                                    "low_stock_count": {
+                                        "description": "Cantidad actual de productos activos con stock físico mayor que cero, stock mínimo configurado y stock menor o igual al mínimo.",
+                                        "type": "integer",
+                                        "example": 7
+                                    },
+                                    "out_of_stock_count": {
+                                        "description": "Cantidad actual de productos activos sin disponibilidad para venta.",
+                                        "type": "integer",
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
             "RouteStopItem": {
                 "title": "RouteStopItem",
                 "description": "Representación de un item asignado a una parada de ruta",
@@ -21974,6 +22169,10 @@
         {
             "name": "Store - Logística",
             "description": "Store - Logística"
+        },
+        {
+            "name": "Reports",
+            "description": "Reports"
         },
         {
             "name": "Store - Rutas",

@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\V1\Store\PurchaseDocumentController;
 use App\Http\Controllers\Api\V1\Store\PurchaseReceiptController;
 use App\Http\Controllers\Api\V1\Store\ReceivedPaymentController;
 use App\Http\Controllers\Api\V1\Store\RejectionReasonController;
+use App\Http\Controllers\Api\V1\Store\ReportsSummaryController;
 use App\Http\Controllers\Api\V1\Store\RouteController;
 use App\Http\Controllers\Api\V1\Store\SaleHistoryController;
 use App\Http\Controllers\Api\V1\Store\StoreUserController;
@@ -215,6 +216,10 @@ Route::prefix('v1')->group(function () {
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('store.products.destroy');
 
             Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
+
+            Route::get('reports/summary', ReportsSummaryController::class)
+                ->middleware('feature:reports')
+                ->name('store.reports.summary');
 
             Route::middleware('feature:pos')->group(function () {
                 Route::get('price-lists/active', [PriceListController::class, 'active'])->name('store.price-lists.active');
