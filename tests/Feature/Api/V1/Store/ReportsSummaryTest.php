@@ -1,10 +1,13 @@
 <?php
 
 use App\Models\CommercialOperation;
+use App\Models\DeliveryRoute;
 use App\Models\Feature;
 use App\Models\OperationPayment;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\RouteStop;
+use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
@@ -49,6 +52,29 @@ function reportPayment(CommercialOperation $operation, StorePaymentMethod $metho
         'created_at' => CarbonImmutable::parse('2026-11-15 15:00:00', 'UTC'),
         'updated_at' => CarbonImmutable::parse('2026-11-15 15:00:00', 'UTC'),
     ], $attributes));
+}
+
+function reportDelivery(
+    Store $store,
+    CommercialOperation $operation,
+    string $occurredAt,
+    string $status = 'completed',
+    string $quantityDelivered = '1.0000',
+): RouteStop {
+    $route = DeliveryRoute::factory()->forStore($store)->create();
+    $stop = RouteStop::factory()->create([
+        'route_id' => $route->id,
+        'order_id' => $operation->id,
+        'status' => $status,
+        'completed_at' => CarbonImmutable::parse($occurredAt, 'UTC'),
+    ]);
+    RouteStopItem::factory()->create([
+        'route_stop_id' => $stop->id,
+        'product_id' => reportProduct($store)->id,
+        'quantity_delivered' => $quantityDelivered,
+    ]);
+
+    return $stop;
 }
 
 function reportProduct(Store $store, array $attributes = []): Product
@@ -157,6 +183,62 @@ test('reports current pending balance independently from the selected period', f
 
     summaryFor($this->userA)->assertOk()
         ->assertJsonPath('data.current.pending_balance.amount', 8400);
+});
+
+test('counts physical delivery stops in the selected period and store', function (): void {
+    $partial = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'partially_delivered']);
+    $firstStop = reportDelivery($this->storeA, $partial, '2026-11-15 15:00:00', quantityDelivered: '6.0000');
+    RouteStopItem::factory()->create([
+        'route_stop_id' => $firstStop->id,
+        'product_id' => reportProduct($this->storeA)->id,
+        'quantity_delivered' => '1.0000',
+        'is_extra' => true,
+    ]);
+    reportDelivery($this->storeA, $partial, '2026-11-16 15:00:00', quantityDelivered: '4.0000');
+    $outside = reportOperation($this->storeA, $this->userA, ['type' => 'order']);
+    reportDelivery($this->storeA, $outside, '2026-10-31 15:00:00');
+    $failed = reportOperation($this->storeA, $this->userA, ['type' => 'order']);
+    reportDelivery($this->storeA, $failed, '2026-11-15 15:00:00', status: 'failed');
+    $empty = reportOperation($this->storeA, $this->userA, ['type' => 'order']);
+    reportDelivery($this->storeA, $empty, '2026-11-15 15:00:00', quantityDelivered: '0.0000');
+
+    $foreign = reportOperation($this->storeB, $this->userB, ['type' => 'order']);
+    reportDelivery($this->storeB, $foreign, '2026-11-15 15:00:00');
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.deliveries_completed.count', 2);
+    summaryFor($this->userB)->assertOk()
+        ->assertJsonPath('data.metrics.deliveries_completed.count', 1);
+});
+
+test('uses store timezone boundaries for physical deliveries', function (): void {
+    $outside = reportOperation($this->storeA, $this->userA, ['type' => 'order']);
+    reportDelivery($this->storeA, $outside, '2026-11-01 02:59:59');
+    $inside = reportOperation($this->storeA, $this->userA, ['type' => 'order']);
+    reportDelivery($this->storeA, $inside, '2026-11-01 03:00:00');
+
+    summaryFor($this->userA, '2026-11-01', '2026-11-01')->assertOk()
+        ->assertJsonPath('data.metrics.deliveries_completed.count', 1);
+});
+
+test('reports current attention indicators scoped to the authenticated store', function (): void {
+    reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'partially_delivered']);
+    $deliveredWithBalance = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'delivered', 'total' => '1000.00']);
+    reportPayment($deliveredWithBalance, $this->methodA, ['amount' => '400.00']);
+    $fullyPaidDelivered = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'delivered', 'total' => '1000.00']);
+    reportPayment($fullyPaidDelivered, $this->methodA, ['amount' => '1000.00']);
+    DeliveryRoute::factory()->forStore($this->storeA)->create(['status' => 'awaiting_reconciliation']);
+    DeliveryRoute::factory()->forStore($this->storeA)->create(['status' => 'dispatched']);
+
+    reportOperation($this->storeB, $this->userB, ['type' => 'order', 'status' => 'partially_delivered']);
+    $foreignDelivered = reportOperation($this->storeB, $this->userB, ['type' => 'order', 'status' => 'delivered', 'total' => '5000.00']);
+    reportPayment($foreignDelivered, $this->methodB, ['amount' => '1.00']);
+    DeliveryRoute::factory()->forStore($this->storeB)->create(['status' => 'awaiting_reconciliation']);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.current.attention.partially_delivered_orders', 1)
+        ->assertJsonPath('data.current.attention.delivered_with_balance', 1)
+        ->assertJsonPath('data.current.attention.routes_pending_reconciliation', 1);
 });
 
 test('uses the store timezone at local day boundaries', function (): void {

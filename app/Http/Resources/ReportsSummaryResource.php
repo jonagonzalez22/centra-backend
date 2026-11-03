@@ -14,11 +14,13 @@ class ReportsSummaryResource extends JsonResource
             'metrics' => [
                 'pos_sales' => $this->moneyMetrics($this['metrics']['pos_sales']),
                 'orders_taken' => $this->moneyMetrics($this['metrics']['orders_taken']),
+                'deliveries_completed' => $this['metrics']['deliveries_completed'],
                 'collected' => $this->moneyMetrics($this['metrics']['collected']),
             ],
             'current' => [
                 'pending_balance' => $this->moneyMetrics($this['current']['pending_balance']),
                 'inventory_alerts' => $this['current']['inventory_alerts'],
+                'attention' => $this['current']['attention'],
             ],
         ];
     }

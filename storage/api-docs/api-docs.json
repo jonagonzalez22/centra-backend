@@ -8293,6 +8293,19 @@
                                                             "quantity_delivered": {
                                                                 "type": "integer"
                                                             },
+                                                            "rejection_reason": {
+                                                                "properties": {
+                                                                    "id": {
+                                                                        "type": "string",
+                                                                        "format": "uuid"
+                                                                    },
+                                                                    "label": {
+                                                                        "type": "string"
+                                                                    }
+                                                                },
+                                                                "type": "object",
+                                                                "nullable": true
+                                                            },
                                                             "original_route_stop_id": {
                                                                 "type": "string",
                                                                 "format": "uuid",
@@ -19345,6 +19358,13 @@
                         "type": "number",
                         "format": "float"
                     },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "active",
+                            "reversed"
+                        ]
+                    },
                     "reference": {
                         "type": "string",
                         "nullable": true
@@ -21666,6 +21686,16 @@
                                 },
                                 "type": "object"
                             },
+                            "deliveries_completed": {
+                                "properties": {
+                                    "count": {
+                                        "description": "Cantidad de entregas de mercadería realizadas durante el período seleccionado, parciales o completas.",
+                                        "type": "integer",
+                                        "example": 14
+                                    }
+                                },
+                                "type": "object"
+                            },
                             "collected": {
                                 "properties": {
                                     "amount": {
@@ -21704,6 +21734,27 @@
                                     },
                                     "out_of_stock_count": {
                                         "description": "Cantidad actual de productos activos sin disponibilidad para venta.",
+                                        "type": "integer",
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "attention": {
+                                "description": "Indicadores operativos actuales que pueden requerir seguimiento; no dependen del período solicitado.",
+                                "properties": {
+                                    "partially_delivered_orders": {
+                                        "description": "Pedidos actualmente con estado partially_delivered.",
+                                        "type": "integer",
+                                        "example": 3
+                                    },
+                                    "delivered_with_balance": {
+                                        "description": "Pedidos entregados cuyo total supera la suma de sus pagos activos.",
+                                        "type": "integer",
+                                        "example": 5
+                                    },
+                                    "routes_pending_reconciliation": {
+                                        "description": "Rutas actualmente en awaiting_reconciliation, listas para el proceso administrativo de conciliación.",
                                         "type": "integer",
                                         "example": 2
                                     }

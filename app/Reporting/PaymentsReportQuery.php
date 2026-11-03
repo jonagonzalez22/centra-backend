@@ -51,4 +51,22 @@ final class PaymentsReportQuery
 
         return ['amount' => $pendingBalance];
     }
+
+    public function deliveredOrdersWithPendingBalanceCount(ReportContext $context): int
+    {
+        $orders = CommercialOperation::query()
+            ->forStore($context->storeId)
+            ->where('type', 'order')
+            ->where('status', 'delivered')
+            ->withSum('activePayments', 'amount')
+            ->get(['id', 'total']);
+
+        return $orders->filter(fn (CommercialOperation $order): bool => MoneyMath::compare(
+            MoneyMath::subtract(
+                (string) $order->total,
+                (string) ($order->active_payments_sum_amount ?? '0'),
+            ),
+            '0'
+        ) > 0)->count();
+    }
 }

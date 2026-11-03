@@ -44,6 +44,13 @@ class ReportsSummarySchema
                 ]
             ),
             new OA\Property(
+                property: 'deliveries_completed',
+                type: 'object',
+                properties: [
+                    new OA\Property(property: 'count', type: 'integer', example: 14, description: 'Cantidad de entregas de mercadería realizadas durante el período seleccionado, parciales o completas.'),
+                ]
+            ),
+            new OA\Property(
                 property: 'collected',
                 type: 'object',
                 properties: [
@@ -72,6 +79,16 @@ class ReportsSummarySchema
                 properties: [
                     new OA\Property(property: 'low_stock_count', type: 'integer', example: 7, description: 'Cantidad actual de productos activos con stock físico mayor que cero, stock mínimo configurado y stock menor o igual al mínimo.'),
                     new OA\Property(property: 'out_of_stock_count', type: 'integer', example: 2, description: 'Cantidad actual de productos activos sin disponibilidad para venta.'),
+                ]
+            ),
+            new OA\Property(
+                property: 'attention',
+                type: 'object',
+                description: 'Indicadores operativos actuales que pueden requerir seguimiento; no dependen del período solicitado.',
+                properties: [
+                    new OA\Property(property: 'partially_delivered_orders', type: 'integer', example: 3, description: 'Pedidos actualmente con estado partially_delivered.'),
+                    new OA\Property(property: 'delivered_with_balance', type: 'integer', example: 5, description: 'Pedidos entregados cuyo total supera la suma de sus pagos activos.'),
+                    new OA\Property(property: 'routes_pending_reconciliation', type: 'integer', example: 2, description: 'Rutas actualmente en awaiting_reconciliation, listas para el proceso administrativo de conciliación.'),
                 ]
             ),
         ]
