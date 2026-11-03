@@ -55,6 +55,10 @@ class ReportsSummarySchema
                 type: 'object',
                 properties: [
                     new OA\Property(property: 'amount', type: 'number', format: 'float', example: 2420000, description: 'Importe total de pagos activos registrados durante el período. Los pagos revertidos no se incluyen.'),
+                    new OA\Property(property: 'channels', type: 'object', description: 'Desglose de pagos activos por canal comercial.', properties: [
+                        new OA\Property(property: 'pos_amount', type: 'number', format: 'float', example: 167340),
+                        new OA\Property(property: 'orders_amount', type: 'number', format: 'float', example: 33520),
+                    ]),
                 ]
             ),
         ]

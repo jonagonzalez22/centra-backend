@@ -3,6 +3,7 @@
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRoute;
 use App\Models\Feature;
+use App\Models\OperationItem;
 use App\Models\OperationPayment;
 use App\Models\Plan;
 use App\Models\Product;
@@ -87,6 +88,11 @@ function reportProduct(Store $store, array $attributes = []): Product
 function summaryFor(User $user, string $from = '2026-11-01', string $to = '2026-11-30')
 {
     return test()->actingAs($user, 'sanctum')->getJson("/api/v1/store/reports/summary?date_from={$from}&date_to={$to}");
+}
+
+function analyticsFor(User $user, string $from = '2026-11-01', string $to = '2026-11-30')
+{
+    return test()->actingAs($user, 'sanctum')->getJson("/api/v1/store/reports/analytics?date_from={$from}&date_to={$to}");
 }
 
 test('isolates period metrics, payments and inventory between stores', function (): void {
@@ -255,6 +261,75 @@ test('uses the store timezone at local day boundaries', function (): void {
         ->assertJsonPath('data.period.timezone', 'America/Argentina/Mendoza')
         ->assertJsonPath('data.metrics.pos_sales.amount', 200)
         ->assertJsonPath('data.metrics.pos_sales.count', 1);
+});
+
+test('returns tenant scoped daily analytics with local day boundaries, historical methods and pos products', function (): void {
+    $atLocalStart = CarbonImmutable::parse('2026-11-01 03:00:00', 'UTC');
+    $sale = reportOperation($this->storeA, $this->userA, [
+        'type' => 'sale', 'status' => 'confirmed', 'total' => '100.00', 'created_at' => $atLocalStart,
+    ]);
+    $cancelled = reportOperation($this->storeA, $this->userA, [
+        'type' => 'sale', 'status' => 'cancelled', 'total' => '500.00', 'created_at' => $atLocalStart,
+    ]);
+    $order = reportOperation($this->storeA, $this->userA, [
+        'type' => 'order', 'status' => 'open', 'created_at' => CarbonImmutable::parse('2026-11-02 15:00:00', 'UTC'),
+    ]);
+    reportOperation($this->storeA, $this->userA, [
+        'type' => 'order', 'status' => 'cancelled', 'created_at' => CarbonImmutable::parse('2026-11-02 15:00:00', 'UTC'),
+    ]);
+    reportDelivery($this->storeA, $order, '2026-11-02 15:00:00', quantityDelivered: '2.0000');
+    reportDelivery($this->storeA, $order, '2026-11-03 15:00:00', quantityDelivered: '1.0000');
+
+    $this->methodA->update(['custom_name' => 'Efectivo histórico', 'is_enabled' => false]);
+    reportPayment($sale, $this->methodA, ['amount' => '10.00', 'created_at' => $atLocalStart]);
+    reportPayment($order, $this->methodA, ['amount' => '40.00', 'created_at' => $atLocalStart]);
+    reportPayment($order, $this->methodA, ['amount' => '90.00', 'status' => 'reversed', 'created_at' => $atLocalStart]);
+
+    $productA = reportProduct($this->storeA, ['name' => 'Producto histórico']);
+    $productB = reportProduct($this->storeA, ['name' => 'Otro producto']);
+    OperationItem::factory()->forOperation($sale)->forProduct($productA)->create([
+        'subtotal' => '80.00', 'tax_amount' => '20.00', 'discount_amount' => '10.00', 'created_at' => $atLocalStart,
+    ]);
+    OperationItem::factory()->forOperation($sale)->forProduct($productB)->create([
+        'subtotal' => '40.00', 'tax_amount' => '0.00', 'discount_amount' => '0.00', 'created_at' => $atLocalStart,
+    ]);
+    OperationItem::factory()->forOperation($cancelled)->forProduct($productA)->create([
+        'subtotal' => '900.00', 'tax_amount' => '0.00', 'discount_amount' => '0.00', 'created_at' => $atLocalStart,
+    ]);
+
+    $foreignSale = reportOperation($this->storeB, $this->userB, [
+        'type' => 'sale', 'status' => 'confirmed', 'total' => '999.00', 'created_at' => $atLocalStart,
+    ]);
+    reportPayment($foreignSale, $this->methodB, ['amount' => '999.00', 'created_at' => $atLocalStart]);
+    $foreignOrder = reportOperation($this->storeB, $this->userB, [
+        'type' => 'order', 'status' => 'open', 'created_at' => CarbonImmutable::parse('2026-11-02 15:00:00', 'UTC'),
+    ]);
+    reportDelivery($this->storeB, $foreignOrder, '2026-11-02 15:00:00');
+
+    summaryFor($this->userA, '2026-11-01', '2026-11-03')->assertOk()
+        ->assertJsonPath('data.metrics.collected.amount', 50)
+        ->assertJsonPath('data.metrics.collected.channels.pos_amount', 10)
+        ->assertJsonPath('data.metrics.collected.channels.orders_amount', 40);
+
+    analyticsFor($this->userA, '2026-11-01', '2026-11-03')->assertOk()
+        ->assertJsonPath('data.period.timezone', 'America/Argentina/Mendoza')
+        ->assertJsonPath('data.payments_series.0.date', '2026-11-01')
+        ->assertJsonPath('data.payments_series.0.collected_amount', 50)
+        ->assertJsonPath('data.payments_series.1.collected_amount', 0)
+        ->assertJsonPath('data.orders_series.1.orders_taken_count', 1)
+        ->assertJsonPath('data.orders_series.1.deliveries_count', 1)
+        ->assertJsonPath('data.orders_series.2.deliveries_count', 1)
+        ->assertJsonPath('data.payment_methods.0.name', 'Efectivo histórico')
+        ->assertJsonPath('data.payment_methods.0.amount', 50)
+        ->assertJsonPath('data.payment_methods.0.count', 2);
+});
+
+test('returns zero-filled analytics series without payment methods or pos products', function (): void {
+    analyticsFor($this->userA, '2026-11-01', '2026-11-03')->assertOk()
+        ->assertJsonCount(3, 'data.payments_series')
+        ->assertJsonPath('data.payments_series.0.collected_amount', 0)
+        ->assertJsonPath('data.orders_series.2.deliveries_count', 0)
+        ->assertJsonCount(0, 'data.payment_methods');
 });
 
 test('validates dates and does not accept a global store report', function (): void {

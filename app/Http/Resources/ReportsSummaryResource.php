@@ -33,6 +33,13 @@ class ReportsSummaryResource extends JsonResource
             }
         }
 
+        if (isset($metrics['channels'])) {
+            $metrics['channels'] = array_map(
+                fn (string $amount): float => (float) $amount,
+                $metrics['channels'],
+            );
+        }
+
         return $metrics;
     }
 }
