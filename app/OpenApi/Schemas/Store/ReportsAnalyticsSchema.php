@@ -14,6 +14,14 @@ class ReportsAnalyticsSchema
     ])]
     public object $period;
 
+    #[OA\Property(type: 'array', description: 'Ventas realizadas por día local: POS confirmado más entregas monetizadas de pedidos. Incluye días sin actividad.', items: new OA\Items(type: 'object', properties: [
+        new OA\Property(property: 'date', type: 'string', format: 'date', example: '2026-11-01'),
+        new OA\Property(property: 'pos_amount', type: 'number', format: 'float', example: 22800),
+        new OA\Property(property: 'orders_amount', type: 'number', format: 'float', example: 20000),
+        new OA\Property(property: 'total_amount', type: 'number', format: 'float', example: 42800),
+    ]))]
+    public array $realized_sales_series;
+
     #[OA\Property(type: 'array', description: 'Pagos activos registrados por día local. Incluye días sin actividad.', items: new OA\Items(type: 'object', properties: [
         new OA\Property(property: 'date', type: 'string', format: 'date', example: '2026-11-01'),
         new OA\Property(property: 'collected_amount', type: 'number', format: 'float', example: 98000, description: 'Pagos active registrados ese día.'),
@@ -34,4 +42,11 @@ class ReportsAnalyticsSchema
         new OA\Property(property: 'count', type: 'integer', example: 18),
     ]))]
     public array $payment_methods;
+
+    #[OA\Property(type: 'array', description: 'Hasta cinco productos presentes en más operaciones de venta realizada. Cada producto cuenta una sola vez por operación; consolida POS confirmado y pedidos con mercadería entregada.', items: new OA\Items(type: 'object', properties: [
+        new OA\Property(property: 'product_id', type: 'string', format: 'uuid'),
+        new OA\Property(property: 'name', type: 'string', example: 'Papel higiénico 30x70mtrs'),
+        new OA\Property(property: 'operations_count', type: 'integer', example: 12),
+    ]))]
+    public array $top_products;
 }

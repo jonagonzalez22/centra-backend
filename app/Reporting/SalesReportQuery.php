@@ -53,7 +53,7 @@ final class SalesReportQuery
         ])->all();
     }
 
-    /** @return array<int, array{product_id: string, name: string, amount: string}> */
+    /** @return array<int, array{product_id: string, name: string, operations_count: int}> */
     public function topProducts(ReportContext $context): array
     {
         $rows = OperationItem::query()
@@ -63,7 +63,7 @@ final class SalesReportQuery
             ->where('operations.status', 'confirmed')
             ->where('operations.created_at', '>=', $context->fromUtc)
             ->where('operations.created_at', '<', $context->toUtcExclusive)
-            ->selectRaw('operation_items.product_id, operation_items.product_name, operation_items.created_at, (operation_items.subtotal + operation_items.tax_amount - operation_items.discount_amount) as line_amount')
+            ->select('operation_items.product_id', 'operation_items.product_name', 'operation_items.operation_id', 'operation_items.created_at', 'operation_items.id')
             ->orderBy('operation_items.product_id')
             ->orderByDesc('operation_items.created_at')
             ->orderByDesc('operation_items.id')
@@ -72,15 +72,15 @@ final class SalesReportQuery
         return $rows->groupBy('product_id')
             ->map(function ($items, string $productId): array {
                 $latest = $items->first();
-                $amount = $items->reduce(
-                    fn (string $total, object $item): string => MoneyMath::add($total, (string) $item->line_amount),
-                    '0.00',
-                );
 
-                return ['product_id' => $productId, 'name' => $latest->product_name, 'amount' => $amount];
+                return [
+                    'product_id' => $productId,
+                    'name' => $latest->product_name,
+                    // A product can be present in several lines of one POS sale;
+                    // it remains one choice in that commercial operation.
+                    'operations_count' => $items->pluck('operation_id')->unique()->count(),
+                ];
             })
-            ->sortByDesc('amount', SORT_NUMERIC)
-            ->take(5)
             ->values()
             ->all();
     }

@@ -13,6 +13,7 @@ class ReportsSummaryResource extends JsonResource
             'period' => $this['period'],
             'metrics' => [
                 'pos_sales' => $this->moneyMetrics($this['metrics']['pos_sales']),
+                'realized_sales' => $this->moneyMetrics($this['metrics']['realized_sales']),
                 'orders_taken' => $this->moneyMetrics($this['metrics']['orders_taken']),
                 'deliveries_completed' => $this['metrics']['deliveries_completed'],
                 'collected' => $this->moneyMetrics($this['metrics']['collected']),
@@ -34,10 +35,14 @@ class ReportsSummaryResource extends JsonResource
         }
 
         if (isset($metrics['channels'])) {
-            $metrics['channels'] = array_map(
-                fn (string $amount): float => (float) $amount,
-                $metrics['channels'],
-            );
+            foreach ($metrics['channels'] as &$channel) {
+                if (is_array($channel) && isset($channel['amount'])) {
+                    $channel['amount'] = (float) $channel['amount'];
+                } elseif (is_string($channel) || is_numeric($channel)) {
+                    $channel = (float) $channel;
+                }
+            }
+            unset($channel);
         }
 
         return $metrics;

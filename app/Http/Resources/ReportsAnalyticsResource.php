@@ -11,9 +11,11 @@ class ReportsAnalyticsResource extends JsonResource
     {
         return [
             'period' => $this['period'],
+            'realized_sales_series' => $this->moneySeries($this['realized_sales_series'], ['pos_amount', 'orders_amount', 'total_amount']),
             'payments_series' => $this->moneySeries($this['payments_series'], ['collected_amount']),
             'orders_series' => $this['orders_series'],
             'payment_methods' => $this->moneySeries($this['payment_methods'], ['amount']),
+            'top_products' => $this['top_products'],
         ];
     }
 

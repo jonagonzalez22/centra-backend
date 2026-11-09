@@ -2,6 +2,7 @@
 
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRoute;
+use App\Models\DeliverySaleAllocation;
 use App\Models\Feature;
 use App\Models\OperationItem;
 use App\Models\OperationPayment;
@@ -83,6 +84,38 @@ function reportProduct(Store $store, array $attributes = []): Product
     return Product::factory()->forStore($store)->create(array_merge([
         'stock_measurement_unit_id' => \App\Models\MeasurementUnit::query()->where('code', 'unit')->value('id'),
     ], $attributes));
+}
+
+function reportSaleAllocation(
+    Store $store,
+    CommercialOperation $operation,
+    Product $product,
+    string $occurredAt,
+    string $amount,
+    bool $isExtra = false,
+): DeliverySaleAllocation {
+    $route = DeliveryRoute::factory()->forStore($store)->create();
+    $stop = RouteStop::factory()->create(['route_id' => $route->id, 'order_id' => $operation->id]);
+    $stopItem = RouteStopItem::factory()->create(['route_stop_id' => $stop->id, 'product_id' => $product->id]);
+    $line = OperationItem::factory()->forOperation($operation)->forProduct($product)->create();
+
+    return DeliverySaleAllocation::create([
+        'store_id' => $store->id,
+        'route_id' => $route->id,
+        'route_stop_id' => $stop->id,
+        'route_stop_item_id' => $stopItem->id,
+        'operation_id' => $operation->id,
+        'operation_item_id' => $line->id,
+        'product_id' => $product->id,
+        'quantity_delivered' => '1.0000',
+        'unit_price_snapshot' => $amount,
+        'gross_amount' => $amount,
+        'discount_amount' => '0.00',
+        'tax_amount' => '0.00',
+        'net_amount' => $amount,
+        'is_extra' => $isExtra,
+        'occurred_at' => CarbonImmutable::parse($occurredAt, 'UTC'),
+    ]);
 }
 
 function summaryFor(User $user, string $from = '2026-11-01', string $to = '2026-11-30')
@@ -261,6 +294,88 @@ test('uses the store timezone at local day boundaries', function (): void {
         ->assertJsonPath('data.period.timezone', 'America/Argentina/Mendoza')
         ->assertJsonPath('data.metrics.pos_sales.amount', 200)
         ->assertJsonPath('data.metrics.pos_sales.count', 1);
+});
+
+test('reports realized sales from POS plus immutable delivered allocations', function (): void {
+    $posProduct = reportProduct($this->storeA, ['name' => 'Producto POS']);
+    $orderProduct = reportProduct($this->storeA, ['name' => 'Producto pedido']);
+    $sale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '100.00']);
+    OperationItem::factory()->forOperation($sale)->forProduct($posProduct)->create([
+        'subtotal' => '100.00', 'tax_amount' => '0.00', 'discount_amount' => '0.00',
+    ]);
+    $order = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'open']);
+    reportSaleAllocation($this->storeA, $order, $orderProduct, '2026-11-15 15:00:00', '50.00');
+    reportSaleAllocation($this->storeA, $order, $orderProduct, '2026-11-16 15:00:00', '25.00');
+
+    $foreignOrder = reportOperation($this->storeB, $this->userB, ['type' => 'order', 'status' => 'open']);
+    reportSaleAllocation($this->storeB, $foreignOrder, reportProduct($this->storeB), '2026-11-15 15:00:00', '999.00');
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.realized_sales.amount', 175)
+        ->assertJsonPath('data.metrics.realized_sales.channels.pos.amount', 100)
+        ->assertJsonPath('data.metrics.realized_sales.channels.orders.amount', 75)
+        ->assertJsonPath('data.metrics.realized_sales.channels.pos.percentage', 57)
+        ->assertJsonPath('data.metrics.realized_sales.channels.orders.percentage', 43);
+
+    analyticsFor($this->userA, '2026-11-15', '2026-11-16')->assertOk()
+        ->assertJsonPath('data.realized_sales_series.0.total_amount', 150)
+        ->assertJsonPath('data.realized_sales_series.1.orders_amount', 25)
+        ->assertJsonPath('data.top_products.0.name', 'Producto POS')
+        ->assertJsonPath('data.top_products.0.operations_count', 1)
+        ->assertJsonPath('data.top_products.1.name', 'Producto pedido')
+        ->assertJsonPath('data.top_products.1.operations_count', 1);
+});
+
+test('ranks products by distinct realized operations without counting repeated lines or re-deliveries twice', function (): void {
+    $frequent = reportProduct($this->storeA, ['name' => 'Frecuente']);
+    $extra = reportProduct($this->storeA, ['name' => 'Extra']);
+    $rare = reportProduct($this->storeA, ['name' => 'Raro']);
+
+    $firstSale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '9999.00']);
+    // Two lines and 30 physical units still represent one choice in one POS sale.
+    OperationItem::factory()->forOperation($firstSale)->forProduct($frequent)->create(['quantity' => '30.0000']);
+    OperationItem::factory()->forOperation($firstSale)->forProduct($frequent)->create(['quantity' => '1.0000']);
+    foreach (range(1, 2) as $index) {
+        $sale = reportOperation($this->storeA, $this->userA, [
+            'type' => 'sale', 'status' => 'confirmed', 'total' => '10.00',
+            'operation_number' => "F-{$index}",
+        ]);
+        OperationItem::factory()->forOperation($sale)->forProduct($frequent)->create();
+    }
+
+    $order = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'open']);
+    // Partial delivery plus re-delivery is one product choice for this order.
+    reportSaleAllocation($this->storeA, $order, $frequent, '2026-11-02 15:00:00', '10.00');
+    reportSaleAllocation($this->storeA, $order, $frequent, '2026-11-05 15:00:00', '10.00');
+    // A new product added as an extra sale counts naturally in the same order.
+    reportSaleAllocation($this->storeA, $order, $extra, '2026-11-05 15:00:00', '10.00', true);
+
+    $outsidePeriodOrder = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'open']);
+    reportSaleAllocation($this->storeA, $outsidePeriodOrder, $rare, '2026-10-31 02:59:59', '10.00');
+    $foreignSale = reportOperation($this->storeB, $this->userB, ['type' => 'sale', 'status' => 'confirmed']);
+    OperationItem::factory()->forOperation($foreignSale)->forProduct(reportProduct($this->storeB, ['name' => 'Extranjero']))->create();
+
+    analyticsFor($this->userA, '2026-11-01', '2026-11-30')->assertOk()
+        ->assertJsonPath('data.top_products.0.name', 'Frecuente')
+        ->assertJsonPath('data.top_products.0.operations_count', 4)
+        ->assertJsonPath('data.top_products.1.name', 'Extra')
+        ->assertJsonPath('data.top_products.1.operations_count', 1)
+        ->assertJsonMissing(['name' => 'Extranjero'])
+        ->assertJsonMissing(['name' => 'Raro']);
+});
+
+test('limits most chosen products to five with a deterministic name tie-breaker', function (): void {
+    foreach (['Zulu', 'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'] as $name) {
+        $product = reportProduct($this->storeA, ['name' => $name]);
+        $sale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed']);
+        OperationItem::factory()->forOperation($sale)->forProduct($product)->create();
+    }
+
+    analyticsFor($this->userA)->assertOk()
+        ->assertJsonCount(5, 'data.top_products')
+        ->assertJsonPath('data.top_products.0.name', 'Alpha')
+        ->assertJsonPath('data.top_products.4.name', 'Echo')
+        ->assertJsonMissing(['name' => 'Zulu']);
 });
 
 test('returns tenant scoped daily analytics with local day boundaries, historical methods and pos products', function (): void {

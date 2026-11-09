@@ -36,6 +36,24 @@ class ReportsSummarySchema
                 ]
             ),
             new OA\Property(
+                property: 'realized_sales',
+                type: 'object',
+                description: 'Ventas realizadas: ventas POS confirmadas más entregas monetizadas de pedidos. Las entregas usan el snapshot financiero delivery_sale_allocations.net_amount.',
+                properties: [
+                    new OA\Property(property: 'amount', type: 'number', format: 'float', example: 245000),
+                    new OA\Property(property: 'channels', type: 'object', properties: [
+                        new OA\Property(property: 'pos', type: 'object', properties: [
+                            new OA\Property(property: 'amount', type: 'number', format: 'float', example: 166600),
+                            new OA\Property(property: 'percentage', type: 'integer', example: 68),
+                        ]),
+                        new OA\Property(property: 'orders', type: 'object', properties: [
+                            new OA\Property(property: 'amount', type: 'number', format: 'float', example: 78400),
+                            new OA\Property(property: 'percentage', type: 'integer', example: 32),
+                        ]),
+                    ]),
+                ]
+            ),
+            new OA\Property(
                 property: 'orders_taken',
                 type: 'object',
                 properties: [

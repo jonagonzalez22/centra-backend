@@ -21717,6 +21717,35 @@
                         },
                         "type": "object"
                     },
+                    "realized_sales_series": {
+                        "description": "Ventas realizadas por día local: POS confirmado más entregas monetizadas de pedidos. Incluye días sin actividad.",
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "date": {
+                                    "type": "string",
+                                    "format": "date",
+                                    "example": "2026-11-01"
+                                },
+                                "pos_amount": {
+                                    "type": "number",
+                                    "format": "float",
+                                    "example": 22800
+                                },
+                                "orders_amount": {
+                                    "type": "number",
+                                    "format": "float",
+                                    "example": 20000
+                                },
+                                "total_amount": {
+                                    "type": "number",
+                                    "format": "float",
+                                    "example": 42800
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
                     "payments_series": {
                         "description": "Pagos activos registrados por día local. Incluye días sin actividad.",
                         "type": "array",
@@ -21785,6 +21814,27 @@
                             },
                             "type": "object"
                         }
+                    },
+                    "top_products": {
+                        "description": "Hasta cinco productos presentes en más operaciones de venta realizada. Cada producto cuenta una sola vez por operación; consolida POS confirmado y pedidos con mercadería entregada.",
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "product_id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "example": "Papel higiénico 30x70mtrs"
+                                },
+                                "operations_count": {
+                                    "type": "integer",
+                                    "example": 12
+                                }
+                            },
+                            "type": "object"
+                        }
                     }
                 },
                 "type": "object"
@@ -21837,6 +21887,50 @@
                                         "type": "number",
                                         "format": "float",
                                         "example": 25000
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "realized_sales": {
+                                "description": "Ventas realizadas: ventas POS confirmadas más entregas monetizadas de pedidos. Las entregas usan el snapshot financiero delivery_sale_allocations.net_amount.",
+                                "properties": {
+                                    "amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 245000
+                                    },
+                                    "channels": {
+                                        "properties": {
+                                            "pos": {
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "number",
+                                                        "format": "float",
+                                                        "example": 166600
+                                                    },
+                                                    "percentage": {
+                                                        "type": "integer",
+                                                        "example": 68
+                                                    }
+                                                },
+                                                "type": "object"
+                                            },
+                                            "orders": {
+                                                "properties": {
+                                                    "amount": {
+                                                        "type": "number",
+                                                        "format": "float",
+                                                        "example": 78400
+                                                    },
+                                                    "percentage": {
+                                                        "type": "integer",
+                                                        "example": 32
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "type": "object"
                                     }
                                 },
                                 "type": "object"
