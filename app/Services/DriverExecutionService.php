@@ -24,6 +24,7 @@ class DriverExecutionService
     public function __construct(
         private CommercialOperationService $commercialOperationService,
         private DeliveryCollectionAmountService $deliveryCollectionAmountService,
+        private DeliverySaleAllocationService $deliverySaleAllocationService,
         private RouteStopItemStockConsumptionResolver $routeStopItemConsumptionResolver,
     ) {}
 
@@ -629,15 +630,20 @@ class DriverExecutionService
                 }
             }
 
+            $completedAt = now();
             $stop->update([
                 'status' => $finalStatus,
                 'completed_by' => $driver->id,
-                'completed_at' => now(),
+                'completed_at' => $completedAt,
                 'gps_lat' => $data['gps_lat'] ?? null,
                 'gps_lon' => $data['gps_lon'] ?? null,
                 'signature_uri' => $data['signature_uri'] ?? null,
                 'evidence_uris' => $data['evidence_uris'] ?? null,
             ]);
+
+            if ($finalStatus === 'completed') {
+                $this->deliverySaleAllocationService->persist($stop, $route, $completedAt);
+            }
 
             // Create event
             $eventType = $finalStatus === 'completed' ? 'stop_completed' : 'stop_failed';

@@ -68,4 +68,9 @@ class RouteStopItem extends Model
     {
         return $this->hasOne(DeliveryDiscrepancy::class, 'route_stop_item_id');
     }
+
+    public function saleAllocations(): HasMany
+    {
+        return $this->hasMany(DeliverySaleAllocation::class, 'route_stop_item_id');
+    }
 }

@@ -1,9 +1,11 @@
 <?php
 
+use App\Models\CommercialOperation;
 use App\Models\DeliveryRejectionReason;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\Feature;
+use App\Models\OperationItem;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\RouteStop;
@@ -11,6 +13,7 @@ use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\MoneyMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -60,15 +63,31 @@ function createDispatchedRoute(User $driver, Store $store, Vehicle $vehicle): ar
 
     $product1 = Product::factory()->create(['store_id' => $store->id]);
     $product2 = Product::factory()->create(['store_id' => $store->id]);
+    $order1 = CommercialOperation::factory()->forStore($store)->create();
+    $order2 = CommercialOperation::factory()->forStore($store)->create();
+    OperationItem::factory()->forOperation($order1)->forProduct($product1)->create([
+        'quantity' => 10, 'price' => $product1->price, 'subtotal' => MoneyMath::multiplyQuantityByPrice('10', $product1->price),
+        'tax_amount' => 0, 'discount_amount' => 0,
+    ]);
+    OperationItem::factory()->forOperation($order1)->forProduct($product2)->create([
+        'quantity' => 5, 'price' => $product2->price, 'subtotal' => MoneyMath::multiplyQuantityByPrice('5', $product2->price),
+        'tax_amount' => 0, 'discount_amount' => 0,
+    ]);
+    OperationItem::factory()->forOperation($order2)->forProduct($product1)->create([
+        'quantity' => 3, 'price' => $product1->price, 'subtotal' => MoneyMath::multiplyQuantityByPrice('3', $product1->price),
+        'tax_amount' => 0, 'discount_amount' => 0,
+    ]);
 
     $stop1 = RouteStop::factory()->create([
         'route_id' => $route->id,
+        'order_id' => $order1->id,
         'sequence' => 1,
         'status' => 'pending',
     ]);
 
     $stop2 = RouteStop::factory()->create([
         'route_id' => $route->id,
+        'order_id' => $order2->id,
         'sequence' => 2,
         'status' => 'pending',
     ]);

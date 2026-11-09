@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OperationItem extends Model
 {
@@ -65,5 +66,10 @@ class OperationItem extends Model
     public function stockSourceProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'stock_source_product_id');
+    }
+
+    public function deliverySaleAllocations(): HasMany
+    {
+        return $this->hasMany(DeliverySaleAllocation::class, 'operation_item_id');
     }
 }

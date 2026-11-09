@@ -96,6 +96,11 @@ class DeliveryRoute extends Model
         return $this->hasMany(DeliveryRouteEvent::class, 'route_id');
     }
 
+    public function saleAllocations(): HasMany
+    {
+        return $this->hasMany(DeliverySaleAllocation::class, 'route_id');
+    }
+
     public function scopeForStore(Builder $query, string $storeId): Builder
     {
         return $query->where('store_id', $storeId);

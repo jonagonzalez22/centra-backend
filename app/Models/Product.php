@@ -113,6 +113,11 @@ class Product extends Model
         return $this->hasMany(SupplierProduct::class);
     }
 
+    public function deliverySaleAllocations(): HasMany
+    {
+        return $this->hasMany(DeliverySaleAllocation::class);
+    }
+
     public function parentProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'parent_product_id');
