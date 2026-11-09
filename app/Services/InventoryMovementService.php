@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 class InventoryMovementService
 {
+    public function __construct(private readonly InventoryValuationService $inventoryValuationService) {}
+
     public function recordMovement(
         Product $product,
         User $user,
@@ -18,6 +20,7 @@ class InventoryMovementService
         string $concept,
         ?string $referenceType = null,
         ?string $referenceId = null,
+        ?string $valuationType = null,
     ): InventoryMovement {
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
@@ -35,10 +38,10 @@ class InventoryMovementService
                 : $quantity;
         }
 
-        return DB::transaction(function () use ($product, $user, $type, $quantity, $concept, $referenceType, $referenceId) {
+        return DB::transaction(function () use ($product, $user, $type, $quantity, $concept, $referenceType, $referenceId, $valuationType) {
             $product = Product::where('id', $product->id)->lockForUpdate()->first();
 
-            return $this->recordMovementForLockedProduct($product, $user, $type, $quantity, $concept, $referenceType, $referenceId);
+            return $this->recordMovementForLockedProduct($product, $user, $type, $quantity, $concept, $referenceType, $referenceId, $valuationType);
         });
     }
 
@@ -55,6 +58,7 @@ class InventoryMovementService
         string $concept,
         ?string $referenceType = null,
         ?string $referenceId = null,
+        ?string $valuationType = null,
     ): InventoryMovement {
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
@@ -102,6 +106,29 @@ class InventoryMovementService
 
         $movement->load(['product.stockMeasurementUnit', 'user']);
 
+        if (($type === 'input' || ($type === 'adjustment' && QuantityMath::isPositive($quantity))) && $referenceType !== 'purchase_receipt') {
+            $this->inventoryValuationService->recordUnknownInput(
+                $product,
+                $valuationType ?? 'manual_adjustment',
+                'inventory_movement',
+                $movement->id,
+                $quantity,
+                $movement->created_at,
+                $user,
+            );
+        }
+        if ($type === 'output' || ($type === 'adjustment' && QuantityMath::isNegative($quantity))) {
+            $this->inventoryValuationService->recordOutput(
+                $product,
+                $valuationType ?? 'adjustment_output',
+                'inventory_movement',
+                $movement->id,
+                QuantityMath::subtract('0', $quantity),
+                $movement->created_at,
+                $user,
+            );
+        }
+
         return $movement;
     }
 
@@ -114,7 +141,8 @@ class InventoryMovementService
         Product $product,
         User $user,
         int|string $quantity,
-        string $concept
+        string $concept,
+        bool $recordValuation = true,
     ): InventoryMovement {
         $quantity = QuantityMath::normalize($quantity);
         if (! QuantityMath::isPositive($quantity)) {
@@ -155,6 +183,17 @@ class InventoryMovementService
             'concept' => $concept,
         ]);
         $movement->load(['product.stockMeasurementUnit', 'user']);
+        if ($recordValuation) {
+            $this->inventoryValuationService->recordOutput(
+                $product,
+                'delivery_output',
+                'inventory_movement',
+                $movement->id,
+                $quantity,
+                $movement->created_at,
+                $user,
+            );
+        }
 
         return $movement;
     }

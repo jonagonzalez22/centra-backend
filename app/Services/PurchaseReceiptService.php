@@ -20,6 +20,7 @@ class PurchaseReceiptService
     public function __construct(
         private readonly InventoryMovementService $movementService,
         private readonly PurchaseService $purchaseService,
+        private readonly InventoryValuationService $inventoryValuationService,
     ) {}
 
     /** @param array{received_at?: string, notes?: string|null, items: array<int, array{purchase_item_id: string, quantity: string}>} $data */
@@ -96,7 +97,7 @@ class PurchaseReceiptService
                 /** @var PurchaseItem $purchaseItem */
                 /** @var Product $product */
                 $product = $products->get($purchaseItem->product_id);
-                PurchaseReceiptItem::create([
+                $receiptItem = PurchaseReceiptItem::create([
                     'purchase_receipt_id' => $receipt->id,
                     'purchase_item_id' => $purchaseItem->id,
                     'product_id' => $product->id,
@@ -115,6 +116,16 @@ class PurchaseReceiptService
                     "Recepción {$receipt->receipt_number} de {$lockedPurchase->purchase_number}",
                     'purchase_receipt',
                     $receipt->id,
+                );
+                // PurchaseItem.unit_price is the documented commercial purchase
+                // price in this first valuation version; taxes/freight are not modeled.
+                $this->inventoryValuationService->recordPurchaseReceipt(
+                    $product,
+                    $receiptItem->id,
+                    $quantity,
+                    $purchaseItem->unit_price,
+                    $receipt->received_at,
+                    $user,
                 );
             }
 

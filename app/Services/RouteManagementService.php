@@ -31,6 +31,8 @@ class RouteManagementService
         private CommercialOperationService $commercialOperationService,
         private DeliveryCollectionAmountService $deliveryCollectionAmountService,
         private RouteStopItemStockConsumptionResolver $routeStopItemStockConsumptionResolver,
+        private InventoryValuationService $inventoryValuationService,
+        private InventoryMovementService $inventoryMovementService,
     ) {}
 
     /**
@@ -1125,6 +1127,10 @@ class RouteManagementService
                 $user,
                 recordMovement: true,
             );
+            // Legacy processing can encounter completed stops created before
+            // delivery valuation existed. Current driver completion has already
+            // recorded one entry per stop item, so this is idempotent fallback.
+            $this->recordLegacyDeliveryValuation($completedItems, $stockProducts, $user);
 
             // 4. Update order statuses using deliveries accumulated across routes.
             $orderIds = $route->stops()
@@ -2325,7 +2331,7 @@ class RouteManagementService
         bool $recordMovement,
     ): void {
         $physicalTotals = $this->physicalTotalsForRouteStopItems($items, 'quantity_delivered');
-        $inventoryService = $recordMovement ? new InventoryMovementService : null;
+        $inventoryService = $recordMovement ? $this->inventoryMovementService : null;
 
         foreach ($physicalTotals as $sourceId => $physicalQuantity) {
             /** @var Product $product */
@@ -2340,6 +2346,7 @@ class RouteManagementService
                     $user,
                     $physicalQuantity,
                     "Entrega ruta {$route->id}",
+                    false,
                 );
 
                 continue;
@@ -2361,13 +2368,39 @@ class RouteManagementService
         }
     }
 
+    /** @param iterable<RouteStopItem> $items */
+    private function recordLegacyDeliveryValuation(iterable $items, Collection $stockProducts, User $user): void
+    {
+        $items = collect($items);
+        $completedAtByStop = RouteStop::query()
+            ->whereIn('id', $items->pluck('route_stop_id')->unique())
+            ->pluck('completed_at', 'id');
+
+        foreach ($items as $item) {
+            if (! QuantityMath::isPositive($item->quantity_delivered)) {
+                continue;
+            }
+            $consumption = $this->routeStopItemStockConsumptionResolver->resolve($item);
+            $source = $stockProducts->get($consumption->stockProductId);
+            $this->inventoryValuationService->recordOutput(
+                $source,
+                'delivery_output',
+                'route_stop_item',
+                $item->id,
+                QuantityMath::multiply($item->quantity_delivered, $consumption->consumptionFactor),
+                $completedAtByStop->get($item->route_stop_id) ?? now(),
+                $user,
+            );
+        }
+    }
+
     /**
      * Process inventory impacts for all discrepancies in a route.
      * Called during finalizeReconciliation. Idempotent via processed_at.
      */
     private function processDiscrepancyInventory(DeliveryRoute $route, $stops, User $user, Collection $stockProducts): void
     {
-        $inventoryService = new InventoryMovementService;
+        $inventoryService = $this->inventoryMovementService;
         $reservationReleases = [];
         $inventoryOutputs = [];
         $commercialReductions = [];
@@ -2456,6 +2489,9 @@ class RouteManagementService
                     'output',
                     $physicalQuantity,
                     $concept,
+                    null,
+                    null,
+                    $resolutionType === 'missing' ? 'shortage_output' : 'damage_output',
                 );
             }
         }

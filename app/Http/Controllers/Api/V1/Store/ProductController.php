@@ -12,6 +12,7 @@ use App\Models\PurchaseItem;
 use App\Models\RouteStopItem;
 use App\Models\Supplier;
 use App\Models\SupplierProduct;
+use App\Services\InventoryValuationService;
 use App\Services\ProductStockAssociationValidator;
 use App\Support\QuantityMath;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +22,10 @@ use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
-    public function __construct(private readonly ProductStockAssociationValidator $associationValidator) {}
+    public function __construct(
+        private readonly ProductStockAssociationValidator $associationValidator,
+        private readonly InventoryValuationService $inventoryValuationService,
+    ) {}
 
     /**
      * Display a listing of products for the authenticated user's store.
@@ -252,6 +256,16 @@ class ProductController extends Controller
                 return $this->validationResponse('stock_source_product_id', $exception->getMessage());
             }
             $product->save();
+
+            // Opening stock belongs only to its physical owner. A null manual
+            // reference cost deliberately opens unknown-valued inventory.
+            if (! $associated) {
+                $this->inventoryValuationService->recordInitialStock(
+                    $product,
+                    array_key_exists('cost', $validated) && $validated['cost'] !== null ? (string) $validated['cost'] : null,
+                    $request->user(),
+                );
+            }
 
             foreach ($initialSuppliers as $supplier) {
                 SupplierProduct::create([

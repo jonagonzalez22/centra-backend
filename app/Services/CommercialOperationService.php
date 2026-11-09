@@ -21,6 +21,7 @@ class CommercialOperationService
         private readonly StoreOperationPaymentService $storePaymentService,
         private readonly OrderDeliveryDateService $orderDeliveryDateService,
         private readonly ProductStockConsumptionResolver $stockConsumptionResolver,
+        private readonly InventoryValuationService $inventoryValuationService,
     ) {}
 
     /**
@@ -253,6 +254,20 @@ class CommercialOperationService
                 $this->storePaymentService->createForStore($operation, $payment, $user, [
                     'origin' => $isSale ? 'pos_sale' : 'order_deposit',
                 ]);
+            }
+
+            if ($isSale) {
+                foreach ($stockContext['physical_totals'] as $stockProductId => $physicalQuantity) {
+                    $this->inventoryValuationService->recordOutput(
+                        $stockContext['stock_products']->get($stockProductId),
+                        'sale_output',
+                        'commercial_operation',
+                        $operation->id,
+                        $physicalQuantity,
+                        $operation->created_at,
+                        $user,
+                    );
+                }
             }
 
             return $operation;

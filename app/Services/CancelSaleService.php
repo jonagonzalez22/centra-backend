@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class CancelSaleService
 {
+    public function __construct(private readonly InventoryValuationService $inventoryValuationService) {}
+
     public function cancel(
         CommercialOperation $sale,
         string $reasonCode,
@@ -48,7 +50,7 @@ class CancelSaleService
             }
 
             $sessions = $this->lockAndValidateCashSessions($payments, $user->store_id);
-            $restoredStock = $this->restoreStock($sale, $user->store_id);
+            $restoredStock = $this->restoreStock($sale, $user->store_id, $user);
 
             $this->reversePayments($payments, $sessions, $user);
 
@@ -111,7 +113,7 @@ class CancelSaleService
     /**
      * @return array<int, array{product_id: string, quantity: string}>
      */
-    private function restoreStock(CommercialOperation $sale, string $storeId): array
+    private function restoreStock(CommercialOperation $sale, string $storeId, User $user): array
     {
         $items = OperationItem::query()
             ->where('operation_id', $sale->id)
@@ -140,7 +142,7 @@ class CancelSaleService
             throw new \RuntimeException('No se pudieron encontrar todos los productos de la venta para restaurar el stock.');
         }
 
-        return collect($quantities)->map(function (string $quantity, string $productId) use ($products): array {
+        return collect($quantities)->map(function (string $quantity, string $productId) use ($products, $sale, $user): array {
             /** @var Product $product */
             $product = $products->get($productId);
             $product->stock = QuantityMath::add($product->stock, $quantity);
@@ -150,6 +152,16 @@ class CancelSaleService
             }
 
             $product->save();
+            $this->inventoryValuationService->reverseOutput(
+                $product,
+                'commercial_operation',
+                $sale->id,
+                'commercial_operation_cancellation',
+                $sale->id,
+                $quantity,
+                now(),
+                $user,
+            );
 
             return ['product_id' => $productId, 'quantity' => $quantity];
         })->values()->all();

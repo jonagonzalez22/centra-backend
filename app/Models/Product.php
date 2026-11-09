@@ -118,6 +118,16 @@ class Product extends Model
         return $this->hasMany(DeliverySaleAllocation::class);
     }
 
+    public function inventoryValuationBalance(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(InventoryValuationBalance::class, 'stock_source_product_id');
+    }
+
+    public function inventoryValuationEntries(): HasMany
+    {
+        return $this->hasMany(InventoryValuationEntry::class, 'stock_source_product_id');
+    }
+
     public function parentProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'parent_product_id');

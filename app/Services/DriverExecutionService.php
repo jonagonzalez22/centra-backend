@@ -26,6 +26,7 @@ class DriverExecutionService
         private DeliveryCollectionAmountService $deliveryCollectionAmountService,
         private DeliverySaleAllocationService $deliverySaleAllocationService,
         private RouteStopItemStockConsumptionResolver $routeStopItemConsumptionResolver,
+        private InventoryValuationService $inventoryValuationService,
     ) {}
 
     /**
@@ -488,6 +489,7 @@ class DriverExecutionService
             $items = $data['items'];
             $allZero = true;
             $eventItems = [];
+            $deliveredItems = [];
 
             foreach ($items as $itemData) {
                 $routeStopItem = RouteStopItem::where('id', $itemData['route_stop_item_id'])
@@ -543,6 +545,10 @@ class DriverExecutionService
                     'quantity_delivered' => $qtyDelivered,
                     'quantity_released_for_extra_sale' => $qtyReleased,
                 ]);
+
+                if (QuantityMath::isPositive($qtyDelivered)) {
+                    $deliveredItems[] = [$routeStopItem, $qtyDelivered];
+                }
 
                 $eventItems[] = [
                     'route_stop_item_id' => $routeStopItem->id,
@@ -643,6 +649,7 @@ class DriverExecutionService
 
             if ($finalStatus === 'completed') {
                 $this->deliverySaleAllocationService->persist($stop, $route, $completedAt);
+                $this->recordDeliveryValuation($route, $deliveredItems, $completedAt, $driver);
             }
 
             // Create event
@@ -668,6 +675,47 @@ class DriverExecutionService
 
             return $stop->fresh();
         });
+    }
+
+    /**
+     * Delivery becomes economically/physically final at stop completion. Stock
+     * remains reserved until reconciliation, so this intentionally does not
+     * mutate products.stock or stock_reserved.
+     *
+     * @param  array<int, array{0: RouteStopItem, 1: string}>  $deliveredItems
+     */
+    private function recordDeliveryValuation(DeliveryRoute $route, array $deliveredItems, \Carbon\CarbonInterface $occurredAt, User $driver): void
+    {
+        $sourceIds = collect($deliveredItems)
+            ->map(fn (array $entry) => $this->routeStopItemConsumptionResolver->resolve($entry[0])->stockProductId)
+            ->unique()
+            ->sort()
+            ->values();
+        $sources = Product::forStore($route->store_id)
+            ->whereIn('id', $sourceIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        if ($sources->count() !== $sourceIds->count()) {
+            throw new \RuntimeException('No se pudieron bloquear todas las fuentes físicas de la entrega.');
+        }
+
+        foreach ($deliveredItems as [$item, $commercialQuantity]) {
+            $consumption = $this->routeStopItemConsumptionResolver->resolve($item);
+            $source = $sources->get($consumption->stockProductId);
+            $this->inventoryValuationService->recordOutput(
+                $source,
+                'delivery_output',
+                'route_stop_item',
+                $item->id,
+                QuantityMath::multiply($commercialQuantity, $consumption->consumptionFactor),
+                $occurredAt,
+                $driver,
+                false,
+            );
+        }
     }
 
     // ── Private helpers ──────────────────────────────────────────────

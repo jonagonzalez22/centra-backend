@@ -4,7 +4,9 @@ use App\Models\CommercialOperation;
 use App\Models\DeliveryRejectionReason;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
+use App\Models\DeliverySaleAllocation;
 use App\Models\Feature;
+use App\Models\InventoryValuationEntry;
 use App\Models\OperationItem;
 use App\Models\Plan;
 use App\Models\Product;
@@ -13,8 +15,10 @@ use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\InventoryValuationService;
 use App\Support\MoneyMath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -288,6 +292,32 @@ test('complete stop delivers full quantities and sets completed status', functio
         'event_type' => 'stop_completed',
         'user_id' => $this->driver->id,
     ]);
+});
+
+test('a valuation failure rolls back a completed stop and its delivery allocations', function () {
+    $data = createDispatchedRoute($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+    [$item1, $item2] = $data['items'];
+
+    $this->mock(InventoryValuationService::class, function (MockInterface $mock): void {
+        $mock->shouldReceive('recordOutput')->once()->andThrow(new RuntimeException('forced valuation failure'));
+    });
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->postJson("/api/v1/driver/stops/{$stop->id}/complete", [
+            'status' => 'completed',
+            'items' => [
+                ['route_stop_item_id' => $item1->id, 'quantity_delivered' => 10],
+                ['route_stop_item_id' => $item2->id, 'quantity_delivered' => 5],
+            ],
+        ])
+        ->assertStatus(500);
+
+    expect($stop->fresh()->status)->toBe('pending')
+        ->and($stop->fresh()->completed_at)->toBeNull()
+        ->and($item1->fresh()->quantity_delivered)->toBe('0.0000')
+        ->and(DeliverySaleAllocation::count())->toBe(0)
+        ->and(InventoryValuationEntry::count())->toBe(0);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
