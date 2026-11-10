@@ -21,6 +21,8 @@ class InventoryMovementService
         ?string $referenceType = null,
         ?string $referenceId = null,
         ?string $valuationType = null,
+        ?string $unitCost = null,
+        bool $updateProductCost = false,
     ): InventoryMovement {
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
@@ -38,10 +40,10 @@ class InventoryMovementService
                 : $quantity;
         }
 
-        return DB::transaction(function () use ($product, $user, $type, $quantity, $concept, $referenceType, $referenceId, $valuationType) {
+        return DB::transaction(function () use ($product, $user, $type, $quantity, $concept, $referenceType, $referenceId, $valuationType, $unitCost, $updateProductCost) {
             $product = Product::where('id', $product->id)->lockForUpdate()->first();
 
-            return $this->recordMovementForLockedProduct($product, $user, $type, $quantity, $concept, $referenceType, $referenceId, $valuationType);
+            return $this->recordMovementForLockedProduct($product, $user, $type, $quantity, $concept, $referenceType, $referenceId, $valuationType, $unitCost, $updateProductCost);
         });
     }
 
@@ -59,6 +61,8 @@ class InventoryMovementService
         ?string $referenceType = null,
         ?string $referenceId = null,
         ?string $valuationType = null,
+        ?string $unitCost = null,
+        bool $updateProductCost = false,
     ): InventoryMovement {
         if (! in_array($type, ['input', 'output', 'adjustment'])) {
             throw new \InvalidArgumentException('Tipo de movimiento inválido.');
@@ -74,6 +78,14 @@ class InventoryMovementService
                 : $quantity;
         }
 
+        $isPositiveInput = $type === 'input' || ($type === 'adjustment' && QuantityMath::isPositive($quantity));
+        if ($unitCost !== null && ! $isPositiveInput) {
+            throw new \InvalidArgumentException('El precio de costo solo puede informarse en entradas de inventario.');
+        }
+        if ($updateProductCost && $unitCost === null) {
+            throw new \InvalidArgumentException('El precio de costo es obligatorio para actualizar el costo del producto.');
+        }
+
         if ($product->stock_source_product_id !== null) {
             throw new \InvalidArgumentException('El stock de este producto se administra desde su producto fuente.');
         }
@@ -85,7 +97,11 @@ class InventoryMovementService
             throw new \InvalidArgumentException('El stock resultante no puede ser negativo.');
         }
 
-        $product->update(['stock' => $newStock]);
+        $productUpdates = ['stock' => $newStock];
+        if ($updateProductCost) {
+            $productUpdates['cost'] = $unitCost;
+        }
+        $product->update($productUpdates);
 
         if (! Product::validateStockIntegrity($newStock, $product->stock_reserved)) {
             throw new \RuntimeException("Stock integrity violation on product {$product->id}.");
@@ -106,13 +122,14 @@ class InventoryMovementService
 
         $movement->load(['product.stockMeasurementUnit', 'user']);
 
-        if (($type === 'input' || ($type === 'adjustment' && QuantityMath::isPositive($quantity))) && $referenceType !== 'purchase_receipt') {
-            $this->inventoryValuationService->recordUnknownInput(
+        if ($isPositiveInput && $referenceType !== 'purchase_receipt') {
+            $this->inventoryValuationService->recordManualInput(
                 $product,
                 $valuationType ?? 'manual_adjustment',
                 'inventory_movement',
                 $movement->id,
                 $quantity,
+                $unitCost,
                 $movement->created_at,
                 $user,
             );

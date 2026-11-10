@@ -38,6 +38,17 @@ class AdjustInventoryRequest extends FormRequest
             'quantity' => ['required', DecimalQuantity::positive()],
             'type' => ['required', 'string', Rule::in(['input', 'output', 'adjustment'])],
             'concept' => ['required', 'string', 'max:255'],
+            'unit_cost' => [
+                'nullable',
+                'string',
+                'regex:/^\d+(?:\.\d{1,2})?$/D',
+                Rule::prohibitedIf(fn () => $this->input('type') === 'output'),
+            ],
+            'update_product_cost' => [
+                'sometimes',
+                'boolean',
+                Rule::prohibitedIf(fn () => $this->input('type') === 'output'),
+            ],
         ];
     }
 
@@ -52,7 +63,22 @@ class AdjustInventoryRequest extends FormRequest
             'type.in' => 'El tipo de ajuste debe ser input, output o adjustment.',
             'concept.required' => 'El concepto es obligatorio.',
             'concept.max' => 'El concepto no puede exceder los 255 caracteres.',
+            'unit_cost.regex' => 'El precio de costo debe ser un número no negativo con hasta dos decimales.',
+            'unit_cost.prohibited' => 'El precio de costo solo puede informarse en entradas de inventario.',
+            'update_product_cost.prohibited' => 'La actualización del costo del producto solo aplica a entradas de inventario.',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($this->boolean('update_product_cost') && ! $this->filled('unit_cost')) {
+                $validator->errors()->add(
+                    'unit_cost',
+                    'El precio de costo es obligatorio para actualizar el costo del producto.'
+                );
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator): void

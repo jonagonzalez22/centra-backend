@@ -114,7 +114,9 @@ class InventoryController extends Controller
      *       @OA\Property(property="product_id", type="string", format="uuid", example="uuid-producto"),
      *       @OA\Property(property="quantity", type="integer", example=10),
      *       @OA\Property(property="type", type="string", enum={"input", "output", "adjustment"}, example="input"),
-     *       @OA\Property(property="concept", type="string", maxLength=255, example="Ajuste por carga inicial")
+     *       @OA\Property(property="concept", type="string", maxLength=255, example="Ajuste por carga inicial"),
+     *       @OA\Property(property="unit_cost", type="string", format="decimal", nullable=true, example="1500.00", description="Costo unitario opcional, solo para entradas. Si se omite, la valuación queda como unknown."),
+     *       @OA\Property(property="update_product_cost", type="boolean", example=false, description="Solo para entradas con unit_cost. Actualiza products.cost sin alterar la valuación adicionalmente.")
      *     )
      *   ),
      *
@@ -158,7 +160,9 @@ class InventoryController extends Controller
                 user: $request->user(),
                 type: $request->type,
                 quantity: (string) $request->quantity,
-                concept: $request->concept
+                concept: $request->concept,
+                unitCost: $request->filled('unit_cost') ? (string) $request->input('unit_cost') : null,
+                updateProductCost: $request->boolean('update_product_cost'),
             );
 
             return response()->json([

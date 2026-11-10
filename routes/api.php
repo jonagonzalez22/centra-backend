@@ -200,7 +200,9 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::get('inventory/movements', [InventoryController::class, 'index'])->name('store.inventory.movements');
-            Route::post('inventory/adjust', [InventoryController::class, 'adjust'])->name('store.inventory.adjust');
+            Route::post('inventory/adjust', [InventoryController::class, 'adjust'])
+                ->middleware('permission:inventory.adjust')
+                ->name('store.inventory.adjust');
 
             Route::get('products', [ProductController::class, 'index'])->name('store.products.index');
             Route::get('measurement-units', [MeasurementUnitController::class, 'index'])

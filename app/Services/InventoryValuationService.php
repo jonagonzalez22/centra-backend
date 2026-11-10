@@ -38,6 +38,12 @@ class InventoryValuationService
         $this->recordInput($source, $type, $referenceType, $referenceId, $quantity, null, $occurredAt, $user);
     }
 
+    /** Records a manual input as known only when the user explicitly supplied its unit cost. */
+    public function recordManualInput(Product $source, string $type, string $referenceType, string $referenceId, string $quantity, ?string $unitCost, CarbonInterface $occurredAt, ?User $user): void
+    {
+        $this->recordInput($source, $type, $referenceType, $referenceId, $quantity, $unitCost, $occurredAt, $user);
+    }
+
     public function recordOutput(Product $source, string $type, string $referenceType, string $referenceId, string $quantity, CarbonInterface $occurredAt, ?User $user, bool $physicalStockAlreadyDecremented = true): void
     {
         $quantity = QuantityMath::normalize($quantity);
