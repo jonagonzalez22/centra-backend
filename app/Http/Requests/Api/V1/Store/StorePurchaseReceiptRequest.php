@@ -29,6 +29,7 @@ class StorePurchaseReceiptRequest extends FormRequest
         return [
             'received_at' => ['nullable', 'date', 'before_or_equal:now'],
             'notes' => ['nullable', 'string'],
+            'update_reference_cost' => ['sometimes', 'boolean'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.purchase_item_id' => ['required', 'uuid', 'distinct'],
             'items.*.quantity' => ['required', DecimalQuantity::positive()],

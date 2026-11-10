@@ -14720,6 +14720,88 @@
                 ]
             }
         },
+        "/store/purchases/{purchase}/receipts": {
+            "post": {
+                "tags": [
+                    "Store - Compras"
+                ],
+                "summary": "Registrar una recepción de compra",
+                "operationId": "20354eefb16069f967de3c10959fc841",
+                "parameters": [
+                    {
+                        "name": "purchase",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "received_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "nullable": true
+                                    },
+                                    "notes": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "update_reference_cost": {
+                                        "description": "Actualiza el costo de referencia de los productos efectivamente recibidos; no modifica la valuación promedio.",
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "purchase_item_id",
+                                                "quantity"
+                                            ],
+                                            "properties": {
+                                                "purchase_item_id": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "quantity": {
+                                                    "type": "string",
+                                                    "example": "2.5000"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Recepción registrada exitosamente"
+                    },
+                    "422": {
+                        "description": "Error de validación"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/store/logistics/rejection-reasons": {
             "get": {
                 "tags": [
@@ -22497,6 +22579,10 @@
         {
             "name": "Store - Listas de precios",
             "description": "Store - Listas de precios"
+        },
+        {
+            "name": "Store - Compras",
+            "description": "Store - Compras"
         },
         {
             "name": "Store - Logística",

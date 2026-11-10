@@ -3,6 +3,8 @@
 use App\Models\Category;
 use App\Models\Feature;
 use App\Models\InventoryMovement;
+use App\Models\InventoryValuationBalance;
+use App\Models\InventoryValuationEntry;
 use App\Models\MeasurementUnit;
 use App\Models\Plan;
 use App\Models\Product;
@@ -13,6 +15,7 @@ use App\Models\PurchaseReceiptItem;
 use App\Models\Supplier;
 use App\Models\SupplierProduct;
 use App\Models\User;
+use App\Services\InventoryValuationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -86,6 +89,117 @@ function receiptPayload(PurchaseItem $item, string $quantity, array $overrides =
 {
     return [...['items' => [['purchase_item_id' => $item->id, 'quantity' => $quantity]], 'notes' => 'Recepción parcial'], ...$overrides];
 }
+
+function receiptItemWithPrice(Purchase $purchase, Product $product, string $unitPrice): PurchaseItem
+{
+    $item = $purchase->items->firstWhere('product_id', $product->id);
+    $item->update(['unit_price' => $unitPrice, 'subtotal' => $unitPrice]);
+
+    return $item->fresh();
+}
+
+test('receipt leaves the reference cost unchanged unless explicitly requested while valuation records the receipt price', function () {
+    $product = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '15.00']);
+    $purchase = receiptPurchase($this->store, $this->supplier, $this->user, [[$product, '2.0000']]);
+    $item = receiptItemWithPrice($purchase, $product, '18.00');
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchase->id}/receipts", receiptPayload($item, '2.0000'))
+        ->assertCreated();
+
+    expect($product->fresh()->cost)->toBe('15.00')
+        ->and(InventoryValuationEntry::where('type', 'purchase_receipt')->sole()->unit_cost)->toBe('18.000000');
+});
+
+test('receipt updates the reference cost upward without changing weighted average valuation semantics', function () {
+    $product = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '1000.00']);
+    app(InventoryValuationService::class)->recordInitialStock($product->fresh(), '1000.00', $this->user);
+    $purchase = receiptPurchase($this->store, $this->supplier, $this->user, [[$product, '10.0000']]);
+    $item = receiptItemWithPrice($purchase, $product, '1500.00');
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchase->id}/receipts", receiptPayload($item, '10.0000', ['update_reference_cost' => true]))
+        ->assertCreated();
+
+    $balance = InventoryValuationBalance::where('store_id', $this->store->id)->where('stock_source_product_id', $product->id)->sole();
+    expect($product->fresh()->cost)->toBe('1500.00')
+        ->and($balance->quantity)->toBe('20.0000')
+        ->and($balance->total_value)->toBe('25000.000000')
+        ->and($balance->average_unit_cost)->toBe('1250.000000');
+});
+
+test('receipt updates the reference cost downward and does so from the first partial receipt', function () {
+    $product = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '1800.00']);
+    $purchase = receiptPurchase($this->store, $this->supplier, $this->user, [[$product, '100.0000']]);
+    $item = receiptItemWithPrice($purchase, $product, '1400.00');
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchase->id}/receipts", receiptPayload($item, '40.0000', ['update_reference_cost' => true]))
+        ->assertCreated();
+
+    expect($product->fresh()->cost)->toBe('1400.00')
+        ->and($item->fresh()->quantity_received)->toBe('40.0000')
+        ->and($purchase->fresh()->status)->toBe('partially_received');
+});
+
+test('a global reference cost choice updates each effectively received product with its own purchase price', function () {
+    $first = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '10.00']);
+    $second = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '20.00']);
+    $purchase = receiptPurchase($this->store, $this->supplier, $this->user, [[$first, '1.0000'], [$second, '1.0000']]);
+    $firstItem = receiptItemWithPrice($purchase, $first, '12.50');
+    $secondItem = receiptItemWithPrice($purchase, $second, '22.75');
+
+    $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/purchases/{$purchase->id}/receipts", [
+        'update_reference_cost' => true,
+        'items' => [
+            ['purchase_item_id' => $firstItem->id, 'quantity' => '1.0000'],
+            ['purchase_item_id' => $secondItem->id, 'quantity' => '1.0000'],
+        ],
+    ])->assertCreated();
+
+    expect($first->fresh()->cost)->toBe('12.50')
+        ->and($second->fresh()->cost)->toBe('22.75');
+});
+
+test('a receipt can update only products that belong to the authenticated store', function () {
+    $local = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '10.00']);
+    $otherPlan = Plan::factory()->create();
+    $otherPlan->features()->attach(Feature::query()->where('code', 'purchases')->sole()->id);
+    $otherStore = \App\Models\Store::factory()->create(['plan_id' => $otherPlan->id]);
+    $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
+    $otherUser->assignRole('STORE_ADMIN');
+    $otherUser->givePermissionTo(['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'products.edit']);
+    $otherCategory = Category::factory()->belongsToStore($otherStore)->create();
+    $otherSupplier = Supplier::create(['store_id' => $otherStore->id, 'business_name' => 'Proveedor ajeno']);
+    $otherProduct = receiptProduct($otherStore, $otherCategory, $otherSupplier, ['cost' => '20.00']);
+    $otherPurchase = receiptPurchase($otherStore, $otherSupplier, $otherUser, [[$otherProduct, '1.0000']]);
+    $otherItem = receiptItemWithPrice($otherPurchase, $otherProduct, '25.00');
+
+    $this->actingAs($otherUser, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$otherPurchase->id}/receipts", receiptPayload($otherItem, '1.0000', ['update_reference_cost' => true]))
+        ->assertCreated();
+
+    expect($otherProduct->fresh()->cost)->toBe('25.00')
+        ->and($local->fresh()->cost)->toBe('10.00');
+});
+
+test('a failed receipt rolls back the selected reference cost update', function () {
+    $product = receiptProduct($this->store, $this->category, $this->supplier, ['cost' => '15.00']);
+    $purchase = receiptPurchase($this->store, $this->supplier, $this->user, [[$product, '1.0000']]);
+    $item = receiptItemWithPrice($purchase, $product, '18.00');
+    $this->mock(InventoryValuationService::class, function ($mock): void {
+        $mock->shouldReceive('recordPurchaseReceipt')->once()->andThrow(new RuntimeException('valuation failure'));
+    });
+    $this->withoutExceptionHandling();
+
+    expect(fn () => $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchase->id}/receipts", receiptPayload($item, '1.0000', ['update_reference_cost' => true])))
+        ->toThrow(RuntimeException::class, 'valuation failure');
+
+    expect($product->fresh()->cost)->toBe('15.00')
+        ->and($product->fresh()->stock)->toBe('10.0000')
+        ->and(PurchaseReceipt::count())->toBe(0);
+});
 
 test('receives ordered purchases partially and fully with exact stock and movement traceability', function () {
     $first = receiptProduct($this->store, $this->category, $this->supplier, ['name' => 'Harina', 'stock' => '10.0000']);

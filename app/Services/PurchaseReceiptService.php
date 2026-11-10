@@ -23,10 +23,12 @@ class PurchaseReceiptService
         private readonly InventoryValuationService $inventoryValuationService,
     ) {}
 
-    /** @param array{received_at?: string, notes?: string|null, items: array<int, array{purchase_item_id: string, quantity: string}>} $data */
+    /** @param array{received_at?: string, notes?: string|null, update_reference_cost?: bool, items: array<int, array{purchase_item_id: string, quantity: string}>} $data */
     public function receive(Purchase $purchase, array $data, string $storeId, User $user): PurchaseReceipt
     {
-        return DB::transaction(function () use ($purchase, $data, $storeId, $user) {
+        $updateReferenceCost = filter_var($data['update_reference_cost'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        return DB::transaction(function () use ($purchase, $data, $storeId, $user, $updateReferenceCost) {
             $lockedPurchase = Purchase::forStore($storeId)->whereKey($purchase->id)->lockForUpdate()->firstOrFail();
             $this->ensureReceivable($lockedPurchase);
 
@@ -127,6 +129,11 @@ class PurchaseReceiptService
                     $receipt->received_at,
                     $user,
                 );
+                // This is a replenishment/reference price only. Inventory
+                // valuation remains exclusively driven by the receipt above.
+                if ($updateReferenceCost) {
+                    $product->update(['cost' => $purchaseItem->unit_price]);
+                }
             }
 
             $allReceived = $purchaseItems->every(fn (PurchaseItem $item) => QuantityMath::compare($item->quantity_received, $item->quantity_ordered) === 0);
