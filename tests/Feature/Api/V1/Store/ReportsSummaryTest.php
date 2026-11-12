@@ -93,6 +93,8 @@ function reportSaleAllocation(
     string $occurredAt,
     string $amount,
     bool $isExtra = false,
+    string $quantityDelivered = '1.0000',
+    ?string $unitCostSnapshot = null,
 ): DeliverySaleAllocation {
     $route = DeliveryRoute::factory()->forStore($store)->create();
     $stop = RouteStop::factory()->create(['route_id' => $route->id, 'order_id' => $operation->id]);
@@ -107,8 +109,9 @@ function reportSaleAllocation(
         'operation_id' => $operation->id,
         'operation_item_id' => $line->id,
         'product_id' => $product->id,
-        'quantity_delivered' => '1.0000',
+        'quantity_delivered' => $quantityDelivered,
         'unit_price_snapshot' => $amount,
+        'unit_cost_snapshot' => $unitCostSnapshot,
         'gross_amount' => $amount,
         'discount_amount' => '0.00',
         'tax_amount' => '0.00',
@@ -324,6 +327,162 @@ test('reports realized sales from POS plus immutable delivered allocations', fun
         ->assertJsonPath('data.top_products.0.operations_count', 1)
         ->assertJsonPath('data.top_products.1.name', 'Producto pedido')
         ->assertJsonPath('data.top_products.1.operations_count', 1);
+});
+
+test('reports POS gross profit from the frozen commercial SKU snapshot, not physical shared-stock valuation', function (): void {
+    $source = reportProduct($this->storeA, ['name' => 'Fuente física', 'cost' => '30000.00']);
+    $child = reportProduct($this->storeA, [
+        'name' => 'SKU comercial', 'price' => '2000.00', 'cost' => '1000.00',
+        'stock_source_product_id' => $source->id, 'stock_consumption_quantity' => '5.0000', 'stock' => '0.0000',
+    ]);
+    $sale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '2000.00']);
+    OperationItem::factory()->forOperation($sale)->forProduct($child)->create([
+        'quantity' => '1.0000', 'unit_cost_snapshot' => '1000.00',
+        'stock_source_product_id' => $source->id, 'stock_consumption_quantity' => '5.0000',
+    ]);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 1000)
+        ->assertJsonPath('data.metrics.gross_profit.amount', 1000)
+        ->assertJsonPath('data.metrics.gross_profit.margin_percentage', 50)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'complete');
+});
+
+test('uses POS line snapshots after product cost changes, including zero cost and multiple lines', function (): void {
+    $product = reportProduct($this->storeA, ['cost' => '200.00']);
+    $sale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '700.00']);
+    OperationItem::factory()->forOperation($sale)->forProduct($product)->create([
+        'quantity' => '2.0000', 'unit_cost_snapshot' => '200.00',
+    ]);
+    OperationItem::factory()->forOperation($sale)->forProduct($product)->create([
+        'quantity' => '1.0000', 'unit_cost_snapshot' => '0.00',
+    ]);
+    $product->update(['cost' => '9999.00']);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 400)
+        ->assertJsonPath('data.metrics.gross_profit.amount', 300)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'complete');
+});
+
+test('returns a complete zero gross profit for a completely empty period', function (): void {
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.realized_sales.amount', 0)
+        ->assertJsonPath('data.metrics.gross_profit.sales_amount', 0)
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 0)
+        ->assertJsonPath('data.metrics.gross_profit.amount', 0)
+        ->assertJsonPath('data.metrics.gross_profit.margin_percentage', null)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'complete');
+});
+
+test('calculates delivery-only gross profit without POS sales', function (): void {
+    $product = reportProduct($this->storeA);
+    $order = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'open']);
+    reportSaleAllocation($this->storeA, $order, $product, '2026-11-15 15:00:00', '100.00', unitCostSnapshot: '40.00');
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.realized_sales.amount', 100)
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 40)
+        ->assertJsonPath('data.metrics.gross_profit.amount', 60)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'complete');
+});
+
+test('marks a realized POS sale with a null commercial snapshot as unavailable instead of zero cost', function (): void {
+    $product = reportProduct($this->storeA);
+    $sale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '100.00']);
+    OperationItem::factory()->forOperation($sale)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => null]);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 0)
+        ->assertJsonPath('data.metrics.gross_profit.amount', null)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'unavailable')
+        ->assertJsonPath('data.metrics.gross_profit.has_missing_costs', true);
+});
+
+test('excludes a cancelled POS sale and its commercial snapshot from gross profit', function (): void {
+    $product = reportProduct($this->storeA);
+    $confirmed = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '100.00']);
+    $cancelled = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'cancelled', 'total' => '900.00']);
+    OperationItem::factory()->forOperation($confirmed)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => '40.00']);
+    OperationItem::factory()->forOperation($cancelled)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => '900.00']);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.realized_sales.amount', 100)
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 40)
+        ->assertJsonPath('data.metrics.gross_profit.amount', 60);
+});
+
+test('marks gross profit partial or unavailable when POS commercial cost is unknown', function (): void {
+    $product = reportProduct($this->storeA);
+    $mixed = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '100.00']);
+    OperationItem::factory()->forOperation($mixed)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => '40.00']);
+    OperationItem::factory()->forOperation($mixed)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => null]);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.amount', 60)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'partial')
+        ->assertJsonPath('data.metrics.gross_profit.has_missing_costs', true);
+
+    $mixed->update(['status' => 'cancelled']);
+    $unknown = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '50.00']);
+    OperationItem::factory()->forOperation($unknown)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => null]);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.amount', null)
+        ->assertJsonPath('data.metrics.gross_profit.margin_percentage', null)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'unavailable');
+});
+
+test('uses each delivery allocation commercial snapshot for partial delivery and re-delivery', function (): void {
+    $source = reportProduct($this->storeA, ['name' => 'Fuente física']);
+    $commercial = reportProduct($this->storeA, [
+        'name' => 'Producto comercial', 'stock_source_product_id' => $source->id, 'stock_consumption_quantity' => '0.5000', 'stock' => '0.0000',
+    ]);
+    $order = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'open']);
+    reportSaleAllocation($this->storeA, $order, $commercial, '2026-11-15 15:00:00', '60.00', quantityDelivered: '6.0000', unitCostSnapshot: '10.00');
+    reportSaleAllocation($this->storeA, $order, $commercial, '2026-11-16 15:00:00', '40.00', quantityDelivered: '4.0000', unitCostSnapshot: '20.00');
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.realized_sales.amount', 100)
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 140)
+        ->assertJsonPath('data.metrics.gross_profit.amount', -40)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'complete');
+});
+
+test('uses delivery commercial snapshots for shared stock, extra sales, null, and zero cost', function (): void {
+    $source = reportProduct($this->storeA, ['cost' => '30000.00']);
+    $child = reportProduct($this->storeA, [
+        'price' => '2000.00', 'cost' => '1000.00', 'stock' => '0.0000',
+        'stock_source_product_id' => $source->id, 'stock_consumption_quantity' => '5.0000',
+    ]);
+    $order = reportOperation($this->storeA, $this->userA, ['type' => 'order', 'status' => 'open']);
+    reportSaleAllocation($this->storeA, $order, $child, '2026-11-15 15:00:00', '2000.00', unitCostSnapshot: '1000.00');
+    reportSaleAllocation($this->storeA, $order, $child, '2026-11-15 15:00:00', '100.00', true, unitCostSnapshot: '0.00');
+    reportSaleAllocation($this->storeA, $order, $child, '2026-11-15 15:00:00', '50.00', unitCostSnapshot: null);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.realized_sales.amount', 2150)
+        ->assertJsonPath('data.metrics.gross_profit.known_cost_amount', 1000)
+        ->assertJsonPath('data.metrics.gross_profit.amount', 1150)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'partial')
+        ->assertJsonPath('data.metrics.gross_profit.has_missing_costs', true);
+});
+
+test('keeps gross profit tenant scoped and supports negative margins and no sales', function (): void {
+    $product = reportProduct($this->storeA);
+    $sale = reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '10.00']);
+    OperationItem::factory()->forOperation($sale)->forProduct($product)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => '12.00']);
+    $foreignProduct = reportProduct($this->storeB);
+    $foreign = reportOperation($this->storeB, $this->userB, ['type' => 'sale', 'status' => 'confirmed', 'total' => '999.00']);
+    OperationItem::factory()->forOperation($foreign)->forProduct($foreignProduct)->create(['quantity' => '1.0000', 'unit_cost_snapshot' => '1.00']);
+
+    summaryFor($this->userA)->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.amount', -2)
+        ->assertJsonPath('data.metrics.gross_profit.margin_percentage', -20);
+    summaryFor($this->userB, '2026-10-01', '2026-10-31')->assertOk()
+        ->assertJsonPath('data.metrics.gross_profit.amount', 0)
+        ->assertJsonPath('data.metrics.gross_profit.margin_percentage', null)
+        ->assertJsonPath('data.metrics.gross_profit.status', 'complete');
 });
 
 test('ranks products by distinct realized operations without counting repeated lines or re-deliveries twice', function (): void {

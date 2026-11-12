@@ -9,6 +9,7 @@ use App\Models\OperationItem;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\CancelSaleService;
 use App\Services\CommercialOperationService;
 use App\Services\OrderItemEditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,6 +62,51 @@ test('captures the commercial UOM snapshot for an initial sale', function () {
     $sale = createSnapshotOperation($this, 'sale', $product, '1.2500');
 
     expectCommercialSnapshot($sale->items()->sole());
+});
+
+test('freezes the normal SKU commercial cost for a POS sale and uses the new cost for a later sale', function () {
+    $product = snapshotProduct($this, ['cost' => '200.00', 'price' => '600.00']);
+
+    $firstSale = createSnapshotOperation($this, 'sale', $product, '2.0000');
+    $product->update(['cost' => '250.00']);
+    $secondSale = createSnapshotOperation($this, 'sale', $product->fresh(), '1.0000');
+
+    expect($firstSale->items()->sole()->unit_cost_snapshot)->toBe('200.00')
+        ->and($secondSale->items()->sole()->unit_cost_snapshot)->toBe('250.00');
+});
+
+test('freezes the commercial child SKU cost, not the shared physical source cost, for a POS sale', function () {
+    $source = snapshotProduct($this, ['cost' => '30000.00', 'stock' => '20.0000']);
+    $child = snapshotProduct($this, [
+        'cost' => '1000.00',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+        'stock' => '0.0000',
+    ]);
+
+    $sale = createSnapshotOperation($this, 'sale', $child, '1.0000');
+
+    expect($sale->items()->sole()->unit_cost_snapshot)->toBe('1000.00');
+});
+
+test('preserves null and explicit zero as distinct POS commercial cost snapshots', function () {
+    $withoutCost = snapshotProduct($this, ['cost' => null]);
+    $zeroCost = snapshotProduct($this, ['cost' => '0.00']);
+
+    $nullSale = createSnapshotOperation($this, 'sale', $withoutCost, '1.0000');
+    $zeroSale = createSnapshotOperation($this, 'sale', $zeroCost, '1.0000');
+
+    expect($nullSale->items()->sole()->unit_cost_snapshot)->toBeNull()
+        ->and($zeroSale->items()->sole()->unit_cost_snapshot)->toBe('0.00');
+});
+
+test('keeps the POS commercial cost snapshot after cancellation', function () {
+    $product = snapshotProduct($this, ['cost' => '200.00']);
+    $sale = createSnapshotOperation($this, 'sale', $product, '1.0000');
+
+    app(CancelSaleService::class)->cancel($sale, 'customer_request', null, $this->user);
+
+    expect($sale->items()->sole()->fresh()->unit_cost_snapshot)->toBe('200.00');
 });
 
 test('captures the commercial UOM snapshot for an initial order', function () {
@@ -134,10 +180,12 @@ test('allows historical operation items without commercial snapshots', function 
         'measurement_unit_code' => null,
         'measurement_unit_symbol' => null,
         'sale_quantity_step' => null,
+        'unit_cost_snapshot' => null,
     ]);
 
     expect($item->fresh())
         ->measurement_unit_code->toBeNull()
         ->measurement_unit_symbol->toBeNull()
-        ->sale_quantity_step->toBeNull();
+        ->sale_quantity_step->toBeNull()
+        ->unit_cost_snapshot->toBeNull();
 });

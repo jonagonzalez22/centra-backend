@@ -54,15 +54,78 @@ function persistSaleAllocations(array $context): void
 
 test('persists a complete delivery with its commercial monetary snapshot', function () {
     $context = saleAllocationContext([['quantity' => '10', 'price' => '100.00', 'subtotal' => '1000.00']], [0 => '10']);
+    $context['products'][0]->update(['cost' => '200.00']);
     persistSaleAllocations($context);
 
     $allocation = DeliverySaleAllocation::sole();
     expect($allocation->quantity_delivered)->toBe('10.0000')
         ->and($allocation->store_id)->toBe($context['store']->id)
         ->and($allocation->unit_price_snapshot)->toBe('100.00')
+        ->and($allocation->unit_cost_snapshot)->toBe('200.00')
         ->and($allocation->gross_amount)->toBe('1000.00')
         ->and($allocation->net_amount)->toBe('1000.00')
         ->and($allocation->occurred_at)->not->toBeNull();
+});
+
+test('freezes the commercial cost independently for partial re-deliveries', function () {
+    $first = saleAllocationContext([['quantity' => '10', 'price' => '10.00', 'subtotal' => '100.00']], [0 => '6']);
+    $first['products'][0]->update(['cost' => '200.00']);
+    persistSaleAllocations($first);
+
+    $first['products'][0]->update(['cost' => '250.00']);
+    $secondRoute = DeliveryRoute::factory()->forStore($first['store'])->create();
+    $secondStop = RouteStop::factory()->create(['route_id' => $secondRoute->id, 'order_id' => $first['operation']->id, 'status' => 'completed']);
+    $secondItem = RouteStopItem::factory()->create([
+        'route_stop_id' => $secondStop->id,
+        'product_id' => $first['products'][0]->id,
+        'quantity_loaded' => '4',
+        'quantity_planned' => '4',
+        'quantity_delivered' => '4',
+    ]);
+    app(DeliverySaleAllocationService::class)->persist($secondStop, $secondRoute, now()->addMinute());
+
+    expect(DeliverySaleAllocation::where('route_stop_item_id', $first['items'][0]->id)->sole()->unit_cost_snapshot)->toBe('200.00')
+        ->and(DeliverySaleAllocation::where('route_stop_item_id', $secondItem->id)->sole()->unit_cost_snapshot)->toBe('250.00');
+});
+
+test('uses the shared-stock child commercial cost for delivery, not its physical source cost', function () {
+    $context = saleAllocationContext([['quantity' => '1', 'price' => '2000.00', 'subtotal' => '2000.00']], [0 => '1']);
+    $source = Product::factory()->forStore($context['store'])->create(['cost' => '30000.00']);
+    $context['products'][0]->update([
+        'cost' => '1000.00',
+        'stock_source_product_id' => $source->id,
+        'stock_consumption_quantity' => '5.0000',
+    ]);
+
+    persistSaleAllocations($context);
+
+    expect(DeliverySaleAllocation::sole()->unit_cost_snapshot)->toBe('1000.00');
+});
+
+test('preserves null and explicit zero commercial costs for deliveries', function () {
+    $nullCost = saleAllocationContext([['quantity' => '1', 'price' => '10.00', 'subtotal' => '10.00']], [0 => '1']);
+    $nullCost['products'][0]->update(['cost' => null]);
+    persistSaleAllocations($nullCost);
+
+    $zeroCost = saleAllocationContext([['quantity' => '1', 'price' => '10.00', 'subtotal' => '10.00']], [0 => '1']);
+    $zeroCost['products'][0]->update(['cost' => '0.00']);
+    persistSaleAllocations($zeroCost);
+
+    expect(DeliverySaleAllocation::where('operation_id', $nullCost['operation']->id)->sole()->unit_cost_snapshot)->toBeNull()
+        ->and(DeliverySaleAllocation::where('operation_id', $zeroCost['operation']->id)->sole()->unit_cost_snapshot)->toBe('0.00');
+});
+
+test('keeps delivery cost snapshots isolated by store', function () {
+    $storeA = saleAllocationContext([['quantity' => '1', 'price' => '10.00', 'subtotal' => '10.00']], [0 => '1']);
+    $storeB = saleAllocationContext([['quantity' => '1', 'price' => '10.00', 'subtotal' => '10.00']], [0 => '1']);
+    $storeA['products'][0]->update(['cost' => '111.00']);
+    $storeB['products'][0]->update(['cost' => '222.00']);
+
+    persistSaleAllocations($storeA);
+    persistSaleAllocations($storeB);
+
+    expect(DeliverySaleAllocation::where('store_id', $storeA['store']->id)->sole()->unit_cost_snapshot)->toBe('111.00')
+        ->and(DeliverySaleAllocation::where('store_id', $storeB['store']->id)->sole()->unit_cost_snapshot)->toBe('222.00');
 });
 
 test('persists partial deliveries independently and preserves cent residuals', function () {

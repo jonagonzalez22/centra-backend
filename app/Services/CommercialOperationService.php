@@ -244,6 +244,9 @@ class CommercialOperationService
                     'sale_quantity_step' => QuantityMath::normalize($product->sale_quantity_step),
                     'quantity' => $item['quantity'],
                     'price' => $product->price,
+                    // A sale is realized at POS confirmation. This is the
+                    // commercial SKU cost, never its physical stock source.
+                    'unit_cost_snapshot' => $isSale ? $product->cost : null,
                     'subtotal' => $itemSubtotal,
                     'tax_amount' => MoneyMath::normalize((string) ($item['tax_amount'] ?? 0)),
                     'discount_amount' => MoneyMath::percentage($itemSubtotal, $priceList?->discount_percentage ?? '0'),

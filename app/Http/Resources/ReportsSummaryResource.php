@@ -14,6 +14,7 @@ class ReportsSummaryResource extends JsonResource
             'metrics' => [
                 'pos_sales' => $this->moneyMetrics($this['metrics']['pos_sales']),
                 'realized_sales' => $this->moneyMetrics($this['metrics']['realized_sales']),
+                'gross_profit' => $this->moneyMetrics($this['metrics']['gross_profit']),
                 'orders_taken' => $this->moneyMetrics($this['metrics']['orders_taken']),
                 'deliveries_completed' => $this['metrics']['deliveries_completed'],
                 'collected' => $this->moneyMetrics($this['metrics']['collected']),
@@ -28,8 +29,8 @@ class ReportsSummaryResource extends JsonResource
 
     private function moneyMetrics(array $metrics): array
     {
-        foreach (['amount', 'average_ticket'] as $key) {
-            if (array_key_exists($key, $metrics)) {
+        foreach (['amount', 'average_ticket', 'sales_amount', 'known_cost_amount', 'margin_percentage'] as $key) {
+            if (array_key_exists($key, $metrics) && $metrics[$key] !== null) {
                 $metrics[$key] = (float) $metrics[$key];
             }
         }

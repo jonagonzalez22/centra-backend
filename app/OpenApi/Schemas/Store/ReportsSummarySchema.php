@@ -54,6 +54,19 @@ class ReportsSummarySchema
                 ]
             ),
             new OA\Property(
+                property: 'gross_profit',
+                type: 'object',
+                description: 'Ganancia bruta del período: ventas realizadas menos el costo comercial histórico conocido de los SKU vendidos. POS usa operation_items.unit_cost_snapshot y delivery usa delivery_sale_allocations.unit_cost_snapshot. Si status no es complete, amount no representa un cálculo exacto.',
+                properties: [
+                    new OA\Property(property: 'sales_amount', type: 'number', format: 'float', example: 245000),
+                    new OA\Property(property: 'known_cost_amount', type: 'number', format: 'float', example: 147000, description: 'Costo comercial histórico cuyo snapshot fue conocido al realizarse la venta.'),
+                    new OA\Property(property: 'amount', type: 'number', format: 'float', nullable: true, example: 98000),
+                    new OA\Property(property: 'margin_percentage', type: 'number', format: 'float', nullable: true, example: 40),
+                    new OA\Property(property: 'status', type: 'string', enum: ['complete', 'partial', 'unavailable'], example: 'complete'),
+                    new OA\Property(property: 'has_missing_costs', type: 'boolean', example: false),
+                ]
+            ),
+            new OA\Property(
                 property: 'orders_taken',
                 type: 'object',
                 properties: [

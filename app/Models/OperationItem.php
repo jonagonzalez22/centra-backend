@@ -32,6 +32,9 @@ class OperationItem extends Model
         'sale_quantity_step',
         'quantity',
         'price',
+        // Commercial cost frozen for realized POS sales. Delivery cost is
+        // frozen per delivery_sale_allocation to preserve partial deliveries.
+        'unit_cost_snapshot',
         'subtotal',
         'tax_amount',
         'discount_amount',
@@ -42,6 +45,7 @@ class OperationItem extends Model
         'stock_consumption_quantity' => 'decimal:4',
         'quantity' => 'decimal:4',
         'price' => 'decimal:2',
+        'unit_cost_snapshot' => 'decimal:2',
         'discount_percentage' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',

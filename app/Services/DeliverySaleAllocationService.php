@@ -48,7 +48,14 @@ class DeliverySaleAllocationService
             throw $this->invalid('No se puede confirmar una entrega con mercadería sin un pedido comercial asignable.');
         }
 
-        $products = Product::whereIn('id', $stopItems->pluck('product_id'))->get()->keyBy('id');
+        // Lock the commercial SKUs while their delivery cost is frozen. This
+        // deliberately does not follow stock_source_product_id: physical stock
+        // valuation is recorded independently by InventoryValuationService.
+        $products = Product::whereIn('id', $stopItems->pluck('product_id'))
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
         foreach ($stopItems as $stopItem) {
             if (! $products->has($stopItem->product_id) || $products[$stopItem->product_id]->store_id !== $route->store_id) {
                 throw $this->invalid('Un producto entregado no pertenece a la tienda de la ruta.');
@@ -110,6 +117,7 @@ class DeliverySaleAllocationService
                         'product_id' => $stopItem->product_id,
                         'quantity_delivered' => $quantity,
                         'unit_price_snapshot' => $line->price,
+                        'unit_cost_snapshot' => $products[$stopItem->product_id]->cost,
                         'gross_amount' => $gross,
                         'discount_amount' => $discount,
                         'tax_amount' => $tax,

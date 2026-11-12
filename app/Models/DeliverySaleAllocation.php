@@ -22,6 +22,7 @@ class DeliverySaleAllocation extends Model
         return [
             'quantity_delivered' => 'decimal:4',
             'unit_price_snapshot' => 'decimal:2',
+            'unit_cost_snapshot' => 'decimal:2',
             'gross_amount' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
