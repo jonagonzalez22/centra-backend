@@ -87,6 +87,13 @@ class CommercialOperation extends Model
         return $this->hasMany(OperationPayment::class, 'operation_id')->active();
     }
 
+    public function declaredRouteCollections(): HasMany
+    {
+        return $this->hasMany(RouteStopCollection::class, 'commercial_operation_id')
+            ->where('status', 'declared')
+            ->whereColumn('route_stop_collections.store_id', 'commercial_operations.store_id');
+    }
+
     public function events(): HasMany
     {
         return $this->hasMany(CommercialOperationEvent::class, 'operation_id');

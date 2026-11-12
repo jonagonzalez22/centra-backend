@@ -151,6 +151,66 @@ test('reversed payments do not reduce the available balance for a new payment', 
         ->assertJsonPath('data.pending_amount', 0);
 });
 
+test('blocks manual payment while an in-store route collection is declared without changing the balance', function () {
+    RouteStopCollection::factory()->create([
+        'store_id' => $this->store->id,
+        'commercial_operation_id' => $this->order->id,
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'declared_by' => $this->user->id,
+        'declared_at' => now(),
+        'status' => 'declared',
+    ]);
+
+    postOrderPayment($this->order->id, [
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'amount' => 15600,
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('payment')
+        ->assertJsonPath('errors.payment.0', 'No se puede registrar un pago mientras haya una cobranza de ruta pendiente de conciliación.');
+
+    $this->assertDatabaseCount('operation_payments', 0);
+    expect((float) $this->session->fresh()->expected_amount)->toBe(20000.0)
+        ->and($this->order->fresh()->pending_balance)->toBe(15600.0);
+});
+
+test('allows manual payment after a route collection is verified or rejected', function (string $status) {
+    RouteStopCollection::factory()->create([
+        'store_id' => $this->store->id,
+        'commercial_operation_id' => $this->order->id,
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'declared_by' => $this->user->id,
+        'declared_at' => now(),
+        'status' => $status,
+    ]);
+
+    postOrderPayment($this->order->id, [
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'amount' => 100,
+    ])->assertCreated()
+        ->assertJsonPath('data.pending_amount', 15500);
+
+    $this->assertDatabaseCount('operation_payments', 1);
+})->with(['verified', 'rejected']);
+
+test('does not let a declared collection from another store block manual payment', function () {
+    $otherStore = Store::factory()->create();
+    RouteStopCollection::factory()->create([
+        'store_id' => $otherStore->id,
+        'commercial_operation_id' => $this->order->id,
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'declared_by' => $this->user->id,
+        'declared_at' => now(),
+        'status' => 'declared',
+    ]);
+
+    postOrderPayment($this->order->id, [
+        'store_payment_method_id' => $this->cashStoreMethod->id,
+        'amount' => 100,
+    ])->assertCreated();
+
+    $this->assertDatabaseCount('operation_payments', 1);
+});
+
 test('requires current user open cash session', function () {
     $this->session->update(['status' => 'closed', 'closed_at' => now()]);
     postOrderPayment($this->order->id, [

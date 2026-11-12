@@ -6,6 +6,7 @@ use App\Models\CashSession;
 use App\Models\CommercialOperation;
 use App\Models\CommercialOperationEvent;
 use App\Models\OperationPayment;
+use App\Models\RouteStopCollection;
 use App\Models\StorePaymentMethod;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,18 @@ class StoreOperationPaymentService
 
             if (in_array($operation->status, ['cancelled', 'closed'], true)) {
                 throw ValidationException::withMessages(['status' => ['El pedido no admite nuevos pagos.']]);
+            }
+
+            $hasPendingRouteCollection = RouteStopCollection::forStore($operation->store_id)
+                ->where('commercial_operation_id', $operation->id)
+                ->where('status', 'declared')
+                ->lockForUpdate()
+                ->exists();
+
+            if ($hasPendingRouteCollection) {
+                throw ValidationException::withMessages([
+                    'payment' => ['No se puede registrar un pago mientras haya una cobranza de ruta pendiente de conciliación.'],
+                ]);
             }
 
             $operation->payments()->orderBy('id')->lockForUpdate()->get();

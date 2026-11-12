@@ -17,6 +17,7 @@ use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Province;
 use App\Models\RouteStop;
+use App\Models\RouteStopCollection;
 use App\Models\RouteStopItem;
 use App\Models\Store;
 use App\Models\StorePaymentMethod;
@@ -227,6 +228,45 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
         expect((float) $data['tax'])->toBe(80.00);
         expect((float) $data['discount'])->toBe(20.00);
         expect((float) $data['total'])->toBe(500.00);
+    });
+
+    test('exposes whether the order has a declared route collection', function () {
+        $order = createDetailOrder($this->store);
+        [, $stop] = createDetailRouteStop($this->store, $order, $this->product, $this->user);
+        $method = makePaymentMethodForStoreDetail($this->store);
+
+        RouteStopCollection::factory()->create([
+            'store_id' => $this->store->id,
+            'route_stop_id' => $stop->id,
+            'commercial_operation_id' => $order->id,
+            'store_payment_method_id' => $method->id,
+            'declared_by' => $this->user->id,
+            'declared_at' => now(),
+            'status' => 'declared',
+        ]);
+
+        getOrderDetail($order->id)->assertOk()
+            ->assertJsonPath('data.has_pending_route_collection', true);
+    });
+
+    test('does not expose a declared collection from another store as pending', function () {
+        $order = createDetailOrder($this->store);
+        $otherStore = Store::factory()->create();
+        [, $stop] = createDetailRouteStop($this->store, $order, $this->product, $this->user);
+        $method = makePaymentMethodForStoreDetail($this->store);
+
+        RouteStopCollection::factory()->create([
+            'store_id' => $otherStore->id,
+            'route_stop_id' => $stop->id,
+            'commercial_operation_id' => $order->id,
+            'store_payment_method_id' => $method->id,
+            'declared_by' => $this->user->id,
+            'declared_at' => now(),
+            'status' => 'declared',
+        ]);
+
+        getOrderDetail($order->id)->assertOk()
+            ->assertJsonPath('data.has_pending_route_collection', false);
     });
 
     test('returns 404 for non-existent order', function () {

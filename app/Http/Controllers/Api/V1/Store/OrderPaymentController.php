@@ -58,7 +58,7 @@ class OrderPaymentController extends Controller
             'customer.addresses.locality', 'items.product',
             'payments.storePaymentMethod.paymentMethod', 'payments.cashSession', 'payments.registeredBy',
             'user', 'routeStops.items.product', 'routeStops.route',
-        ])->loadSum('activePayments', 'amount');
+        ])->loadSum('activePayments', 'amount')->loadExists('declaredRouteCollections as has_pending_route_collection');
         $historyBuilder->attach($operation, $operation->store_id);
 
         return response()->json([

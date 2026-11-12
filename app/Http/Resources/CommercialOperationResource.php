@@ -58,6 +58,7 @@ use Illuminate\Support\Collection;
  *   @OA\Property(property="events", type="array", @OA\Items(ref="#/components/schemas/CommercialOperationEventResource")),
  *   @OA\Property(property="history", type="array", description="Historial funcional normalizado del pedido", @OA\Items(type="object")),
  *   @OA\Property(property="route_ids", type="array", @OA\Items(type="string", format="uuid"), description="IDs de rutas activas (no canceladas) donde está asignado este pedido"),
+ *   @OA\Property(property="has_pending_route_collection", type="boolean"),
  *   @OA\Property(property="delivery_summary", type="object", description="Resumen operativo de mercadería pendiente")
  * )
  */
@@ -110,11 +111,17 @@ class CommercialOperationResource extends JsonResource
                 ->unique()
                 ->values()
                 ->toArray(), []),
+            'has_pending_route_collection' => $this->hasPendingRouteCollection(),
             'delivery_summary' => $this->when(
                 $this->type === 'order',
                 fn () => app(\App\Services\DeliverySummaryService::class)->summarize($this->resource)
             ),
         ];
+    }
+
+    private function hasPendingRouteCollection(): bool
+    {
+        return (bool) ($this->resource->getAttribute('has_pending_route_collection') ?? false);
     }
 
     private function getDeliveryAddress(): ?array

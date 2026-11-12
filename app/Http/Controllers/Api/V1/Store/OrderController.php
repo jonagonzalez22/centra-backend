@@ -186,6 +186,7 @@ class OrderController extends Controller
                 'routeStops.route',
             ])
             ->withSum('activePayments', 'amount')
+            ->withExists('declaredRouteCollections as has_pending_route_collection')
             ->find($id);
 
         if (! $operation) {
@@ -478,7 +479,7 @@ class OrderController extends Controller
 
     private function orderResponse(CommercialOperation $operation, string $message): JsonResponse
     {
-        $operation->load(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod', 'payments.cashSession', 'payments.registeredBy', 'events.user', 'routeStops.items.product', 'routeStops.route'])->loadSum('activePayments', 'amount');
+        $operation->load(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod', 'payments.cashSession', 'payments.registeredBy', 'events.user', 'routeStops.items.product', 'routeStops.route'])->loadSum('activePayments', 'amount')->loadExists('declaredRouteCollections as has_pending_route_collection');
 
         return response()->json(['status' => 'success', 'message' => $message, 'data' => CommercialOperationResource::make($operation), 'errors' => null]);
     }
