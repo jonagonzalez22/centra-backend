@@ -38,6 +38,8 @@ class DeliveryRouteResource extends JsonResource
             'vehicle' => VehicleResource::make($this->whenLoaded('vehicle')),
             'driver' => DriverResource::make($this->whenLoaded('driver')),
             'stops' => RouteStopResource::collection($this->whenLoaded('stops')),
+            'operational_stops_count' => $this->active_stops_count
+                ?? ($this->relationLoaded('stops') ? $this->stops->where('status', '!=', 'cancelled')->count() : 0),
             'events' => DeliveryRouteEventResource::collection($this->whenLoaded('events')),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),

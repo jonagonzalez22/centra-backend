@@ -91,6 +91,11 @@ class DeliveryRoute extends Model
         return $this->hasMany(RouteStop::class, 'route_id');
     }
 
+    public function activeStops(): HasMany
+    {
+        return $this->stops()->active();
+    }
+
     public function events(): HasMany
     {
         return $this->hasMany(DeliveryRouteEvent::class, 'route_id');

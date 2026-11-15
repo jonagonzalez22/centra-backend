@@ -168,7 +168,8 @@ class RouteController extends Controller
         $storeId = $request->user()->store_id;
 
         $query = DeliveryRoute::forStore($storeId)
-            ->with(['stops.order', 'vehicle', 'driver']);
+            ->with(['stops.order', 'vehicle', 'driver'])
+            ->withCount('activeStops');
 
         if ($request->filled('status')) {
             $query->byStatus($request->get('status'));
@@ -292,6 +293,7 @@ class RouteController extends Controller
 
         $route = DeliveryRoute::forStore($storeId)
             ->with($this->routeDetailRelations())
+            ->withCount('activeStops')
             ->find($id);
 
         if (! $route) {

@@ -106,6 +106,31 @@ function createEligibleOrder(Store $store, Customer $customer, array $attrs = []
         ], $attrs));
 }
 
+/**
+ * Create a route with historical and/or operational stops for endpoint assertions.
+ *
+ * @param  array<int, string>  $statuses
+ */
+function createRouteWithStops(Store $store, array $statuses): DeliveryRoute
+{
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $store->id,
+        'vehicle_id' => createVehicle($store)->id,
+        'driver_id' => createDriver($store)->id,
+    ]);
+
+    foreach ($statuses as $index => $status) {
+        RouteStop::factory()->create([
+            'route_id' => $route->id,
+            'status' => $status,
+            // Cancelled stops are historical and deliberately leave the active sequence space.
+            'sequence' => $status === 'cancelled' ? null : $index + 1,
+        ]);
+    }
+
+    return $route;
+}
+
 // ── CRUD Tests ───────────────────────────────────────────────────────
 
 test('creates a new delivery route', function () {
@@ -253,6 +278,88 @@ test('shows a single route with stops and events', function () {
     $response->assertStatus(200)
         ->assertJsonPath('data.id', $route->id)
         ->assertJsonPath('data.status', 'draft');
+});
+
+test('reports pending stops as operational in route index and show', function () {
+    $route = createRouteWithStops($this->store, ['pending', 'pending']);
+
+    $index = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes');
+    $show = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}");
+
+    $index->assertOk()
+        ->assertJsonPath('data.items.0.id', $route->id)
+        ->assertJsonPath('data.items.0.operational_stops_count', 2);
+    $show->assertOk()
+        ->assertJsonPath('data.id', $route->id)
+        ->assertJsonPath('data.operational_stops_count', 2);
+});
+
+test('reports completed stops as operational in route index and show', function () {
+    $route = createRouteWithStops($this->store, ['completed', 'completed']);
+
+    $index = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes');
+    $show = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}");
+
+    $index->assertOk()
+        ->assertJsonPath('data.items.0.operational_stops_count', 2);
+    $show->assertOk()
+        ->assertJsonPath('data.operational_stops_count', 2);
+});
+
+test('preserves cancelled stop history while counting only operational stops in index and show', function () {
+    $route = createRouteWithStops($this->store, [
+        'cancelled', 'cancelled', 'cancelled', 'completed', 'completed',
+    ]);
+
+    $index = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes');
+    $show = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}");
+
+    $index->assertOk()
+        ->assertJsonCount(5, 'data.items.0.stops')
+        ->assertJsonPath('data.items.0.operational_stops_count', 2);
+    $show->assertOk()
+        ->assertJsonCount(5, 'data.stops')
+        ->assertJsonPath('data.operational_stops_count', 2);
+});
+
+test('keeps removed stop history out of the operational count after replanning', function () {
+    $route = createRouteWithStops($this->store, ['cancelled', 'cancelled', 'pending', 'pending']);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}");
+
+    $response->assertOk()
+        ->assertJsonCount(4, 'data.stops')
+        ->assertJsonPath('data.operational_stops_count', 2);
+
+    expect(RouteStop::where('route_id', $route->id)->where('status', 'cancelled')->count())->toBe(2);
+});
+
+test('keeps operational stop counts isolated by store in route index and show', function () {
+    $storeARoute = createRouteWithStops($this->store, ['completed', 'cancelled']);
+    $storeB = Store::factory()->create();
+    $storeBRoute = createRouteWithStops($storeB, ['pending', 'pending', 'pending']);
+
+    $index = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes');
+    $showOwn = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$storeARoute->id}");
+    $showOtherStore = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$storeBRoute->id}");
+
+    $index->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.id', $storeARoute->id)
+        ->assertJsonPath('data.items.0.operational_stops_count', 1);
+    $showOwn->assertOk()
+        ->assertJsonPath('data.operational_stops_count', 1);
+    $showOtherStore->assertNotFound();
 });
 
 test('dispatch response preserves order customer and address in route stops', function () {
