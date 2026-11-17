@@ -8,6 +8,7 @@ use App\Models\Plan;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -16,7 +17,17 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-    Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $storeAdmin = Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $permissions = [
+        'customer_contacts.view',
+        'customer_contacts.create',
+        'customer_contacts.edit',
+        'customer_contacts.delete',
+    ];
+    foreach ($permissions as $permission) {
+        Permission::findOrCreate($permission, 'web');
+    }
+    $storeAdmin->givePermissionTo($permissions);
 
     $this->store = Store::factory()->create();
 

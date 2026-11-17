@@ -5,6 +5,7 @@ namespace App\Services\Location;
 use App\Services\Geocoding\DTOs\GeocodingResult;
 use App\Services\Location\Contracts\LocationResolverInterface;
 use App\Services\Location\Resolvers\AddressResolver;
+use App\Services\Location\Resolvers\AppleMapsLinkResolver;
 use App\Services\Location\Resolvers\CoordinatesResolver;
 use App\Services\Location\Resolvers\GoogleMapsLinkResolver;
 
@@ -41,6 +42,7 @@ class LocationManager
     {
         $this->resolvers['coordinates'] = new CoordinatesResolver;
         $this->resolvers['google_maps_link'] = new GoogleMapsLinkResolver;
+        $this->resolvers['apple_maps_link'] = new AppleMapsLinkResolver;
         $this->resolvers['address'] = new AddressResolver(
             app(\App\Services\Geocoding\GeocodingService::class)
         );

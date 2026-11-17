@@ -116,6 +116,38 @@ class CustomerController extends Controller
         ]);
     }
 
+    /**
+     * Provides the small active-customer catalogue needed while registering
+     * commercial operations. This deliberately has a different route and
+     * permission from the administrative customer list.
+     */
+    public function commercialSearch(Request $request): JsonResponse
+    {
+        $request->validate([
+            'search' => ['nullable', 'string'],
+        ]);
+
+        $customers = Customer::forStore($request->user()->store_id)
+            ->with(['documentType'])
+            ->where('status', 'active')
+            ->when($request->filled('search'), fn ($query) => $query->identitySearch($request->search))
+            ->orderBy('display_name')
+            ->paginate(min($request->integer('per_page', 20), 20));
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Clientes obtenidos exitosamente.',
+            'data' => [
+                'items' => CustomerResource::collection($customers->items()),
+                'total' => $customers->total(),
+                'per_page' => $customers->perPage(),
+                'current_page' => $customers->currentPage(),
+                'last_page' => $customers->lastPage(),
+            ],
+            'errors' => null,
+        ]);
+    }
+
     #[OA\Post(
         path: '/store/customers',
         summary: 'Crear cliente',

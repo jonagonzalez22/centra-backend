@@ -60,6 +60,21 @@ test('creates draft purchases with exact snapshots, totals, and no stock mutatio
     expect($product->fresh()->stock)->toBe($stock)->and(InventoryMovement::count())->toBe(0);
 });
 
+test('purchase creation does not require supplier administration or create associations', function () {
+    $product = Product::factory()->forStore($this->store)->create(['category_id' => $this->category->id]);
+    $employee = User::factory()->create(['store_id' => $this->store->id]);
+    Role::firstOrCreate(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    $employee->assignRole('STORE_USER');
+    $employee->givePermissionTo(['purchases.create']);
+
+    $this->actingAs($employee, 'sanctum')->postJson('/api/v1/store/purchases', purchasePayload($this->supplier, $product))
+        ->assertCreated()
+        ->assertJsonPath('data.items.0.supplier_code', null)
+        ->assertJsonPath('data.items.0.supplier_product_name', null);
+
+    expect(SupplierProduct::query()->where('supplier_id', $this->supplier->id)->where('product_id', $product->id)->exists())->toBeFalse();
+});
+
 test('includes the current scoped supplier phone only in purchase detail', function () {
     $product = purchasableProduct($this->store, $this->category, $this->supplier);
     $this->supplier->update(['phone' => '+54 261 555-0100']);
@@ -200,14 +215,14 @@ test('orders only planned drafts, refreshes snapshots, and never mutates stock',
     $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/purchases/{$created}/order")->assertUnprocessable();
 });
 
-test('blocks order for direct drafts and stale supplier, product, or association', function () {
+test('blocks order for direct drafts and stale supplier or product but preserves purchases without association metadata', function () {
     $product = purchasableProduct($this->store, $this->category, $this->supplier);
     $direct = $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/store/purchases', purchasePayload($this->supplier, $product, ['purchase_type' => 'direct']))->json('data.id');
     $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/purchases/{$direct}/order")->assertUnprocessable();
     $draft = $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/store/purchases', purchasePayload($this->supplier, $product))->json('data.id');
     SupplierProduct::query()->where('supplier_id', $this->supplier->id)->where('product_id', $product->id)->delete();
-    $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/purchases/{$draft}/order")->assertUnprocessable();
-    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $product->id]);
+    $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/purchases/{$draft}/order")->assertOk()->assertJsonPath('data.items.0.supplier_code', null);
+    $draft = $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/store/purchases', purchasePayload($this->supplier, $product))->json('data.id');
     $product->update(['is_active' => false]);
     $this->actingAs($this->user, 'sanctum')->postJson("/api/v1/store/purchases/{$draft}/order")->assertUnprocessable();
 });

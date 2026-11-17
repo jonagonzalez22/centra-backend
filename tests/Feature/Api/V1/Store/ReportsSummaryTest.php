@@ -15,6 +15,7 @@ use App\Models\StorePaymentMethod;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -23,6 +24,9 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
     Role::findOrCreate('STORE_ADMIN', 'web');
+    Role::findOrCreate('STORE_USER', 'web');
+    Permission::findOrCreate('reports.view', 'web');
+    Role::findByName('STORE_ADMIN', 'web')->givePermissionTo('reports.view');
 
     $reports = Feature::factory()->create(['code' => 'reports']);
     $plan = Plan::factory()->create();
@@ -130,6 +134,29 @@ function analyticsFor(User $user, string $from = '2026-11-01', string $to = '202
 {
     return test()->actingAs($user, 'sanctum')->getJson("/api/v1/store/reports/analytics?date_from={$from}&date_to={$to}");
 }
+
+test('reports require reports view in addition to the reports feature', function (): void {
+    $storeUser = User::factory()->create(['store_id' => $this->storeA->id]);
+    $storeUser->assignRole('STORE_USER');
+
+    summaryFor($storeUser)->assertForbidden();
+    analyticsFor($storeUser)->assertForbidden();
+
+    $storeUser->givePermissionTo('reports.view');
+    summaryFor($storeUser)->assertOk();
+    analyticsFor($storeUser)->assertOk();
+});
+
+test('reports view is ineffective when the store plan does not include reports', function (): void {
+    $plan = Plan::factory()->create();
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+    $user = User::factory()->create(['store_id' => $store->id]);
+    $user->assignRole('STORE_USER');
+    $user->givePermissionTo('reports.view');
+
+    summaryFor($user)->assertForbidden();
+    analyticsFor($user)->assertForbidden();
+});
 
 test('isolates period metrics, payments and inventory between stores', function (): void {
     reportOperation($this->storeA, $this->userA, ['type' => 'sale', 'status' => 'confirmed', 'total' => '100.00']);

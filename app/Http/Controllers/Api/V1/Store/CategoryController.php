@@ -12,6 +12,23 @@ use Illuminate\Http\Request;
 
 class CategoryController extends Controller
 {
+  public function operationalOptions(Request $request): JsonResponse
+  {
+    $request->validate(['include_inactive' => ['nullable', 'boolean']]);
+
+    $categories = Category::forStore($request->user()->store_id)
+      ->when(! $request->boolean('include_inactive'), fn ($query) => $query->where('is_active', true))
+      ->orderBy('name')
+      ->get(['id', 'name', 'is_active']);
+
+    return response()->json([
+      'status' => 'success',
+      'message' => 'Opciones de categorías obtenidas exitosamente.',
+      'data' => ['items' => $categories],
+      'errors' => null,
+    ]);
+  }
+
   /**
    * Display a listing of categories for the authenticated user's store.
    *

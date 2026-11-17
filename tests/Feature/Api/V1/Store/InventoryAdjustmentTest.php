@@ -1,10 +1,12 @@
 <?php
 
 use App\Models\Category;
+use App\Models\Feature;
 use App\Models\InventoryMovement;
 use App\Models\InventoryValuationBalance;
 use App\Models\InventoryValuationEntry;
 use App\Models\MeasurementUnit;
+use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
@@ -22,12 +24,16 @@ beforeEach(function () {
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
     Permission::create(['name' => 'inventory.adjust', 'guard_name' => 'web']);
+    Permission::create(['name' => 'inventory.view', 'guard_name' => 'web']);
 
-    $this->store = Store::factory()->create();
+    $inventory = Feature::firstOrCreate(['code' => 'inventory'], ['name' => 'Inventario']);
+    $plan = Plan::factory()->create();
+    $plan->features()->attach($inventory->id, ['limit_value' => null]);
+    $this->store = Store::factory()->create(['plan_id' => $plan->id]);
     $this->category = Category::factory()->belongsToStore($this->store)->create();
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
-    $this->user->givePermissionTo('inventory.adjust');
+    $this->user->givePermissionTo(['inventory.adjust', 'inventory.view']);
     $this->token = $this->user->createToken('test-token')->plainTextToken;
 });
 
@@ -49,6 +55,53 @@ function adjustInventory(array $data): \Illuminate\Testing\TestResponse
 }
 
 describe('POST /api/v1/store/inventory/adjust', function () {
+    test('movements require the inventory feature even when inventory.view is granted', function () {
+        $this->store->plan->features()->detach(
+            Feature::query()->where('code', 'inventory')->value('id')
+        );
+
+        $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/store/inventory/movements')
+            ->assertForbidden();
+    });
+
+    test('movements require inventory.view and remain scoped to the authenticated store', function () {
+        $product = createProductForStore($this->store, $this->category, 10);
+        adjustInventory([
+            'product_id' => $product->id,
+            'quantity' => 1,
+            'type' => 'input',
+            'concept' => 'Movimiento propio',
+        ])->assertCreated();
+
+        $withoutView = User::factory()->create(['store_id' => $this->store->id]);
+        $withoutView->assignRole('STORE_USER');
+        $this->actingAs($withoutView, 'sanctum')
+            ->getJson('/api/v1/store/inventory/movements')
+            ->assertForbidden();
+
+        $otherStore = Store::factory()->create(['plan_id' => $this->store->plan_id]);
+        $otherCategory = Category::factory()->belongsToStore($otherStore)->create();
+        $otherProduct = createProductForStore($otherStore, $otherCategory, 10);
+        $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
+        $otherUser->assignRole('STORE_USER');
+        $otherUser->givePermissionTo('inventory.view');
+
+        $this->actingAs($otherUser, 'sanctum')
+            ->getJson('/api/v1/store/inventory/movements?product_id='.$product->id)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['product_id']);
+        $this->actingAs($otherUser, 'sanctum')
+            ->getJson('/api/v1/store/inventory/movements')
+            ->assertOk()
+            ->assertJsonCount(0, 'data.items');
+
+        $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/store/inventory/movements?product_id='.$product->id)
+            ->assertOk()
+            ->assertJsonPath('data.items.0.product.id', $product->id);
+    });
+
     test('movements list exposes the product stock measurement unit', function () {
         $measurementUnit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
         $product = createProductForStore($this->store, $this->category, 10);

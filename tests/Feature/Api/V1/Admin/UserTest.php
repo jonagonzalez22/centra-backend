@@ -20,6 +20,8 @@ beforeEach(function () {
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_DRIVER', 'guard_name' => 'web']);
+    Role::create(['name' => 'BACKOFFICE_USER', 'guard_name' => 'web']);
 
     Permission::create(['name' => 'store_users.edit', 'guard_name' => 'web']);
     Permission::create(['name' => 'store_users.view', 'guard_name' => 'web']);
@@ -698,14 +700,15 @@ test('store admin can sync user permissions', function () {
 
     $response = $this->withHeader('Authorization', "Bearer $token")
         ->postJson("/api/v1/store/users/{$user->id}/permissions", [
-            'permissions' => ['inventory.create', 'inventory.view'],
+            'permissions' => ['categories.view', 'inventory.create', 'inventory.view'],
         ]);
 
     $response->assertStatus(200)
         ->assertJsonPath('message', 'Permisos sincronizados correctamente.');
 
     $user->refresh();
-    expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['inventory.create', 'inventory.view']);
+    expect($user->getDirectPermissions()->pluck('name')->toArray())
+        ->toBe(['categories.view', 'inventory.create', 'inventory.view']);
 });
 
 test('store admin cannot assign admin/backoffice permissions', function () {
@@ -843,7 +846,7 @@ test('store admin can see full permission catalog when store has all features', 
         ->and($groups['Usuarios'])->toHaveCount(4);
 });
 
-test('store admin sees only inventory group when store lacks multi_user feature', function () {
+test('store admin sees inventory and category permissions when inventory is enabled', function () {
     /** @var \Tests\TestCase $this */
     $plan = Plan::create(['name' => 'Plan Basic', 'price' => 49, 'billing_cycle' => 'monthly', 'is_active' => true]);
     $featureInventory = Feature::create(['code' => 'inventory', 'name' => 'Inventario', 'description' => 'Gestión de inventario.']);
@@ -863,7 +866,7 @@ test('store admin sees only inventory group when store lacks multi_user feature'
 
     $groups = $response->json('data.groups');
     expect($groups)->toHaveKey('Inventario')
-        ->not->toHaveKey('Categorías')
+        ->toHaveKey('Categorías')
         ->not->toHaveKey('Usuarios');
 });
 
@@ -992,4 +995,132 @@ test('store admin can recover permissions after emptying them', function () {
 
     $user->refresh();
     expect($user->getDirectPermissions()->pluck('name')->toArray())->toBe(['inventory.view']);
+});
+
+// ============================================================
+// TENANT ROLE ASSIGNMENT BOUNDARY
+// ============================================================
+
+function storeUserManagementContext(): array
+{
+    $plan = Plan::factory()->create();
+    $multiUser = Feature::factory()->create(['code' => 'multi_user']);
+    $plan->features()->attach($multiUser->id, ['limit_value' => 10]);
+    $store = Store::factory()->create(['plan_id' => $plan->id]);
+    $admin = User::factory()->create(['store_id' => $store->id]);
+    $admin->assignRole('STORE_ADMIN');
+
+    return [$store, $admin->createToken('test-token')->plainTextToken, $admin];
+}
+
+test('store admin can create store employees only', function (string $role): void {
+    [$store, $token] = storeUserManagementContext();
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/v1/store/users', [
+        'name' => "Empleado {$role}",
+        'email' => strtolower($role).'@example.test',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => $role,
+    ]);
+
+    $response->assertCreated();
+    $user = User::where('email', strtolower($role).'@example.test')->firstOrFail();
+    expect($user->store_id)->toBe($store->id)
+        ->and($user->hasRole($role))->toBeTrue();
+})->with(['store user' => 'STORE_USER', 'store driver' => 'STORE_DRIVER']);
+
+test('store admin cannot create a platform or administrative role', function (string $role): void {
+    [, $token] = storeUserManagementContext();
+    $email = strtolower($role).'@example.test';
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/v1/store/users', [
+        'name' => 'Intento no autorizado',
+        'email' => $email,
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => $role,
+    ]);
+
+    $response->assertForbidden()
+        ->assertJsonPath('message', 'No tenés permisos para asignar ese rol.');
+    $this->assertDatabaseMissing('users', ['email' => $email]);
+})->with(['backoffice' => 'BACKOFFICE_USER', 'super admin' => 'SUPER_ADMIN', 'store admin' => 'STORE_ADMIN']);
+
+test('store role assignment ignores a manipulated role id because the contract accepts role names only', function (): void {
+    [$store, $token] = storeUserManagementContext();
+    $backoffice = Role::findByName('BACKOFFICE_USER', 'web');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/v1/store/users', [
+        'name' => 'Empleado válido',
+        'email' => 'employee-role-id@example.test',
+        'password' => 'Password1',
+        'password_confirmation' => 'Password1',
+        'role' => 'STORE_USER',
+        'role_id' => $backoffice->id,
+    ]);
+
+    $response->assertCreated();
+    $user = User::where('email', 'employee-role-id@example.test')->firstOrFail();
+    expect($user->store_id)->toBe($store->id)
+        ->and($user->hasRole('STORE_USER'))->toBeTrue()
+        ->and($user->hasRole('BACKOFFICE_USER'))->toBeFalse();
+});
+
+test('store admin cannot reassign an employee to an administrative role and leaves the user unchanged', function (): void {
+    [$store, $token] = storeUserManagementContext();
+    $employee = User::factory()->create(['store_id' => $store->id, 'name' => 'Empleado original']);
+    $employee->assignRole('STORE_USER');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->putJson("/api/v1/store/users/{$employee->id}", [
+        'name' => 'No debe guardarse',
+        'role' => 'BACKOFFICE_USER',
+    ]);
+
+    $response->assertForbidden();
+    $employee->refresh();
+    expect($employee->name)->toBe('Empleado original')
+        ->and($employee->hasRole('STORE_USER'))->toBeTrue()
+        ->and($employee->hasRole('BACKOFFICE_USER'))->toBeFalse();
+});
+
+test('store admin cannot change the role of another store administrator', function (): void {
+    [$store, $token] = storeUserManagementContext();
+    $otherAdmin = User::factory()->create(['store_id' => $store->id]);
+    $otherAdmin->assignRole('STORE_ADMIN');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->putJson("/api/v1/store/users/{$otherAdmin->id}", [
+        'role' => 'STORE_USER',
+    ]);
+
+    $response->assertForbidden();
+    expect($otherAdmin->fresh()->hasRole('STORE_ADMIN'))->toBeTrue();
+});
+
+test('store admin cannot change a user from another store', function (): void {
+    [, $token] = storeUserManagementContext();
+    $foreignUser = User::factory()->create(['name' => 'Usuario ajeno']);
+    $foreignUser->assignRole('STORE_USER');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->putJson("/api/v1/store/users/{$foreignUser->id}", [
+        'role' => 'BACKOFFICE_USER',
+    ]);
+
+    $response->assertNotFound();
+    expect($foreignUser->fresh()->hasRole('STORE_USER'))->toBeTrue();
+});
+
+test('store admin cannot grant platform permissions directly to an employee', function (): void {
+    [$store, $token, $admin] = storeUserManagementContext();
+    $admin->givePermissionTo('store_users.edit');
+    Permission::firstOrCreate(['name' => 'stores.view', 'guard_name' => 'web']);
+    $employee = User::factory()->create(['store_id' => $store->id]);
+    $employee->assignRole('STORE_USER');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")->postJson("/api/v1/store/users/{$employee->id}/permissions", [
+        'permissions' => ['stores.view'],
+    ]);
+
+    $response->assertUnprocessable();
+    expect($employee->fresh()->getDirectPermissions())->toHaveCount(0);
 });

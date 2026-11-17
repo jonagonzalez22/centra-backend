@@ -1,19 +1,30 @@
 <?php
 
 use App\Models\Category;
+use App\Models\Feature;
+use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Store;
 use App\Models\Supplier;
 use App\Models\SupplierProduct;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
-    $this->store = Store::factory()->create();
+    $storeAdminRole = Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Role::firstOrCreate(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    Permission::findOrCreate('inventory.create', 'web');
+    Permission::findOrCreate('suppliers.edit', 'web');
+    $storeAdminRole->givePermissionTo(['inventory.create', 'suppliers.edit']);
+    $inventory = Feature::firstOrCreate(['code' => 'inventory'], ['name' => 'Inventario']);
+    $purchases = Feature::firstOrCreate(['code' => 'purchases'], ['name' => 'Compras']);
+    $plan = Plan::factory()->create();
+    $plan->features()->sync([$inventory->id, $purchases->id]);
+    $this->store = Store::factory()->create(['plan_id' => $plan->id]);
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
     $this->category = Category::factory()->belongsToStore($this->store)->create();
@@ -39,6 +50,31 @@ test('creates a product without suppliers and keeps supplier associations option
 
     $product = Product::query()->where('sku', 'WITHOUT-SUPPLIER')->firstOrFail();
     expect(SupplierProduct::query()->where('product_id', $product->id)->exists())->toBeFalse();
+});
+
+test('requires purchases and suppliers edit only when creating supplier associations', function () {
+    $supplier = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Proveedor']);
+    $payload = productCreationPayload($this->category, 'AUTH-SUPPLIER', [['supplier_id' => $supplier->id]]);
+
+    $withoutEdit = User::factory()->create(['store_id' => $this->store->id]);
+    $withoutEdit->assignRole('STORE_USER');
+    $withoutEdit->givePermissionTo('inventory.create');
+    $this->actingAs($withoutEdit, 'sanctum')->postJson('/api/v1/store/products', $payload)->assertForbidden();
+    expect(Product::query()->where('sku', 'AUTH-SUPPLIER')->exists())->toBeFalse();
+
+    $purchases = Feature::query()->where('code', 'purchases')->firstOrFail();
+    $withoutPurchasesPlan = Plan::factory()->create();
+    $withoutPurchasesPlan->features()->attach(Feature::query()->where('code', 'inventory')->firstOrFail()->id);
+    $withoutPurchasesStore = Store::factory()->create(['plan_id' => $withoutPurchasesPlan->id]);
+    $withoutPurchasesUser = User::factory()->create(['store_id' => $withoutPurchasesStore->id]);
+    $withoutPurchasesUser->assignRole('STORE_USER');
+    $withoutPurchasesUser->givePermissionTo(['inventory.create', 'suppliers.edit']);
+    $category = Category::factory()->belongsToStore($withoutPurchasesStore)->create();
+    $withoutPurchasesSupplier = Supplier::create(['store_id' => $withoutPurchasesStore->id, 'business_name' => 'Proveedor local']);
+    $withoutPurchasesPayload = productCreationPayload($category, 'WITHOUT-PURCHASES', [['supplier_id' => $withoutPurchasesSupplier->id]]);
+    $this->actingAs($withoutPurchasesUser, 'sanctum')->postJson('/api/v1/store/products', $withoutPurchasesPayload)->assertForbidden();
+    expect(Product::query()->where('sku', 'WITHOUT-PURCHASES')->exists())->toBeFalse();
+    expect($purchases)->not->toBeNull();
 });
 
 test('creates one or multiple initial supplier associations with their own metadata', function () {

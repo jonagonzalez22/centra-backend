@@ -8,12 +8,17 @@ use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $storeAdminRole = Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    foreach (['pos.view', 'inventory.view'] as $permission) {
+        Permission::findOrCreate($permission, 'web');
+    }
+    $storeAdminRole->givePermissionTo(['pos.view', 'inventory.view']);
     $this->pos = Feature::firstOrCreate(['code' => 'pos'], ['name' => 'Punto de Venta']);
     $this->inventory = Feature::firstOrCreate(['code' => 'inventory'], ['name' => 'Gestión de Stock']);
 

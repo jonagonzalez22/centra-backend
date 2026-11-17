@@ -17,7 +17,7 @@ class GeocodingController extends Controller
     #[OA\Post(
         path: '/geocoding/search',
         summary: 'Geocodificar una dirección',
-        description: 'Recibe una dirección y retorna las coordenadas geográficas y la dirección formateada.',
+        description: 'Recibe una dirección, coordenadas o enlace de mapas compatible y retorna sus coordenadas.',
         operationId: 'geocodingSearch',
         security: [['sanctum' => []]],
         tags: ['Geocoding']
@@ -103,7 +103,9 @@ class GeocodingController extends Controller
                 'status' => 'error',
                 'message' => 'No se pudo resolver la ubicación.',
                 'data' => null,
-                'errors' => ['location' => [$e->getMessage()]],
+                // Provider errors may contain request URLs or provider-side
+                // diagnostics. They are intentionally not part of the API.
+                'errors' => ['location' => ['No se pudo procesar la solicitud de ubicación.']],
             ], 500);
         }
     }

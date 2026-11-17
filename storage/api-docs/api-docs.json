@@ -12478,6 +12478,18 @@
                                         "type": "string",
                                         "maxLength": 255,
                                         "example": "Ajuste por carga inicial"
+                                    },
+                                    "unit_cost": {
+                                        "description": "Costo unitario opcional, solo para entradas. Si se omite, la valuación queda como unknown.",
+                                        "type": "string",
+                                        "format": "decimal",
+                                        "example": "1500.00",
+                                        "nullable": true
+                                    },
+                                    "update_product_cost": {
+                                        "description": "Solo para entradas con unit_cost. Actualiza products.cost sin alterar la valuación adicionalmente.",
+                                        "type": "boolean",
+                                        "example": false
                                     }
                                 },
                                 "type": "object"
@@ -19402,6 +19414,9 @@
                             "format": "uuid"
                         }
                     },
+                    "has_pending_route_collection": {
+                        "type": "boolean"
+                    },
                     "delivery_summary": {
                         "description": "Resumen operativo de mercadería pendiente",
                         "type": "object"
@@ -22013,6 +22028,48 @@
                                             }
                                         },
                                         "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "gross_profit": {
+                                "description": "Ganancia bruta del período: ventas realizadas menos el costo comercial histórico conocido de los SKU vendidos. POS usa operation_items.unit_cost_snapshot y delivery usa delivery_sale_allocations.unit_cost_snapshot. Si status no es complete, amount no representa un cálculo exacto.",
+                                "properties": {
+                                    "sales_amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 245000
+                                    },
+                                    "known_cost_amount": {
+                                        "description": "Costo comercial histórico cuyo snapshot fue conocido al realizarse la venta.",
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 147000
+                                    },
+                                    "amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 98000,
+                                        "nullable": true
+                                    },
+                                    "margin_percentage": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 40,
+                                        "nullable": true
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "complete",
+                                            "partial",
+                                            "unavailable"
+                                        ],
+                                        "example": "complete"
+                                    },
+                                    "has_missing_costs": {
+                                        "type": "boolean",
+                                        "example": false
                                     }
                                 },
                                 "type": "object"

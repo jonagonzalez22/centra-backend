@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1\Store;
 
 use App\Support\PermissionFeatureResolver;
+use App\Support\PermissionRegistry;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -35,6 +36,16 @@ class StoreUserPermissionRequest extends FormRequest
             $store = $authUser->store->load('plan.features');
 
             foreach ($permissions as $permission) {
+                $definition = PermissionRegistry::definition($permission);
+                if (! $definition || ! $definition['delegable']) {
+                    $validator->errors()->add(
+                        'permissions',
+                        "El permiso '{$permission}' no está habilitado para delegación."
+                    );
+
+                    continue;
+                }
+
                 $featureCode = PermissionFeatureResolver::resolveFeature($permission);
 
                 if ($featureCode === null) {

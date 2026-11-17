@@ -14,6 +14,9 @@ beforeEach(function () {
 
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'BACKOFFICE_USER', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_DRIVER', 'guard_name' => 'web']);
 });
 
 test('api can list all features', function () {
@@ -293,3 +296,40 @@ test('api can access features with BACKOFFICE_USER role', function () {
     $response->assertStatus(200)
         ->assertJsonCount(1, 'data.items');
 });
+
+test('backoffice user cannot mutate features', function () {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole('BACKOFFICE_USER');
+    $token = $user->createToken('test-token')->plainTextToken;
+    $feature = Feature::create(['code' => 'pos', 'name' => 'Punto de venta']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/features', ['code' => 'forbidden', 'name' => 'No permitido'])
+        ->assertForbidden();
+    $this->assertDatabaseMissing('features', ['code' => 'forbidden']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/features/{$feature->id}", ['code' => 'forbidden', 'name' => 'No permitido'])
+        ->assertForbidden();
+    $this->withHeader('Authorization', "Bearer $token")
+        ->patchJson("/api/v1/admin/features/{$feature->id}", ['name' => 'Tampoco permitido'])
+        ->assertForbidden();
+    $this->assertDatabaseHas('features', ['id' => $feature->id, 'code' => 'pos', 'name' => 'Punto de venta']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->deleteJson("/api/v1/admin/features/{$feature->id}")
+        ->assertForbidden();
+    $this->assertDatabaseHas('features', ['id' => $feature->id]);
+});
+
+test('store roles cannot access global features', function (string $role) {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole($role);
+    $token = $user->createToken('test-token')->plainTextToken;
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/features')
+        ->assertForbidden();
+})->with(['STORE_ADMIN', 'STORE_USER', 'STORE_DRIVER']);

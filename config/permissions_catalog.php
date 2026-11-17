@@ -8,6 +8,10 @@ return [
     ],
     'Punto de Venta' => [
         ['name' => 'pos.view', 'label' => 'Ver'],
+        ['name' => 'pos.create', 'label' => 'Registrar operaciones'],
+    ],
+    'Informes' => [
+        ['name' => 'reports.view', 'label' => 'Ver informes'],
     ],
     'Compras' => [
         ['name' => 'purchases.view', 'label' => 'Ver'],
@@ -42,6 +46,18 @@ return [
         ['name' => 'categories.create', 'label' => 'Crear'],
         ['name' => 'categories.edit', 'label' => 'Editar'],
         ['name' => 'categories.delete', 'label' => 'Eliminar'],
+    ],
+    'Marcas' => [
+        ['name' => 'brands.view', 'label' => 'Ver'],
+        ['name' => 'brands.create', 'label' => 'Crear'],
+        ['name' => 'brands.edit', 'label' => 'Editar'],
+        ['name' => 'brands.delete', 'label' => 'Eliminar'],
+    ],
+    'Proveedores' => [
+        ['name' => 'suppliers.view', 'label' => 'Ver'],
+        ['name' => 'suppliers.create', 'label' => 'Crear'],
+        ['name' => 'suppliers.edit', 'label' => 'Editar'],
+        ['name' => 'suppliers.delete', 'label' => 'Eliminar'],
     ],
     'Clientes' => [
         ['name' => 'customers.view', 'label' => 'Ver'],

@@ -37,7 +37,10 @@ beforeEach(function () {
     $this->store = Store::factory()->create();
     $this->plan = Plan::factory()->create();
     $this->store->update(['plan_id' => $this->plan->id]);
-    $this->plan->features()->attach(Feature::firstOrCreate(['code' => 'deliveries'], ['name' => 'Entregas'])->id);
+    $this->plan->features()->attach([
+        Feature::firstOrCreate(['code' => 'deliveries'], ['name' => 'Entregas'])->id,
+        Feature::firstOrCreate(['code' => 'pos'], ['name' => 'Punto de Venta'])->id,
+    ]);
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
     $this->user->givePermissionTo(['payments.view', 'payments.reverse', 'logistics.routes.reconcile']);
@@ -346,6 +349,16 @@ test('requires payments reverse permission', function () {
     $withoutPermissionToken = $withoutPermission->createToken('without-reverse')->plainTextToken;
 
     reversePayment($this, $payment, [], $withoutPermissionToken)->assertForbidden();
+});
+
+test('payments view permission does not allow reversal', function () {
+    $payment = reversalPayment($this, reversalOrder($this));
+    $viewer = User::factory()->create(['store_id' => $this->store->id]);
+    $viewer->assignRole('STORE_USER');
+    $viewer->givePermissionTo('payments.view');
+    $viewerToken = $viewer->createToken('payment-viewer')->plainTextToken;
+
+    reversePayment($this, $payment, [], $viewerToken)->assertForbidden();
 });
 
 test('keeps reversed payments visible in received payments', function () {

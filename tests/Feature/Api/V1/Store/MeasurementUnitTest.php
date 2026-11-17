@@ -3,9 +3,11 @@
 use App\Models\Category;
 use App\Models\CommercialOperation;
 use App\Models\DeliveryRoute;
+use App\Models\Feature;
 use App\Models\InventoryMovement;
 use App\Models\MeasurementUnit;
 use App\Models\OperationItem;
+use App\Models\Plan;
 use App\Models\Product;
 use App\Models\RouteStop;
 use App\Models\RouteStopItem;
@@ -14,14 +16,22 @@ use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $storeAdminRole = Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    foreach (['inventory.view', 'inventory.create', 'inventory.edit', 'inventory.delete'] as $permission) {
+        Permission::findOrCreate($permission, 'web');
+    }
+    $storeAdminRole->givePermissionTo(['inventory.view', 'inventory.create', 'inventory.edit', 'inventory.delete']);
 
-    $this->store = Store::factory()->create();
+    $inventory = Feature::firstOrCreate(['code' => 'inventory'], ['name' => 'Inventario']);
+    $plan = Plan::factory()->create();
+    $plan->features()->sync([$inventory->id]);
+    $this->store = Store::factory()->create(['plan_id' => $plan->id]);
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
     $this->category = Category::factory()->belongsToStore($this->store)->create();

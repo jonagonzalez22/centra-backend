@@ -16,7 +16,7 @@ class PriceListController extends Controller
     #[OA\Get(
         path: '/store/price-lists/active',
         summary: 'Obtener listas activas para selección operativa',
-        description: 'Devuelve únicamente las listas activas pertenecientes a la Store autenticada. Está destinado a selección operativa en POS y no requiere permisos administrativos price_lists.*.',
+        description: 'Devuelve únicamente las listas activas pertenecientes a la Store autenticada. Está destinado a selección operativa en POS o edición de pedidos y no requiere permisos administrativos price_lists.*.',
         operationId: 'priceListActive',
         security: [['sanctum' => []]],
         tags: ['Store - Listas de precios']

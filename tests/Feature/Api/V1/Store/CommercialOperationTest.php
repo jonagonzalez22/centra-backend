@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\CashBusinessDateService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -27,6 +28,9 @@ beforeEach(function () {
 
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
     Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    Permission::findOrCreate('pos.view', 'web');
+    Permission::findOrCreate('pos.create', 'web');
+    Role::findByName('STORE_ADMIN', 'web')->givePermissionTo(['pos.view', 'pos.create']);
 
     $this->store = Store::factory()->create();
     $this->plan = Plan::factory()->create();
@@ -130,6 +134,27 @@ test('commercial operation current payment metrics ignore reversed payments', fu
 });
 
 describe('GET /api/v1/store/operations', function () {
+    test('requires the POS feature even when pos.view is granted', function () {
+        $planWithoutPos = Plan::factory()->create();
+        $storeWithoutPos = Store::factory()->create(['plan_id' => $planWithoutPos->id]);
+        $userWithView = User::factory()->create(['store_id' => $storeWithoutPos->id]);
+        $userWithView->assignRole('STORE_USER');
+        $userWithView->givePermissionTo('pos.view');
+
+        $this->actingAs($userWithView, 'sanctum')
+            ->getJson('/api/v1/store/operations')
+            ->assertForbidden();
+    });
+
+    test('requires pos.view to list commercial operations', function () {
+        $userWithoutPermission = User::factory()->create(['store_id' => $this->store->id]);
+        $userWithoutPermission->assignRole('STORE_USER');
+
+        $this->actingAs($userWithoutPermission, 'sanctum')
+            ->getJson('/api/v1/store/operations')
+            ->assertForbidden();
+    });
+
     test('returns operations for the authenticated user store', function () {
         $operation = createOperationForStore($this->store, [
             'type' => 'sale',
@@ -228,6 +253,19 @@ describe('GET /api/v1/store/operations', function () {
 });
 
 describe('GET /api/v1/store/operations/{id}', function () {
+    test('requires pos.view to inspect an operation or its receipt', function () {
+        $operation = createOperationForStore($this->store, ['type' => 'sale']);
+        $userWithoutPermission = User::factory()->create(['store_id' => $this->store->id]);
+        $userWithoutPermission->assignRole('STORE_USER');
+
+        $this->actingAs($userWithoutPermission, 'sanctum')
+            ->getJson("/api/v1/store/operations/{$operation->id}")
+            ->assertForbidden();
+        $this->actingAs($userWithoutPermission, 'sanctum')
+            ->getJson("/api/v1/store/operations/{$operation->id}/receipt")
+            ->assertForbidden();
+    });
+
     test('returns operation when it belongs to user store', function () {
         $operation = createOperationForStore($this->store, [
             'customer_id' => $this->customer->id,
@@ -608,6 +646,41 @@ describe('CommercialOperation::generateNumber()', function () {
 });
 
 describe('POST /api/v1/store/operations - Stock', function () {
+    test('requires pos.create to register a commercial operation', function () {
+        $userWithoutPermission = User::factory()->create(['store_id' => $this->store->id]);
+        $userWithoutPermission->assignRole('STORE_USER');
+
+        $this->actingAs($userWithoutPermission, 'sanctum')
+            ->postJson('/api/v1/store/operations', [
+                'type' => 'sale',
+                'items' => [
+                    ['product_id' => $this->product->id, 'quantity' => 1],
+                ],
+                'payments' => [],
+            ])
+            ->assertForbidden();
+
+        expect(CommercialOperation::query()->count())->toBe(0);
+    });
+
+    test('pos.view alone cannot register a commercial operation', function () {
+        $userWithViewOnly = User::factory()->create(['store_id' => $this->store->id]);
+        $userWithViewOnly->assignRole('STORE_USER');
+        $userWithViewOnly->givePermissionTo('pos.view');
+
+        $this->actingAs($userWithViewOnly, 'sanctum')
+            ->postJson('/api/v1/store/operations', [
+                'type' => 'sale',
+                'items' => [
+                    ['product_id' => $this->product->id, 'quantity' => 1],
+                ],
+                'payments' => [],
+            ])
+            ->assertForbidden();
+
+        expect(CommercialOperation::query()->count())->toBe(0);
+    });
+
     test('rejects a quantity that is not a multiple of the product sale step', function () {
         $this->product->update(['sale_quantity_step' => '0.2500']);
 
@@ -1026,6 +1099,12 @@ describe('POST /api/v1/store/operations - Payments', function () {
     });
 
     test('initial payment rejects stale and pending cash sessions', function (array $sessionState) {
+        if (($sessionState['business_date'] ?? null) === 'previous-business-day') {
+            $sessionState['business_date'] = \Carbon\CarbonImmutable::parse(
+                app(CashBusinessDateService::class)->currentForStore($this->store)
+            )->subDay()->toDateString();
+        }
+
         $this->cashSession->update($sessionState);
         $spm = makePaymentMethodForStore($this->store);
 
@@ -1036,7 +1115,7 @@ describe('POST /api/v1/store/operations - Payments', function () {
             'payments' => [['store_payment_method_id' => $spm->id, 'amount' => 100]],
         ])->assertUnprocessable()->assertJsonValidationErrors('cash_session');
     })->with([
-        'stale open' => [['business_date' => now()->subDay()->toDateString()]],
+        'stale open' => [['business_date' => 'previous-business-day']],
         'pending reconciliation' => [[
             'status' => 'pending_reconciliation',
             'declared_amount' => 1000,

@@ -3,7 +3,9 @@
 use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\DeliveryRoute;
+use App\Models\Feature;
 use App\Models\OperationPayment;
+use App\Models\Plan;
 use App\Models\RouteStop;
 use App\Models\RouteStopCollection;
 use App\Models\Store;
@@ -20,9 +22,13 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
     Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
     Permission::create(['name' => 'payments.view', 'guard_name' => 'web']);
 
-    $this->store = Store::factory()->create();
+    $plan = Plan::factory()->create();
+    $pos = Feature::firstOrCreate(['code' => 'pos'], ['name' => 'Punto de Venta']);
+    $plan->features()->attach($pos->id);
+    $this->store = Store::factory()->create(['plan_id' => $plan->id]);
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
     $this->user->givePermissionTo('payments.view');
@@ -166,6 +172,16 @@ test('requires payments view permission', function (): void {
     $this->actingAs($this->user, 'sanctum')
         ->getJson('/api/v1/store/received-payments')
         ->assertForbidden();
+});
+
+test('store user with payments view permission can consult received payments', function (): void {
+    $viewer = User::factory()->create(['store_id' => $this->store->id]);
+    $viewer->assignRole('STORE_USER');
+    $viewer->givePermissionTo('payments.view');
+
+    $this->actingAs($viewer, 'sanctum')
+        ->getJson('/api/v1/store/received-payments')
+        ->assertOk();
 });
 
 test('lists enabled and historically used payment methods only for the current store', function (): void {

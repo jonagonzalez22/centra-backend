@@ -19,7 +19,13 @@ class AddressResolver extends LocationResolver
     public function resolve(string $input): ?GeocodingResult
     {
         try {
-            return $this->geocodingService->search(trim($input));
+            // A map URL with a textual place is sent to the fixed geocoding
+            // provider as its extracted address, never as an arbitrary URL.
+            $address = AppleMapsLinkResolver::addressFromUrl($input)
+                ?? GoogleMapsLinkResolver::addressFromUrl($input)
+                ?? trim($input);
+
+            return $this->geocodingService->search($address);
         } catch (\RuntimeException) {
             return null;
         }

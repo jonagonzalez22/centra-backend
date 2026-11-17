@@ -24,16 +24,17 @@ uses(RefreshDatabase::class);
 
 beforeEach(function () {
     Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
-    foreach (['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'products.edit'] as $permission) {
+    foreach (['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'inventory.edit'] as $permission) {
         Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
     }
     $feature = Feature::factory()->create(['code' => 'purchases']);
+    $inventoryFeature = Feature::factory()->create(['code' => 'inventory']);
     $plan = Plan::factory()->create();
-    $plan->features()->attach($feature->id);
+    $plan->features()->attach([$feature->id, $inventoryFeature->id]);
     $this->store = \App\Models\Store::factory()->create(['plan_id' => $plan->id]);
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');
-    $this->user->givePermissionTo(['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'products.edit']);
+    $this->user->givePermissionTo(['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'inventory.edit']);
     $this->category = Category::factory()->belongsToStore($this->store)->create();
     $this->supplier = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Proveedor recepción']);
 });
@@ -168,7 +169,7 @@ test('a receipt can update only products that belong to the authenticated store'
     $otherStore = \App\Models\Store::factory()->create(['plan_id' => $otherPlan->id]);
     $otherUser = User::factory()->create(['store_id' => $otherStore->id]);
     $otherUser->assignRole('STORE_ADMIN');
-    $otherUser->givePermissionTo(['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'products.edit']);
+    $otherUser->givePermissionTo(['purchases.view', 'purchases.create', 'purchases.edit', 'purchases.receive', 'purchases.close', 'inventory.edit']);
     $otherCategory = Category::factory()->belongsToStore($otherStore)->create();
     $otherSupplier = Supplier::create(['store_id' => $otherStore->id, 'business_name' => 'Proveedor ajeno']);
     $otherProduct = receiptProduct($otherStore, $otherCategory, $otherSupplier, ['cost' => '20.00']);
@@ -238,6 +239,86 @@ test('receives ordered purchases partially and fully with exact stock and moveme
     expect($purchase->fresh()->status)->toBe('received')
         ->and($firstItem->fresh()->quantity_received)->toBe('5.0000')
         ->and(InventoryMovement::query()->where('product_id', $first->id)->count())->toBe(2);
+});
+
+test('an unassociated purchase stays unassociated through ordering and partial and full receipt', function () {
+    $product = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'name' => 'Bolsas de residuo 45x60',
+        'stock' => '0.0000',
+    ]);
+    $payload = [
+        'supplier_id' => $this->supplier->id,
+        'purchase_type' => 'order',
+        'items' => [[
+            'product_id' => $product->id,
+            'quantity' => '1.0000',
+            'unit_price' => '123.45',
+        ]],
+    ];
+
+    $purchaseId = $this->actingAs($this->user, 'sanctum')
+        ->postJson('/api/v1/store/purchases', $payload)
+        ->assertCreated()
+        ->assertJsonPath('data.items.0.product_name', 'Bolsas de residuo 45x60')
+        ->assertJsonPath('data.items.0.supplier_code', null)
+        ->json('data.id');
+
+    $associationQuery = fn () => SupplierProduct::query()
+        ->where('store_id', $this->store->id)
+        ->where('supplier_id', $this->supplier->id)
+        ->where('product_id', $product->id);
+    expect($associationQuery()->exists())->toBeFalse();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchaseId}/order")
+        ->assertOk()
+        ->assertJsonPath('data.items.0.product_name', 'Bolsas de residuo 45x60')
+        ->assertJsonPath('data.items.0.quantity_ordered', '1.0000')
+        ->assertJsonPath('data.items.0.unit_price', '123.45')
+        ->assertJsonPath('data.items.0.supplier_code', null);
+    expect($associationQuery()->exists())->toBeFalse();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchaseId}/documents", [
+            'type' => 'invoice',
+            'number' => 'FC-A-0001-00000001',
+            'issued_at' => '2026-11-16',
+            'total_amount' => '123.45',
+        ])
+        ->assertCreated();
+    expect($associationQuery()->exists())->toBeFalse();
+
+    $item = PurchaseItem::query()->where('purchase_id', $purchaseId)->sole();
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchaseId}/receipts", receiptPayload($item, '0.4000'))
+        ->assertCreated();
+    expect($associationQuery()->exists())->toBeFalse()
+        ->and($product->fresh()->stock)->toBe('0.4000');
+
+    $this->actingAs($this->user, 'sanctum')
+        ->postJson("/api/v1/store/purchases/{$purchaseId}/receipts", receiptPayload($item->fresh(), '0.6000'))
+        ->assertCreated();
+    expect($associationQuery()->exists())->toBeFalse()
+        ->and($product->fresh()->stock)->toBe('1.0000');
+
+    $receiptIds = PurchaseReceipt::query()->where('purchase_id', $purchaseId)->pluck('id');
+    $movements = InventoryMovement::query()->where('product_id', $product->id)->get();
+    expect($receiptIds)->toHaveCount(2)
+        ->and($movements)->toHaveCount(2)
+        ->and($movements->every(fn (InventoryMovement $movement) =>
+            $movement->type === 'input'
+            && $movement->reference_type === 'purchase_receipt'
+            && $receiptIds->contains($movement->reference_id)
+        ))->toBeTrue();
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson("/api/v1/store/products/{$product->id}/purchase-price-history")
+        ->assertOk()
+        ->assertJsonPath('data.0.supplier.id', $this->supplier->id)
+        ->assertJsonPath('data.0.prices.0.purchase_id', $purchaseId)
+        ->assertJsonPath('data.0.prices.0.purchase_number', Purchase::findOrFail($purchaseId)->purchase_number)
+        ->assertJsonPath('data.0.prices.0.unit_price', '123.45');
 });
 
 test('rejects non receivable states, over receipts, foreign items, and rolls back the entire receipt', function () {

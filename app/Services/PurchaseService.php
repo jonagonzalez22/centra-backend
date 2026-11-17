@@ -93,16 +93,13 @@ class PurchaseService
                     throw ValidationException::withMessages(['items' => 'Los productos con stock compartido no pueden emitirse en una orden de compra.']);
                 }
                 $association = $associations->get($product->id);
-                if (! $association) {
-                    throw ValidationException::withMessages(['items' => 'Todos los productos deben seguir asociados al proveedor para emitir la orden.']);
-                }
                 $subtotal = MoneyMath::multiplyQuantityByPrice($item->quantity_ordered, $item->unit_price);
                 $total = MoneyMath::add($total, $subtotal);
                 $item->update([
                     'product_name' => $product->name,
                     'product_sku' => $product->sku,
-                    'supplier_code' => $association->supplier_code,
-                    'supplier_product_name' => $association->supplier_product_name,
+                    'supplier_code' => $association?->supplier_code,
+                    'supplier_product_name' => $association?->supplier_product_name,
                     'measurement_unit_code' => $product->stockMeasurementUnit->code,
                     'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
                     'subtotal' => $subtotal,
@@ -196,8 +193,8 @@ class PurchaseService
             $item->update([
                 'product_name' => $product->name,
                 'product_sku' => $product->sku,
-                'supplier_code' => $association->supplier_code,
-                'supplier_product_name' => $association->supplier_product_name,
+                'supplier_code' => $association?->supplier_code,
+                'supplier_product_name' => $association?->supplier_product_name,
                 'measurement_unit_code' => $product->stockMeasurementUnit->code,
                 'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
                 'quantity_ordered' => $line['quantity'],
@@ -242,9 +239,6 @@ class PurchaseService
                 throw ValidationException::withMessages(['items' => 'Los productos con stock compartido no pueden comprarse directamente. Seleccioná el producto que administra el stock físico.']);
             }
             $association = $associations->get($product->id);
-            if (! $association) {
-                throw ValidationException::withMessages(['items' => 'El producto seleccionado no está asociado a este proveedor.']);
-            }
             $quantity = QuantityMath::normalize($item['quantity']);
             if (! QuantityMath::isPositive($quantity)) {
                 throw ValidationException::withMessages(['items' => 'La cantidad debe ser mayor a cero.']);
@@ -272,8 +266,8 @@ class PurchaseService
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'product_sku' => $product->sku,
-                'supplier_code' => $association->supplier_code,
-                'supplier_product_name' => $association->supplier_product_name,
+                'supplier_code' => $association?->supplier_code,
+                'supplier_product_name' => $association?->supplier_product_name,
                 'measurement_unit_code' => $product->stockMeasurementUnit->code,
                 'measurement_unit_symbol' => $product->stockMeasurementUnit->symbol,
                 'quantity_ordered' => $line['quantity'],

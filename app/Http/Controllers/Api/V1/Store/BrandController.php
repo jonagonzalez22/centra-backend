@@ -12,6 +12,21 @@ use Illuminate\Http\Request;
 
 class BrandController extends Controller
 {
+    public function operationalOptions(Request $request): JsonResponse
+    {
+        $brands = Brand::forStore($request->user()->store_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_active']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Opciones de marcas obtenidas exitosamente.',
+            'data' => ['items' => $brands],
+            'errors' => null,
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $request->validate(['name' => ['nullable', 'string'], 'is_active' => ['nullable', 'boolean']]);

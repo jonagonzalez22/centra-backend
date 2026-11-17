@@ -13,7 +13,11 @@ use Spatie\Permission\Models\Role;
 
 class StoreUserController extends Controller
 {
-    private const ADMIN_ROLES = ['SUPER_ADMIN', 'STORE_ADMIN'];
+    /**
+     * Roles that may be assigned from the tenant administration boundary.
+     * All other roles belong to platform administration or are not tenant roles.
+     */
+    public const ASSIGNABLE_EMPLOYEE_ROLES = ['STORE_USER', 'STORE_DRIVER'];
 
     /**
      * Filter options for the users list.
@@ -48,8 +52,7 @@ class StoreUserController extends Controller
     public function filterOptions(Request $request): JsonResponse
     {
         $roles = Role::select('id', 'name')
-            ->whereNotIn('name', self::ADMIN_ROLES)
-            ->where('name', 'NOT LIKE', 'BACKOFFICE%')
+            ->whereIn('name', self::ASSIGNABLE_EMPLOYEE_ROLES)
             ->orderBy('name')
             ->get();
 
@@ -372,6 +375,15 @@ class StoreUserController extends Controller
             ], 403);
         }
 
+        if ($request->filled('role') && ! $this->canManageRoleAssignment($user)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No podés modificar el rol de un usuario administrativo.',
+                'data' => null,
+                'errors' => ['role' => ['No podés cambiar el rol de un usuario administrativo.']],
+            ], 403);
+        }
+
         $user->fill($request->only(['name', 'email']));
 
         if ($request->filled('password')) {
@@ -464,10 +476,20 @@ class StoreUserController extends Controller
 
     /**
      * Check if the authenticated user can assign the given role.
-     * STORE_ADMIN cannot assign administrative roles (SUPER_ADMIN, STORE_ADMIN).
+     * Only employee roles may be assigned from a store.
      */
     private function canAssignRole(string $role): bool
     {
-        return ! in_array($role, self::ADMIN_ROLES, true);
+        return in_array($role, self::ASSIGNABLE_EMPLOYEE_ROLES, true);
+    }
+
+    /**
+     * Existing administrative or unknown global roles cannot be changed from a store.
+     */
+    private function canManageRoleAssignment(User $user): bool
+    {
+        return $user->roles->every(
+            fn (Role $role) => in_array($role->name, self::ASSIGNABLE_EMPLOYEE_ROLES, true)
+        );
     }
 }

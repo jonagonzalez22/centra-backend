@@ -199,6 +199,16 @@ class ProductController extends Controller
         $initialSuppliers = $validated['suppliers'] ?? [];
         unset($validated['suppliers']);
 
+        if ($initialSuppliers !== []) {
+            $store = $request->user()->store;
+            if (! $store || ! $store->hasFeature('purchases')) {
+                return $this->forbiddenSupplierAssociations('Tu plan actual no incluye la funcionalidad de compras.');
+            }
+            if (! $request->user()->getAllPermissions()->contains('name', 'suppliers.edit')) {
+                return $this->forbiddenSupplierAssociations('No tenés permiso para administrar asociaciones de proveedores.');
+            }
+        }
+
         return DB::transaction(function () use ($request, $storeId, $validated, $initialSuppliers): JsonResponse {
             $source = isset($validated['stock_source_product_id'])
                 ? Product::forStore($storeId)->whereKey($validated['stock_source_product_id'])->lockForUpdate()->first()
@@ -285,6 +295,16 @@ class ProductController extends Controller
                 'data' => ProductResource::make($product), 'errors' => null,
             ], 201);
         });
+    }
+
+    private function forbiddenSupplierAssociations(string $message): JsonResponse
+    {
+        return response()->json([
+            'status' => 'error',
+            'message' => $message,
+            'data' => null,
+            'errors' => ['auth' => [$message]],
+        ], 403);
     }
 
     /**

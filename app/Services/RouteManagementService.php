@@ -33,6 +33,7 @@ class RouteManagementService
         private RouteStopItemStockConsumptionResolver $routeStopItemStockConsumptionResolver,
         private InventoryValuationService $inventoryValuationService,
         private InventoryMovementService $inventoryMovementService,
+        private DeliveryFeatureEligibilityService $deliveryFeatureEligibility,
     ) {}
 
     /**
@@ -41,6 +42,7 @@ class RouteManagementService
     public function create(array $data, string $storeId, User $user): DeliveryRoute
     {
         return DB::transaction(function () use ($data, $storeId, $user) {
+            $this->deliveryFeatureEligibility->lockStoreForDeliveryWrite($storeId);
             $this->validateVehicle($data['vehicle_id'], $storeId, $data['operational_date']);
             $this->validateDriver($data['driver_id'], $storeId);
 
@@ -356,6 +358,7 @@ class RouteManagementService
     public function plan(DeliveryRoute $route, string $departureTime, User $user): DeliveryRoute
     {
         return DB::transaction(function () use ($route, $departureTime, $user) {
+            $this->deliveryFeatureEligibility->lockStoreForDeliveryWrite($route->store_id);
             if ($route->status !== 'draft') {
                 throw $this->validationError('Solo se pueden planificar rutas en estado draft.');
             }
@@ -935,6 +938,7 @@ class RouteManagementService
     public function confirmLoad(DeliveryRoute $route, array $loadedQuantities, User $user): DeliveryRoute
     {
         return DB::transaction(function () use ($route, $loadedQuantities, $user) {
+            $this->deliveryFeatureEligibility->lockStoreForDeliveryWrite($route->store_id);
             if ($route->status !== 'planned') {
                 throw $this->validationError('Solo se puede confirmar carga de rutas planificadas.');
             }
@@ -1025,6 +1029,7 @@ class RouteManagementService
     public function dispatch(DeliveryRoute $route, User $user): DeliveryRoute
     {
         return DB::transaction(function () use ($route, $user) {
+            $this->deliveryFeatureEligibility->lockStoreForDeliveryWrite($route->store_id);
             if ($route->status !== 'loaded') {
                 throw $this->validationError('Solo se pueden despachar rutas en estado loaded.');
             }
@@ -1910,6 +1915,7 @@ class RouteManagementService
     public function bulkLoad(DeliveryRoute $route, array $products, User $user): DeliveryRoute
     {
         return DB::transaction(function () use ($route, $products, $user) {
+            $this->deliveryFeatureEligibility->lockStoreForDeliveryWrite($route->store_id);
             if ($route->status !== 'planned') {
                 throw $this->validationError('Solo se puede confirmar carga de rutas planificadas.');
             }

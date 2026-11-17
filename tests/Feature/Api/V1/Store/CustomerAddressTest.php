@@ -10,6 +10,7 @@ use App\Models\Province;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -18,7 +19,17 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-    Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $storeAdmin = Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $permissions = [
+        'customer_addresses.view',
+        'customer_addresses.create',
+        'customer_addresses.edit',
+        'customer_addresses.delete',
+    ];
+    foreach ($permissions as $permission) {
+        Permission::findOrCreate($permission, 'web');
+    }
+    $storeAdmin->givePermissionTo($permissions);
 
     $this->store = Store::factory()->create();
 

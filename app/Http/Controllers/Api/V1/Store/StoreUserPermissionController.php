@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\StoreUserPermissionRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Support\PermissionRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -89,13 +90,14 @@ class StoreUserPermissionController extends Controller
      *     @OA\JsonContent(
      *       required={"permissions"},
      *
-      *       @OA\Property(
-      *         property="permissions",
-      *         type="array",
-      *         @OA\Items(type="string"),
-      *         example={},
-      *         description="Lista de nombres de permisos directos a asignar. Puede ser un array vacío."
-      *       )
+     *       @OA\Property(
+     *         property="permissions",
+     *         type="array",
+     *
+     *         @OA\Items(type="string"),
+     *         example={},
+     *         description="Lista de nombres de permisos directos a asignar. Puede ser un array vacío."
+     *       )
      *     )
      *   ),
      *
@@ -153,6 +155,32 @@ class StoreUserPermissionController extends Controller
                 'data' => null,
                 'errors' => ['id' => ['No podés modificar los permisos de un SUPER_ADMIN.']],
             ], 403);
+        }
+
+        if (! $user->roles->every(
+            fn ($role) => in_array($role->name, StoreUserController::ASSIGNABLE_EMPLOYEE_ROLES, true)
+        )) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No podés modificar los permisos de un usuario administrativo.',
+                'data' => null,
+                'errors' => ['id' => ['Solo podés administrar permisos de empleados de tienda.']],
+            ], 403);
+        }
+
+        $targetRoles = $user->roles->pluck('name')->all();
+        foreach ($request->permissions as $permission) {
+            // Some historical employee records predate tenant roles. Keep their
+            // existing management flow compatible; they are still constrained
+            // by the canonical delegable allowlist and same-store query.
+            if ($targetRoles !== [] && ! PermissionRegistry::isDelegableTo($permission, $targetRoles)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El permiso no puede delegarse al rol del usuario.',
+                    'data' => null,
+                    'errors' => ['permissions' => ["El permiso '{$permission}' no es compatible con el rol del usuario."]],
+                ], 422);
+            }
         }
 
         $user->syncPermissions($request->permissions);

@@ -63,6 +63,9 @@ class UpdateProductRequest extends FormRequest
             'stock_consumption_quantity' => ['nullable', DecimalQuantity::positive()],
             'is_active' => ['sometimes', 'boolean'],
             'is_sellable' => ['sometimes', 'boolean'],
+            // Supplier-product relations are created through the protected
+            // product creation flow or the dedicated supplier endpoints.
+            'suppliers' => ['prohibited'],
         ];
     }
 

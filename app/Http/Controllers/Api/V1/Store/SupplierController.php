@@ -7,11 +7,31 @@ use App\Http\Requests\Api\V1\Store\StoreSupplierRequest;
 use App\Http\Requests\Api\V1\Store\UpdateSupplierRequest;
 use App\Http\Resources\SupplierResource;
 use App\Models\Supplier;
+use App\Models\Purchase;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SupplierController extends Controller
 {
+    public function operationalOptions(Request $request): JsonResponse
+    {
+        $request->validate(['search' => ['nullable', 'string', 'max:255']]);
+
+        $suppliers = Supplier::forStore($request->user()->store_id)
+            ->where('is_active', true)
+            ->when($request->filled('search'), fn ($query) => $query->where('business_name', 'like', '%'.$request->input('search').'%'))
+            ->orderBy('business_name')
+            ->get(['id', 'business_name']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Opciones de proveedores obtenidas exitosamente.',
+            'data' => ['items' => $suppliers],
+            'errors' => null,
+        ]);
+    }
+
     public function index(Request $r): JsonResponse
     {
         $r->validate(['search' => ['nullable', 'string'], 'is_active' => ['nullable', 'boolean']]);
@@ -49,7 +69,17 @@ class SupplierController extends Controller
         if (! $s) {
             return $this->notFound();
         }
-        $s->delete();
+        if ($s->supplierProducts()->exists() || Purchase::forStore($r->user()->store_id)->where('supplier_id', $s->id)->exists()) {
+            return $this->inUse();
+        }
+
+        try {
+            $s->delete();
+        } catch (QueryException) {
+            // The explicit precondition provides a clear response in the usual
+            // case; retain it for a concurrent reference created after it.
+            return $this->inUse();
+        }
 
         return response()->json(['status' => 'success', 'message' => 'Proveedor eliminado exitosamente.', 'data' => null, 'errors' => null]);
     }
@@ -64,5 +94,15 @@ class SupplierController extends Controller
     private function notFound(): JsonResponse
     {
         return response()->json(['status' => 'error', 'message' => 'Proveedor no encontrado.', 'data' => null, 'errors' => null], 404);
+    }
+
+    private function inUse(): JsonResponse
+    {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'No se puede eliminar el proveedor porque tiene asociaciones o compras relacionadas.',
+            'data' => null,
+            'errors' => ['supplier' => ['El proveedor está siendo utilizado y debe conservarse por motivos comerciales.']],
+        ], 409);
     }
 }

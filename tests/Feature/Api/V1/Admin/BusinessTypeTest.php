@@ -13,6 +13,10 @@ beforeEach(function () {
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
     Role::create(['name' => 'SUPER_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'BACKOFFICE_USER', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
+    Role::create(['name' => 'STORE_DRIVER', 'guard_name' => 'web']);
 });
 
 test('api can list all business types', function () {
@@ -206,9 +210,50 @@ test('api cannot access business types without authentication', function () {
     $response->assertStatus(401);
 });
 
-test('api cannot access business types without SUPER_ADMIN role', function () {
+test('backoffice user can list business types', function () {
     /** @var \Tests\TestCase $this */
     $user = User::factory()->create();
+    $user->assignRole('BACKOFFICE_USER');
+    $token = $user->createToken('test-token')->plainTextToken;
+
+    BusinessType::create(['name' => 'Ferretería', 'description' => 'Test', 'status' => 'active']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->getJson('/api/v1/admin/business-types')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items');
+});
+
+test('backoffice user cannot mutate business types', function () {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole('BACKOFFICE_USER');
+    $token = $user->createToken('test-token')->plainTextToken;
+    $businessType = BusinessType::create(['name' => 'Ferretería', 'description' => 'Original', 'status' => 'active']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->postJson('/api/v1/admin/business-types', ['name' => 'No permitido', 'status' => 'active'])
+        ->assertForbidden();
+    $this->assertDatabaseMissing('business_types', ['name' => 'No permitido']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->putJson("/api/v1/admin/business-types/{$businessType->id}", ['name' => 'No permitido'])
+        ->assertForbidden();
+    $this->withHeader('Authorization', "Bearer $token")
+        ->patchJson("/api/v1/admin/business-types/{$businessType->id}", ['name' => 'Tampoco permitido'])
+        ->assertForbidden();
+    $this->assertDatabaseHas('business_types', ['id' => $businessType->id, 'name' => 'Ferretería']);
+
+    $this->withHeader('Authorization', "Bearer $token")
+        ->deleteJson("/api/v1/admin/business-types/{$businessType->id}")
+        ->assertForbidden();
+    $this->assertDatabaseHas('business_types', ['id' => $businessType->id]);
+});
+
+test('store roles cannot access global business types', function (string $role) {
+    /** @var \Tests\TestCase $this */
+    $user = User::factory()->create();
+    $user->assignRole($role);
     $token = $user->createToken('test-token')->plainTextToken;
 
     BusinessType::create(['name' => 'Ferretería', 'description' => 'Test', 'status' => 'active']);
@@ -218,4 +263,4 @@ test('api cannot access business types without SUPER_ADMIN role', function () {
 
     $response->assertStatus(403)
         ->assertJsonPath('message', 'No tenés permisos para realizar esta acción.');
-});
+})->with(['STORE_ADMIN', 'STORE_USER', 'STORE_DRIVER']);

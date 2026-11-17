@@ -8,6 +8,8 @@ use App\Http\Resources\StoreResource;
 use App\Models\BusinessType;
 use App\Models\Plan;
 use App\Models\Store;
+use App\Services\DeliveryFeatureEligibilityService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
 
@@ -554,10 +556,37 @@ class StoreController extends Controller
             ]
         )
     )]
-    public function update(StoreRequest $request, string $id)
+    public function update(StoreRequest $request, string $id, DeliveryFeatureEligibilityService $deliveryFeatureEligibility)
     {
-        $store = Store::findOrFail($id);
-        $store->update($request->validated());
+        $validated = $request->validated();
+        $initialPlanId = Store::whereKey($id)->value('plan_id');
+        $targetPlanId = $validated['plan_id'] ?? null;
+
+        $store = DB::transaction(function () use ($id, $validated, $initialPlanId, $targetPlanId, $deliveryFeatureEligibility) {
+            // Plan rows are locked before the store row, matching plan feature
+            // synchronization. This makes the effective-feature comparison and
+            // the subsequent store assignment one atomic decision.
+            $plans = Plan::query()
+                ->whereIn('id', collect([$initialPlanId, $targetPlanId])->filter()->unique())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $store = Store::whereKey($id)->lockForUpdate()->firstOrFail();
+            $currentPlan = $plans->get($store->plan_id);
+            $targetPlan = $targetPlanId ? $plans->get($targetPlanId) : null;
+
+            if ($deliveryFeatureEligibility->planIncludesDeliveries($currentPlan)
+                && ! $deliveryFeatureEligibility->planIncludesDeliveries($targetPlan)) {
+                $deliveryFeatureEligibility->assertStoresCanLoseDeliveries([$store->id]);
+            }
+
+            $store->update($validated);
+
+            return $store;
+        });
+
         $store->load(['businessType', 'plan']);
 
         return response()->json([

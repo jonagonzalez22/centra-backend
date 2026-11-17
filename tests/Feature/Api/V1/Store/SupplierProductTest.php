@@ -260,6 +260,25 @@ test('requires supplier permissions and the purchases feature', function () {
     $this->actingAs($disabledUser, 'sanctum')->postJson("/api/v1/store/suppliers/{$disabledSupplier->id}/products/bulk", ['product_ids' => [productForSupplier($disabledStore, Category::factory()->belongsToStore($disabledStore)->create())->id]])->assertForbidden();
 });
 
+test('purchase creators can read scoped supplier products and candidates without supplier permissions', function () {
+    $product = productForSupplier($this->store, $this->category, ['name' => 'Mortimer local', 'sku' => 'MORT-1']);
+    SupplierProduct::create(['store_id' => $this->store->id, 'supplier_id' => $this->supplier->id, 'product_id' => $product->id, 'supplier_code' => 'M-1']);
+    $purchaseUser = User::factory()->create(['store_id' => $this->store->id]);
+    $purchaseUser->assignRole('STORE_ADMIN');
+    Permission::firstOrCreate(['name' => 'purchases.create', 'guard_name' => 'web']);
+    $purchaseUser->givePermissionTo('purchases.create');
+
+    $this->actingAs($purchaseUser, 'sanctum')->getJson("/api/v1/store/purchases/suppliers/{$this->supplier->id}/products?page=1&per_page=20&search=MORT")
+        ->assertOk()->assertJsonPath('data.items.0.product.id', $product->id)->assertJsonPath('data.items.0.supplier_code', 'M-1');
+    $this->actingAs($purchaseUser, 'sanctum')->getJson("/api/v1/store/purchases/suppliers/{$this->supplier->id}/products/candidates?search=MORT&include_associated=1")
+        ->assertOk()->assertJsonPath('data.items.0.id', $product->id)->assertJsonPath('data.items.0.is_associated', true);
+    $this->actingAs($purchaseUser, 'sanctum')->postJson("/api/v1/store/suppliers/{$this->supplier->id}/products/bulk", ['product_ids' => [$product->id]])->assertForbidden();
+
+    $otherStore = Store::factory()->create(['plan_id' => $this->store->plan_id]);
+    $otherSupplier = Supplier::create(['store_id' => $otherStore->id, 'business_name' => 'Ajeno']);
+    $this->actingAs($purchaseUser, 'sanctum')->getJson("/api/v1/store/purchases/suppliers/{$otherSupplier->id}/products")->assertNotFound();
+});
+
 test('maintains at most one preferred supplier per product and allows clearing it', function () {
     $product = productForSupplier($this->store, $this->category);
     $otherProduct = productForSupplier($this->store, $this->category);

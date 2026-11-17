@@ -8,12 +8,15 @@ use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    $storeAdminRole = Role::firstOrCreate(['name' => 'STORE_ADMIN', 'guard_name' => 'web']);
+    Permission::findOrCreate('pos.view', 'web');
+    $storeAdminRole->givePermissionTo('pos.view');
     $this->pos = Feature::firstOrCreate(['code' => 'pos'], ['name' => 'Punto de Venta']);
     $this->inventory = Feature::firstOrCreate(['code' => 'inventory'], ['name' => 'Gestión de Stock']);
 
@@ -112,7 +115,7 @@ describe('GET /api/v1/store/operations/products/{id}', function () {
         commercialProductDetail($this->user, $otherStoreProduct->id)->assertNotFound();
     });
 
-    test('requires POS and does not change the existing product detail endpoint', function () {
+    test('requires POS and keeps the administrative product detail behind Inventory', function () {
         $inventoryOnlyPlan = Plan::factory()->create();
         $inventoryOnlyPlan->features()->sync([$this->inventory->id]);
         $inventoryStore = Store::factory()->create(['plan_id' => $inventoryOnlyPlan->id]);
@@ -123,8 +126,6 @@ describe('GET /api/v1/store/operations/products/{id}', function () {
         commercialProductDetail($inventoryUser, $product->id)->assertForbidden();
         test()->actingAs($this->user, 'sanctum')
             ->getJson("/api/v1/store/products/{$product->id}")
-            ->assertOk()
-            ->assertJsonPath('data.id', $product->id)
-            ->assertJsonPath('data.cost', 125);
+            ->assertForbidden();
     });
 });

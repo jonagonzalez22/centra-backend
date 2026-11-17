@@ -62,11 +62,20 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
-        Route::post('geocoding/search', [GeocodingController::class, 'search'])->name('geocoding.search');
+        // Geocoding is an auxiliary operation of customer-address editing. It
+        // must not be available to drivers, backoffice users, or read-only users.
+        Route::post('geocoding/search', [GeocodingController::class, 'search'])
+            ->middleware([
+                'role:STORE_ADMIN|STORE_USER',
+                'feature:customers',
+                'permission:customer_addresses.create|customer_addresses.edit',
+                'throttle:geocoding',
+            ])
+            ->name('geocoding.search');
     });
 
     // Driver Execution API — authenticated drivers complete their assigned deliveries
-    Route::middleware(['auth:sanctum', 'role:STORE_DRIVER'])->prefix('driver')->group(function () {
+    Route::middleware(['auth:sanctum', 'role:STORE_DRIVER', 'feature:deliveries'])->prefix('driver')->group(function () {
         Route::get('active-route', [DriverExecutionController::class, 'activeRoute']);
         Route::post('stops/{stop}/arrive', [DriverExecutionController::class, 'arrive']);
         Route::post('stops/{stop}/complete', [DriverExecutionController::class, 'complete']);
@@ -75,7 +84,7 @@ Route::prefix('v1')->group(function () {
         Route::get('stops/{stop}', [DriverStopController::class, 'show']);
         Route::get('routes/{route}/available-surplus', [DriverExtraSaleController::class, 'availableSurplus']);
         Route::post('stops/{stop}/extra-sales', [DriverExtraSaleController::class, 'addExtraSale']);
-        Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
+        Route::get('payment-methods', [DriverExecutionController::class, 'paymentMethods'])
             ->name('store.payment-methods.index');
         Route::get('rejection-reasons', [RejectionReasonController::class, 'index'])
             ->name('store.logistics.rejection-reasons.index');
@@ -107,9 +116,13 @@ Route::prefix('v1')->group(function () {
                 Route::delete('stores/{id}', [StoreController::class, 'destroy'])
                     ->middleware('permission:stores.delete');
 
-                Route::apiResource('business-types', BusinessTypeController::class);
+                // Backoffice users can consult these global catalogs, but only
+                // platform administrators may change them.
+                Route::apiResource('business-types', BusinessTypeController::class)
+                    ->only(['index', 'show']);
 
-                Route::apiResource('features', FeatureController::class);
+                Route::apiResource('features', FeatureController::class)
+                    ->only(['index', 'show']);
 
                 Route::get('payment-methods', [AdminPaymentMethodController::class, 'index'])
                     ->middleware('permission:payment_methods.view');
@@ -124,6 +137,12 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::middleware('role:SUPER_ADMIN')->group(function () {
+                Route::apiResource('business-types', BusinessTypeController::class)
+                    ->only(['store', 'update', 'destroy']);
+
+                Route::apiResource('features', FeatureController::class)
+                    ->only(['store', 'update', 'destroy']);
+
                 Route::apiResource('plans', PlanController::class);
                 Route::post('plans/{plan}/sync-features', [PlanController::class, 'syncFeatures']);
 
@@ -152,16 +171,26 @@ Route::prefix('v1')->group(function () {
     Route::prefix('store')
         ->middleware(['auth:sanctum', 'throttle:api', 'role:STORE_ADMIN|STORE_USER'])
         ->group(function () {
-            Route::get('categories', [CategoryController::class, 'index'])->name('store.categories.index');
-            Route::get('categories/{category}', [CategoryController::class, 'show'])->name('store.categories.show');
-            Route::post('categories', [CategoryController::class, 'store'])->name('store.categories.store');
-            Route::put('categories/{category}', [CategoryController::class, 'update'])->name('store.categories.update');
-            Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->name('store.categories.destroy');
-            Route::get('brands', [BrandController::class, 'index'])->middleware('permission:brands.view')->name('store.brands.index');
-            Route::get('brands/{brand}', [BrandController::class, 'show'])->middleware('permission:brands.view')->name('store.brands.show');
-            Route::post('brands', [BrandController::class, 'store'])->middleware('permission:brands.create')->name('store.brands.store');
-            Route::put('brands/{brand}', [BrandController::class, 'update'])->middleware('permission:brands.edit')->name('store.brands.update');
-            Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
+            Route::middleware('feature:inventory')->group(function () {
+                Route::get('products/category-options', [CategoryController::class, 'operationalOptions'])
+                    ->middleware('permission:inventory.create|inventory.edit|inventory.view')
+                    ->name('store.products.category-options');
+                Route::get('categories', [CategoryController::class, 'index'])->middleware('permission:categories.view')->name('store.categories.index');
+                Route::get('categories/{category}', [CategoryController::class, 'show'])->middleware('permission:categories.view')->name('store.categories.show');
+                Route::post('categories', [CategoryController::class, 'store'])->middleware('permission:categories.create')->name('store.categories.store');
+                Route::put('categories/{category}', [CategoryController::class, 'update'])->middleware('permission:categories.edit')->name('store.categories.update');
+                Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->middleware('permission:categories.delete')->name('store.categories.destroy');
+            });
+            Route::middleware('feature:inventory')->group(function () {
+                Route::get('products/brand-options', [BrandController::class, 'operationalOptions'])
+                    ->middleware('permission:inventory.create|inventory.edit')
+                    ->name('store.products.brand-options');
+                Route::get('brands', [BrandController::class, 'index'])->middleware('permission:brands.view')->name('store.brands.index');
+                Route::get('brands/{brand}', [BrandController::class, 'show'])->middleware('permission:brands.view')->name('store.brands.show');
+                Route::post('brands', [BrandController::class, 'store'])->middleware('permission:brands.create')->name('store.brands.store');
+                Route::put('brands/{brand}', [BrandController::class, 'update'])->middleware('permission:brands.edit')->name('store.brands.update');
+                Route::delete('brands/{brand}', [BrandController::class, 'destroy'])->middleware('permission:brands.delete')->name('store.brands.destroy');
+            });
             Route::get('received-payments', [ReceivedPaymentController::class, 'index'])
                 ->middleware('permission:payments.view')
                 ->name('store.received-payments.index');
@@ -172,6 +201,12 @@ Route::prefix('v1')->group(function () {
                 ->middleware('permission:payments.reverse')
                 ->name('store.received-payments.reverse');
             Route::middleware('feature:purchases')->group(function () {
+                Route::get('purchases/supplier-options', [SupplierController::class, 'operationalOptions'])
+                    ->middleware('permission:purchases.create|purchases.edit|suppliers.edit');
+                Route::get('purchases/suppliers/{supplier}/products', [SupplierProductController::class, 'index'])
+                    ->middleware('permission:purchases.create|purchases.edit');
+                Route::get('purchases/suppliers/{supplier}/products/candidates', [SupplierProductController::class, 'candidates'])
+                    ->middleware('permission:purchases.create|purchases.edit');
                 Route::get('purchases', [PurchaseController::class, 'index'])->middleware('permission:purchases.view');
                 Route::get('products/{product}/purchase-price-history', [ProductController::class, 'purchasePriceHistory'])->middleware('permission:purchases.view');
                 Route::post('purchases', [PurchaseController::class, 'store'])->middleware('permission:purchases.create');
@@ -199,36 +234,44 @@ Route::prefix('v1')->group(function () {
                 Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->middleware('permission:suppliers.delete');
             });
 
-            Route::get('inventory/movements', [InventoryController::class, 'index'])->name('store.inventory.movements');
+            Route::get('inventory/movements', [InventoryController::class, 'index'])
+                ->middleware(['feature:inventory', 'permission:inventory.view'])
+                ->name('store.inventory.movements');
             Route::post('inventory/adjust', [InventoryController::class, 'adjust'])
                 ->middleware('permission:inventory.adjust')
                 ->name('store.inventory.adjust');
 
-            Route::get('products', [ProductController::class, 'index'])->name('store.products.index');
+            Route::middleware('feature:inventory')->group(function () {
+                Route::get('products', [ProductController::class, 'index'])->middleware('permission:inventory.view')->name('store.products.index');
+                Route::get('products/search', [ProductSearchController::class, '__invoke'])
+                    ->middleware('permission:inventory.view')
+                    ->name('store.products.search');
+                Route::get('products/generate-sku', [GenerateSkuController::class, '__invoke'])
+                    ->middleware('permission:inventory.create')
+                    ->name('store.products.generate-sku');
+                Route::get('products/{product}', [ProductController::class, 'show'])->middleware('permission:inventory.view')->name('store.products.show');
+                Route::post('products', [ProductController::class, 'store'])->middleware('permission:inventory.create')->name('store.products.store');
+                Route::put('products/{product}', [ProductController::class, 'update'])->middleware('permission:inventory.edit')->name('store.products.update');
+                Route::delete('products/{product}', [ProductController::class, 'destroy'])->middleware('permission:inventory.delete')->name('store.products.destroy');
+            });
             Route::get('measurement-units', [MeasurementUnitController::class, 'index'])
                 ->name('store.measurement-units.index');
-            Route::get('products/search', [ProductSearchController::class, '__invoke'])
-                ->middleware('feature:inventory')
-                ->name('store.products.search');
-            Route::get('products/generate-sku', [GenerateSkuController::class, '__invoke'])
-                ->middleware('feature:inventory')
-                ->name('store.products.generate-sku');
-            Route::get('products/{product}', [ProductController::class, 'show'])->name('store.products.show');
-            Route::post('products', [ProductController::class, 'store'])->name('store.products.store');
-            Route::put('products/{product}', [ProductController::class, 'update'])->name('store.products.update');
-            Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('store.products.destroy');
 
             Route::get('permissions/catalog', [PermissionCatalogController::class, 'index'])->name('store.permissions.catalog');
 
             Route::get('reports/summary', ReportsSummaryController::class)
                 ->middleware('feature:reports')
+                ->middleware('permission:reports.view')
                 ->name('store.reports.summary');
             Route::get('reports/analytics', ReportsAnalyticsController::class)
                 ->middleware('feature:reports')
+                ->middleware('permission:reports.view')
                 ->name('store.reports.analytics');
 
             Route::middleware('feature:pos')->group(function () {
-                Route::get('price-lists/active', [PriceListController::class, 'active'])->name('store.price-lists.active');
+                Route::get('price-lists/active', [PriceListController::class, 'active'])
+                    ->middleware('permission:pos.view|orders.edit')
+                    ->name('store.price-lists.active');
                 Route::get('price-lists', [PriceListController::class, 'index'])->middleware('permission:price_lists.view')->name('store.price-lists.index');
                 Route::get('price-lists/{price_list}', [PriceListController::class, 'show'])->middleware('permission:price_lists.view')->name('store.price-lists.show');
                 Route::post('price-lists', [PriceListController::class, 'store'])->middleware('permission:price_lists.create')->name('store.price-lists.store');
@@ -261,9 +304,14 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:sales.cancel')
                     ->name('store.sales.cancel');
                 Route::get('operations/products/search', CommercialProductCatalogController::class)
+                    ->middleware('permission:pos.view|orders.edit')
                     ->name('store.operations.products.search');
                 Route::get('operations/products/{id}', CommercialProductDetailController::class)
+                    ->middleware('permission:pos.view|orders.edit')
                     ->name('store.operations.products.show');
+                Route::get('operations/payment-methods', [StorePaymentMethodController::class, 'commercialIndex'])
+                    ->middleware('permission:pos.create|orders.collect')
+                    ->name('store.operations.payment-methods.index');
                 Route::get('orders', [OrderController::class, 'index'])
                     ->middleware('permission:orders.view')
                     ->name('store.orders.index');
@@ -290,10 +338,18 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:orders.collect')
                     ->name('store.orders.payments.store');
 
-                Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
-                Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');
-                Route::get('operations/{operation}/receipt', [CommercialOperationController::class, 'receipt'])->name('store.operations.receipt');
-                Route::post('operations', [CommercialOperationController::class, 'store'])->name('store.operations.store');
+                Route::get('operations', [CommercialOperationController::class, 'index'])
+                    ->middleware('permission:pos.view')
+                    ->name('store.operations.index');
+                Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])
+                    ->middleware('permission:pos.view')
+                    ->name('store.operations.show');
+                Route::get('operations/{operation}/receipt', [CommercialOperationController::class, 'receipt'])
+                    ->middleware('permission:pos.view')
+                    ->name('store.operations.receipt');
+                Route::post('operations', [CommercialOperationController::class, 'store'])
+                    ->middleware('permission:pos.create')
+                    ->name('store.operations.store');
                 Route::put('operations/{operation}/reschedule', [CommercialOperationController::class, 'reschedule'])
                     ->middleware('permission:orders.edit')
                     ->name('store.operations.reschedule');
@@ -306,23 +362,29 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::middleware('feature:customers')->group(function () {
-                Route::get('customers', [CustomerController::class, 'index'])->name('store.customers.index');
-                Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('store.customers.show');
-                Route::post('customers', [CustomerController::class, 'store'])->name('store.customers.store');
-                Route::put('customers/{customer}', [CustomerController::class, 'update'])->name('store.customers.update');
-                Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('store.customers.destroy');
+                // Commercial selection is intentionally separate from customer
+                // administration: POS/order users do not gain customers.view.
+                Route::get('operations/customers/search', [CustomerController::class, 'commercialSearch'])
+                    ->middleware(['feature:pos', 'permission:pos.view|orders.edit'])
+                    ->name('store.operations.customers.search');
 
-                Route::get('customers/{customer}/addresses', [CustomerAddressController::class, 'index'])->name('store.customers.addresses.index');
-                Route::post('customers/{customer}/addresses', [CustomerAddressController::class, 'store'])->name('store.customers.addresses.store');
-                Route::get('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'show'])->name('store.customers.addresses.show');
-                Route::put('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'update'])->name('store.customers.addresses.update');
-                Route::delete('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'destroy'])->name('store.customers.addresses.destroy');
+                Route::get('customers', [CustomerController::class, 'index'])->middleware('permission:customers.view')->name('store.customers.index');
+                Route::get('customers/{customer}', [CustomerController::class, 'show'])->middleware('permission:customers.view')->name('store.customers.show');
+                Route::post('customers', [CustomerController::class, 'store'])->middleware('permission:customers.create')->name('store.customers.store');
+                Route::put('customers/{customer}', [CustomerController::class, 'update'])->middleware('permission:customers.edit')->name('store.customers.update');
+                Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->middleware('permission:customers.delete')->name('store.customers.destroy');
 
-                Route::get('customers/{customer}/contacts', [CustomerContactController::class, 'index'])->name('store.customers.contacts.index');
-                Route::post('customers/{customer}/contacts', [CustomerContactController::class, 'store'])->name('store.customers.contacts.store');
-                Route::get('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'show'])->name('store.customers.contacts.show');
-                Route::put('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'update'])->name('store.customers.contacts.update');
-                Route::delete('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'destroy'])->name('store.customers.contacts.destroy');
+                Route::get('customers/{customer}/addresses', [CustomerAddressController::class, 'index'])->middleware('permission:customer_addresses.view')->name('store.customers.addresses.index');
+                Route::post('customers/{customer}/addresses', [CustomerAddressController::class, 'store'])->middleware('permission:customer_addresses.create')->name('store.customers.addresses.store');
+                Route::get('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'show'])->middleware('permission:customer_addresses.view')->name('store.customers.addresses.show');
+                Route::put('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'update'])->middleware('permission:customer_addresses.edit')->name('store.customers.addresses.update');
+                Route::delete('customers/{customer}/addresses/{address}', [CustomerAddressController::class, 'destroy'])->middleware('permission:customer_addresses.delete')->name('store.customers.addresses.destroy');
+
+                Route::get('customers/{customer}/contacts', [CustomerContactController::class, 'index'])->middleware('permission:customer_contacts.view')->name('store.customers.contacts.index');
+                Route::post('customers/{customer}/contacts', [CustomerContactController::class, 'store'])->middleware('permission:customer_contacts.create')->name('store.customers.contacts.store');
+                Route::get('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'show'])->middleware('permission:customer_contacts.view')->name('store.customers.contacts.show');
+                Route::put('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'update'])->middleware('permission:customer_contacts.edit')->name('store.customers.contacts.update');
+                Route::delete('customers/{customer}/contacts/{contact}', [CustomerContactController::class, 'destroy'])->middleware('permission:customer_contacts.delete')->name('store.customers.contacts.destroy');
             });
 
             Route::middleware(['role:STORE_ADMIN', 'feature:multi_user'])->group(function () {
@@ -502,8 +564,10 @@ Route::prefix('v1')->group(function () {
 
             Route::middleware('feature:store_settings')->group(function () {
                 Route::get('payment-methods', [StorePaymentMethodController::class, 'index'])
+                    ->middleware('permission:store_payment_methods.view')
                     ->name('store.payment-methods.index');
                 Route::patch('payment-methods/{paymentMethod}', [StorePaymentMethodController::class, 'update'])
+                    ->middleware('permission:store_payment_methods.configure')
                     ->name('store.payment-methods.update');
             });
         });

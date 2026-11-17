@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Store\UpdateStorePaymentMethodRequest;
+use App\Http\Resources\CommercialPaymentMethodResource;
 use App\Http\Resources\StorePaymentMethodResource;
 use App\Models\PaymentMethod;
 use App\Models\StorePaymentMethod;
@@ -14,6 +15,30 @@ use OpenApi\Attributes as OA;
 
 class PaymentMethodController extends Controller
 {
+    /**
+     * Returns only the payment-method attributes required while collecting a
+     * payment. Administrative account configuration must never leave through
+     * this endpoint.
+     */
+    public function commercialIndex(Request $request): JsonResponse
+    {
+        $paymentMethods = StorePaymentMethod::forStore($request->user()->store_id)
+            ->where('is_enabled', true)
+            ->whereHas('paymentMethod', fn ($query) => $query->where('is_active', true))
+            ->with('paymentMethod')
+            ->orderBy('sort_order')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Medios de pago obtenidos correctamente.',
+            'data' => [
+                'items' => CommercialPaymentMethodResource::collection($paymentMethods),
+            ],
+            'errors' => null,
+        ]);
+    }
+
     #[OA\Get(
         path: '/store/payment-methods',
         summary: 'Listar métodos de pago disponibles para la tienda',
@@ -197,15 +222,6 @@ class PaymentMethodController extends Controller
     )]
     public function update(UpdateStorePaymentMethodRequest $request, string $paymentMethodId): JsonResponse
     {
-        if (! $request->user()->hasRole('STORE_ADMIN')) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No tenés permisos para configurar medios de pago.',
-                'data' => null,
-                'errors' => ['role' => ['Solo los administradores de tienda pueden configurar medios de pago.']],
-            ], 403);
-        }
-
         $paymentMethod = PaymentMethod::where('id', $paymentMethodId)
             ->where('is_active', true)
             ->first();

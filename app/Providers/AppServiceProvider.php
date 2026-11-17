@@ -72,6 +72,13 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Provider-backed address lookups have a direct cost. Keep this
+        // separate from the shared API bucket so one user cannot consume the
+        // provider allowance simply by staying under the general API limit.
+        RateLimiter::for('geocoding', function (Request $request) {
+            return Limit::perMinute(10)->by('geocoding:'.($request->user()?->id ?: $request->ip()));
+        });
+
         RateLimiter::for('auth', function (Request $request) {
             return Limit::perMinute(5)->by($request->ip())->response(function () {
                 return response()->json([

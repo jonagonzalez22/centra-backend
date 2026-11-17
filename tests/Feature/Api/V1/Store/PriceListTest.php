@@ -19,6 +19,8 @@ beforeEach(function () {
     foreach ($this->permissions as $permission) {
         Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
     }
+    Permission::firstOrCreate(['name' => 'pos.view', 'guard_name' => 'web']);
+    Permission::firstOrCreate(['name' => 'orders.edit', 'guard_name' => 'web']);
 
     $feature = Feature::factory()->create(['code' => 'pos']);
     $plan = Plan::factory()->create();
@@ -48,18 +50,53 @@ test('lists price lists by store with search and active filters', function () {
         ->assertJsonPath('data.items.0.name', 'Inactiva');
 });
 
-test('active selector lists only active store lists without administrative permissions', function () {
+test('active selector is limited to commercial users and active lists in their store', function () {
     PriceList::factory()->create(['store_id' => $this->store->id, 'name' => 'Activa']);
     PriceList::factory()->create(['store_id' => $this->store->id, 'name' => 'Inactiva', 'is_active' => false]);
     PriceList::factory()->create(['name' => 'Ajena']);
     Role::firstOrCreate(['name' => 'STORE_USER', 'guard_name' => 'web']);
-    $cashier = User::factory()->create(['store_id' => $this->store->id]);
-    $cashier->assignRole('STORE_USER');
+    Role::firstOrCreate(['name' => 'STORE_DRIVER', 'guard_name' => 'web']);
 
-    $this->actingAs($cashier, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+    $withoutCommercialPermission = User::factory()->create(['store_id' => $this->store->id]);
+    $withoutCommercialPermission->assignRole('STORE_USER');
+    $this->actingAs($withoutCommercialPermission, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+        ->assertForbidden();
+
+    $priceListViewer = User::factory()->create(['store_id' => $this->store->id]);
+    $priceListViewer->assignRole('STORE_USER');
+    $priceListViewer->givePermissionTo('price_lists.view');
+    $this->actingAs($priceListViewer, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+        ->assertForbidden();
+
+    $posViewer = User::factory()->create(['store_id' => $this->store->id]);
+    $posViewer->assignRole('STORE_USER');
+    $posViewer->givePermissionTo('pos.view');
+    $this->actingAs($posViewer, 'sanctum')->getJson('/api/v1/store/price-lists/active')
         ->assertOk()
         ->assertJsonCount(1, 'data.items')
         ->assertJsonPath('data.items.0.name', 'Activa');
+
+    $orderEditor = User::factory()->create(['store_id' => $this->store->id]);
+    $orderEditor->assignRole('STORE_USER');
+    $orderEditor->givePermissionTo('orders.edit');
+    $this->actingAs($orderEditor, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.items')
+        ->assertJsonPath('data.items.0.name', 'Activa');
+
+    $driver = User::factory()->create(['store_id' => $this->store->id]);
+    $driver->assignRole('STORE_DRIVER');
+    $driver->givePermissionTo('pos.view');
+    $this->actingAs($driver, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+        ->assertForbidden();
+
+    $withoutPos = Store::factory()->create(['plan_id' => Plan::factory()->create()->id]);
+    $disabledPosUser = User::factory()->create(['store_id' => $withoutPos->id]);
+    $disabledPosUser->assignRole('STORE_USER');
+    $disabledPosUser->givePermissionTo('pos.view');
+
+    $this->actingAs($disabledPosUser, 'sanctum')->getJson('/api/v1/store/price-lists/active')
+        ->assertForbidden();
 });
 
 test('creates price lists with exact decimal percentages and defaults active', function () {

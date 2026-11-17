@@ -8,8 +8,12 @@ use App\Http\Requests\Api\V1\Admin\SyncFeaturesRequest;
 use App\Http\Requests\Api\V1\Admin\UpdatePlanRequest;
 use App\Http\Resources\PlanResource;
 use App\Models\Plan;
+use App\Models\Feature;
+use App\Models\Store;
+use App\Services\DeliveryFeatureEligibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
 class PlanController extends Controller
@@ -646,9 +650,43 @@ class PlanController extends Controller
             ]
         )
     )]
-    public function syncFeatures(SyncFeaturesRequest $request, string $id): JsonResponse
+    public function syncFeatures(SyncFeaturesRequest $request, string $id, DeliveryFeatureEligibilityService $deliveryFeatureEligibility): JsonResponse
     {
-        $plan = Plan::find($id);
+        $syncData = collect($request->features)->mapWithKeys(function ($item) {
+            return [
+                $item['feature_id'] => ['limit_value' => $item['limit_value'] ?? null],
+            ];
+        })->toArray();
+
+        $plan = DB::transaction(function () use ($id, $syncData, $deliveryFeatureEligibility) {
+            // This is the root lock for every shared-plan mutation. Stores are
+            // locked afterwards, the same order used by individual plan moves.
+            $plan = Plan::whereKey($id)->lockForUpdate()->first();
+
+            if (! $plan) {
+                return null;
+            }
+
+            $currentlyIncludesDeliveries = $deliveryFeatureEligibility->planIncludesDeliveries($plan);
+            $willIncludeDeliveries = Feature::query()
+                ->where('code', 'deliveries')
+                ->whereIn('id', array_keys($syncData))
+                ->exists();
+
+            if ($currentlyIncludesDeliveries && ! $willIncludeDeliveries) {
+                $storeIds = Store::query()
+                    ->where('plan_id', $plan->id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->pluck('id');
+
+                $deliveryFeatureEligibility->assertStoresCanLoseDeliveries($storeIds);
+            }
+
+            $plan->features()->sync($syncData);
+
+            return $plan;
+        });
 
         if (! $plan) {
             return response()->json([
@@ -659,13 +697,6 @@ class PlanController extends Controller
             ], 404);
         }
 
-        $syncData = collect($request->features)->mapWithKeys(function ($item) {
-            return [
-                $item['feature_id'] => ['limit_value' => $item['limit_value'] ?? null],
-            ];
-        })->toArray();
-
-        $plan->features()->sync($syncData);
         $plan->load('features');
 
         return response()->json([

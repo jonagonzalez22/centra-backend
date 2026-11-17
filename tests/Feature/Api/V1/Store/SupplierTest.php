@@ -64,3 +64,41 @@ test('feature and individual supplier permissions guard endpoints', function () 
         $this->actingAs($user, 'sanctum')->{$call[0]}($call[1], $call[2] ?? [])->assertForbidden();
     }
 });
+
+test('returns a business conflict when deleting a supplier with associations or purchases', function () {
+    $associated = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Con asociación']);
+    \App\Models\SupplierProduct::create([
+        'store_id' => $this->store->id,
+        'supplier_id' => $associated->id,
+        'product_id' => \App\Models\Product::factory()->forStore($this->store)->create([
+            'category_id' => \App\Models\Category::factory()->belongsToStore($this->store),
+        ])->id,
+    ]);
+    $this->actingAs($this->user, 'sanctum')->deleteJson("/api/v1/store/suppliers/{$associated->id}")
+        ->assertStatus(409)
+        ->assertJsonPath('errors.supplier.0', 'El proveedor está siendo utilizado y debe conservarse por motivos comerciales.');
+    $this->assertDatabaseHas('suppliers', ['id' => $associated->id]);
+
+    $unused = Supplier::create(['store_id' => $this->store->id, 'business_name' => 'Sin uso']);
+    $this->actingAs($this->user, 'sanctum')->deleteJson("/api/v1/store/suppliers/{$unused->id}")->assertOk();
+});
+
+test('purchase editors can read minimal operational supplier options without suppliers view', function () {
+    Permission::firstOrCreate(['name' => 'purchases.create', 'guard_name' => 'web']);
+    Supplier::create([
+        'store_id' => $this->store->id,
+        'business_name' => 'Operativo',
+        'tax_id' => '30-999',
+        'phone' => '1234',
+    ]);
+    $editor = User::factory()->create(['store_id' => $this->store->id]);
+    $editor->assignRole('STORE_ADMIN');
+    $editor->givePermissionTo('purchases.create');
+
+    $this->actingAs($editor, 'sanctum')->getJson('/api/v1/store/purchases/supplier-options')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.business_name', 'Operativo')
+        ->assertJsonMissingPath('data.items.0.tax_id')
+        ->assertJsonMissingPath('data.items.0.phone');
+    $this->actingAs($editor, 'sanctum')->getJson('/api/v1/store/suppliers')->assertForbidden();
+});
