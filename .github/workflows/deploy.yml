@@ -5,60 +5,231 @@ on:
     branches:
       - develop
 
+# Never overlap DEV deployments: migrations and the bind-mounted checkout must
+# be changed by one execution at a time. Queued commits are deployed in order.
+concurrency:
+  group: centra-dev-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy Application
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout exact event revision
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
 
       - name: Setup SSH
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          set -Eeuo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Execute Remote Commands
+      - name: Deploy exact revision with maintenance enabled
         run: |
-          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            set -e
-            
-            cd /var/www/centra/centra-backend
+          set -Eeuo pipefail
 
-            echo "--- 📥 Actualizando código desde Git ---"
-            git pull origin develop
+          ssh \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -p "${{ secrets.SSH_PORT }}" \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            bash -s -- "${{ github.sha }}" develop <<'REMOTE_SCRIPT'
+              set -Eeuo pipefail
 
-            echo "--- 🐳 Construyendo y levantando contenedores ---"
-            docker compose up -d --build
+              readonly deploy_sha="$1"
+              readonly deploy_branch="$2"
+              readonly repository=/var/www/centra/centra-backend
+              readonly maintenance_flag="$repository/storage/framework/centra-deploy-maintenance.flag"
+              maintenance_created=0
+              maintenance_identity=''
 
-            echo "--- 📦 Instalando dependencias ---"
-            docker compose exec -T app composer install --no-dev --optimize-autoloader
+              fail() {
+                echo "ERROR: $*" >&2
+                exit 1
+              }
 
-            echo "--- 🔗 Creando storage link ---"
-            docker compose exec -T app php artisan storage:link --force
+              activate_maintenance() {
+                local temporary_flag
 
-            echo "--- 🧱 Ejecutando migraciones de base de datos ---"
-            docker compose exec -T app php artisan migrate --force
+                if [ -e "$maintenance_flag" ] || [ -L "$maintenance_flag" ]; then
+                  return 1
+                fi
 
-            echo "--- 🧩 Asegurando roles base ---"
-            docker compose exec -T app php artisan db:seed --class=RoleSeeder --force
+                temporary_flag="$(mktemp "${maintenance_flag}.tmp.XXXXXX")" || return 1
+                # link(2) creates the final name atomically and fails if another
+                # actor created it first. The indicator's content is irrelevant.
+                if ! ln "$temporary_flag" "$maintenance_flag"; then
+                  rm -f -- "$temporary_flag"
+                  return 1
+                fi
+                rm -f -- "$temporary_flag"
+                maintenance_identity="$(stat -c '%d:%i' -- "$maintenance_flag")" || return 1
+                maintenance_created=1
+              }
 
-            echo "--- 🚚 Asegurando motivos globales de rechazo ---"
-            docker compose exec -T app php artisan db:seed --class=DeliveryRejectionReasonSeeder --force
+              restore_maintenance_if_needed() {
+                if [ -e "$maintenance_flag" ] || [ -L "$maintenance_flag" ]; then
+                  return 0
+                fi
 
-            echo "--- 🧹 Limpiando caché de permisos ---"
-            docker compose exec -T app php artisan permission:cache-reset
+                echo 'Restoring Nginx maintenance indicator after a failed final verification.' >&2
+                activate_maintenance
+              }
 
-            echo "--- 📄 Generando documentación Swagger ---"
-            docker compose exec -T app php artisan l5-swagger:generate
+              verify_frontend_status() {
+                local expected_status="$1"
+                local actual_status
 
-            echo "--- 🧹 Limpiando caché de Laravel ---"
-            docker compose exec -T app php artisan optimize:clear
+                if ! actual_status="$(curl --connect-timeout 5 --max-time 15 --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1/)"; then
+                  echo 'Could not request the local frontend.' >&2
+                  return 1
+                fi
+                if [ "$actual_status" != "$expected_status" ]; then
+                  echo "Frontend returned HTTP $actual_status, expected $expected_status." >&2
+                  return 1
+                fi
+              }
 
-            docker image prune -f
+              verify_api_json_status() {
+                local expected_status="$1"
+                local headers actual_status content_type
 
-            echo "✅ ¡Despliegue completado con éxito!"
-          EOF
+                headers="$(mktemp)" || return 1
+                # Do not use --fail: a 503 is the expected result while Nginx
+                # maintenance is active and must still be inspected.
+                if ! actual_status="$(curl --connect-timeout 5 --max-time 15 --silent --show-error --header 'Accept: application/json' --dump-header "$headers" --output /dev/null --write-out '%{http_code}' http://127.0.0.1/api/__centra_deploy_health_check__)"; then
+                  rm -f -- "$headers"
+                  echo 'Could not request the local API.' >&2
+                  return 1
+                fi
+                content_type="$(awk -F ': *' 'tolower($1) == "content-type" { gsub(/\r/, "", $2); print tolower($2); exit }' "$headers")"
+                rm -f -- "$headers"
+
+                if [ "$actual_status" != "$expected_status" ]; then
+                  echo "API returned HTTP $actual_status, expected $expected_status." >&2
+                  return 1
+                fi
+                case "$content_type" in
+                  application/json|application/json\;*) ;;
+                  *)
+                    echo "API returned Content-Type '${content_type:-missing}', expected application/json." >&2
+                    return 1
+                    ;;
+                esac
+              }
+
+              verify_maintenance_http() {
+                verify_frontend_status 503 && verify_api_json_status 503
+              }
+
+              on_exit() {
+                local status=$?
+                trap - EXIT
+
+                # Every failure after activation leaves maintenance enabled. If
+                # the final public verification had already removed our flag,
+                # attempt to restore it before reporting failure.
+                if [ "$status" -ne 0 ] && [ "$maintenance_created" -eq 1 ]; then
+                  restore_maintenance_if_needed || \
+                    echo 'CRITICAL: could not restore the Nginx maintenance indicator.' >&2
+                fi
+
+                exit "$status"
+              }
+              trap on_exit EXIT
+
+              cd "$repository" || fail "Repository not found: $repository"
+
+              [ "$(git branch --show-current)" = "$deploy_branch" ] || \
+                fail "Remote checkout is not on $deploy_branch."
+              [ -z "$(git status --porcelain)" ] || \
+                fail 'Remote checkout has unexpected local changes; refusing to overwrite them.'
+
+              git fetch --no-tags origin "$deploy_branch"
+              git show-ref --verify --quiet "refs/remotes/origin/$deploy_branch" || \
+                fail "origin/$deploy_branch was not fetched."
+              git cat-file -e "${deploy_sha}^{commit}" || \
+                fail "Requested SHA is not a commit: $deploy_sha"
+              git merge-base --is-ancestor "$deploy_sha" "origin/$deploy_branch" || \
+                fail "Requested SHA does not belong to origin/$deploy_branch."
+              git merge-base --is-ancestor HEAD "$deploy_sha" || \
+                fail 'Remote branch is not an ancestor of the requested SHA; refusing a non-fast-forward deployment.'
+
+              # Stage 1 must already be loaded by the running Nginx before this
+              # workflow can create the flag. Do not proceed if that guarantee
+              # cannot be established.
+              docker compose ps --status running --services | grep -Fx web >/dev/null || \
+                fail 'Nginx container is not running before maintenance activation.'
+              docker compose exec -T web nginx -T | grep -F 'centra-deploy-maintenance.flag' >/dev/null || \
+                fail 'The running Nginx configuration does not contain the Stage 1 maintenance indicator.'
+
+              activate_maintenance || \
+                fail 'Maintenance indicator already exists or could not be created; it was left untouched.'
+              echo 'Nginx maintenance indicator enabled.'
+              verify_maintenance_http || \
+                fail 'Nginx maintenance HTTP verification failed before updating the repository.'
+
+              git merge --ff-only "$deploy_sha"
+              docker compose config -q
+              docker compose up -d --build
+
+              running_services="$(docker compose ps --status running --services)"
+              for service in app web db redis; do
+                printf '%s\n' "$running_services" | grep -Fx "$service" >/dev/null || \
+                  fail "Required service is not running: $service"
+              done
+              verify_maintenance_http || \
+                fail 'Nginx maintenance HTTP verification failed after updating containers.'
+
+              docker compose exec -T app composer install --no-dev --optimize-autoloader --no-interaction
+              docker compose exec -T app php artisan storage:link --force --no-interaction
+              docker compose exec -T app php artisan migrate --force --no-interaction
+
+              # These seeders use first-or-create/update-or-create semantics and
+              # remain operational data prerequisites. Permission seeders are
+              # deliberately not invoked: the command below is their additive
+              # replacement.
+              docker compose exec -T app php artisan db:seed --class=RoleSeeder --force --no-interaction
+              docker compose exec -T app php artisan db:seed --class=DeliveryRejectionReasonSeeder --force --no-interaction
+
+              docker compose exec -T app php artisan list --raw | \
+                grep -Eq '^centra:permissions-sync([[:space:]]|$)' || \
+                fail 'The deployed code does not provide centra:permissions-sync.'
+              docker compose exec -T app php artisan centra:permissions-sync --apply --no-interaction
+              docker compose exec -T app php artisan permission:cache-reset --no-interaction
+              docker compose exec -T app php artisan optimize:clear --no-interaction
+
+              # Internal checks are used while maintenance is active. There is
+              # no public API health endpoint, and public /api correctly returns
+              # 503 while the indicator exists.
+              docker compose exec -T app php-fpm -t
+              docker compose exec -T app php artisan about --only=environment --no-interaction
+              docker compose exec -T app php artisan migrate:status --no-interaction
+
+              [ "$(stat -c '%d:%i' -- "$maintenance_flag")" = "$maintenance_identity" ] || \
+                fail 'Maintenance indicator changed during deployment; refusing to remove it.'
+              rm -- "$maintenance_flag"
+              echo 'Nginx maintenance indicator disabled; starting final public verification.'
+
+              verify_frontend_status 200 || {
+                restore_maintenance_if_needed || true
+                fail 'Frontend final verification failed.'
+              }
+
+              # A guaranteed-nonexistent API path must reach Laravel and return
+              # its JSON 404; this verifies Nginx -> PHP-FPM -> Laravel without
+              # exposing a public maintenance bypass.
+              verify_api_json_status 404 || {
+                restore_maintenance_if_needed || true
+                fail 'API final verification failed.'
+              }
+
+              echo "Deployment completed successfully at $deploy_sha."
+          REMOTE_SCRIPT

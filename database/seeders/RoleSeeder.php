@@ -13,9 +13,8 @@ class RoleSeeder extends Seeder
   public function run(): void
   {
     // firstOrCreate evita duplicados si ya existen
-    Role::firstOrCreate(['name' => 'SUPER_ADMIN'], ['guard_name' => 'web']);
-    Role::firstOrCreate(['name' => 'STORE_ADMIN'], ['guard_name' => 'web']);
-    Role::firstOrCreate(['name' => 'STORE_USER'], ['guard_name' => 'web']);
-    Role::firstOrCreate(['name' => 'STORE_DRIVER'], ['guard_name' => 'web']);
+    foreach (config('permission_registry.roles', []) as $role) {
+      Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
+    }
   }
 }
