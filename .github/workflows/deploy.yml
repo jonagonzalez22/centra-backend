@@ -46,7 +46,9 @@ jobs:
               readonly deploy_sha="$1"
               readonly deploy_branch="$2"
               readonly repository=/var/www/centra/centra-backend
-              readonly maintenance_flag="$repository/storage/framework/centra-deploy-maintenance.flag"
+              readonly maintenance_directory="$repository/.deploy-maintenance"
+              readonly maintenance_flag="$maintenance_directory/maintenance.flag"
+              readonly legacy_maintenance_flag="$repository/storage/framework/centra-deploy-maintenance.flag"
               maintenance_created=0
               maintenance_identity=''
               deployment_completed=0
@@ -160,6 +162,16 @@ jobs:
               [ -z "$(git status --porcelain)" ] || \
                 fail 'Remote checkout has unexpected local changes; refusing to overwrite them.'
 
+              [ -d "$maintenance_directory" ] || \
+                fail "Dedicated maintenance directory does not exist: $maintenance_directory"
+              [ ! -L "$maintenance_directory" ] || \
+                fail "Dedicated maintenance directory must not be a symbolic link: $maintenance_directory"
+              [ -w "$maintenance_directory" ] || \
+                fail "Deployment user cannot write to dedicated maintenance directory: $maintenance_directory"
+              if [ -e "$legacy_maintenance_flag" ] || [ -L "$legacy_maintenance_flag" ]; then
+                fail "Legacy maintenance indicator exists and was left untouched: $legacy_maintenance_flag"
+              fi
+
               git fetch --no-tags origin "$deploy_branch"
               git show-ref --verify --quiet "refs/remotes/origin/$deploy_branch" || \
                 fail "origin/$deploy_branch was not fetched."
@@ -170,13 +182,12 @@ jobs:
               git merge-base --is-ancestor HEAD "$deploy_sha" || \
                 fail 'Remote branch is not an ancestor of the requested SHA; refusing a non-fast-forward deployment.'
 
-              # Stage 1 must already be loaded by the running Nginx before this
-              # workflow can create the flag. Do not proceed if that guarantee
-              # cannot be established.
+              # Nginx must already have the dual-indicator transition loaded,
+              # including the dedicated path used by this workflow.
               docker compose ps --status running --services | grep -Fx web >/dev/null || \
                 fail 'Nginx container is not running before maintenance activation.'
-              docker compose exec --interactive=false -T web nginx -T | grep -F 'centra-deploy-maintenance.flag' >/dev/null || \
-                fail 'The running Nginx configuration does not contain the Stage 1 maintenance indicator.'
+              docker compose exec --interactive=false -T web nginx -T | grep -F '/var/www/.deploy-maintenance/maintenance.flag' >/dev/null || \
+                fail 'The running Nginx configuration does not contain the dedicated maintenance indicator path.'
 
               activate_maintenance || \
                 fail 'Maintenance indicator already exists or could not be created; it was left untouched.'
