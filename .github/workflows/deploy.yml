@@ -218,8 +218,8 @@ jobs:
               docker compose exec --interactive=false -T app php artisan db:seed --class=RoleSeeder --force --no-interaction
               docker compose exec --interactive=false -T app php artisan db:seed --class=DeliveryRejectionReasonSeeder --force --no-interaction
 
-              docker compose exec --interactive=false -T app php artisan list --raw | \
-                grep -Eq '^centra:permissions-sync([[:space:]]|$)' || \
+              docker compose exec --interactive=false -T app \
+                php artisan help centra:permissions-sync --no-interaction > /dev/null || \
                 fail 'The deployed code does not provide centra:permissions-sync.'
               docker compose exec --interactive=false -T app php artisan centra:permissions-sync --apply --no-interaction
               docker compose exec --interactive=false -T app php artisan permission:cache-reset --no-interaction
