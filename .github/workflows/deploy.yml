@@ -49,6 +49,7 @@ jobs:
               readonly maintenance_flag="$repository/storage/framework/centra-deploy-maintenance.flag"
               maintenance_created=0
               maintenance_identity=''
+              deployment_completed=0
 
               fail() {
                 echo "ERROR: $*" >&2
@@ -133,6 +134,13 @@ jobs:
                 local status=$?
                 trap - EXIT
 
+                # A compose exec that consumes this script's heredoc can make
+                # Bash reach EOF with status 0. Never report that as a deploy.
+                if [ "$status" -eq 0 ] && [ "$deployment_completed" -ne 1 ]; then
+                  echo 'CRITICAL: remote deployment script ended before completion.' >&2
+                  status=1
+                fi
+
                 # Every failure after activation leaves maintenance enabled. If
                 # the final public verification had already removed our flag,
                 # attempt to restore it before reporting failure.
@@ -167,7 +175,7 @@ jobs:
               # cannot be established.
               docker compose ps --status running --services | grep -Fx web >/dev/null || \
                 fail 'Nginx container is not running before maintenance activation.'
-              docker compose exec -T web nginx -T | grep -F 'centra-deploy-maintenance.flag' >/dev/null || \
+              docker compose exec --interactive=false -T web nginx -T | grep -F 'centra-deploy-maintenance.flag' >/dev/null || \
                 fail 'The running Nginx configuration does not contain the Stage 1 maintenance indicator.'
 
               activate_maintenance || \
@@ -188,30 +196,30 @@ jobs:
               verify_maintenance_http || \
                 fail 'Nginx maintenance HTTP verification failed after updating containers.'
 
-              docker compose exec -T app composer install --no-dev --optimize-autoloader --no-interaction
-              docker compose exec -T app php artisan storage:link --force --no-interaction
-              docker compose exec -T app php artisan migrate --force --no-interaction
+              docker compose exec --interactive=false -T app composer install --no-dev --optimize-autoloader --no-interaction
+              docker compose exec --interactive=false -T app php artisan storage:link --force --no-interaction
+              docker compose exec --interactive=false -T app php artisan migrate --force --no-interaction
 
               # These seeders use first-or-create/update-or-create semantics and
               # remain operational data prerequisites. Permission seeders are
               # deliberately not invoked: the command below is their additive
               # replacement.
-              docker compose exec -T app php artisan db:seed --class=RoleSeeder --force --no-interaction
-              docker compose exec -T app php artisan db:seed --class=DeliveryRejectionReasonSeeder --force --no-interaction
+              docker compose exec --interactive=false -T app php artisan db:seed --class=RoleSeeder --force --no-interaction
+              docker compose exec --interactive=false -T app php artisan db:seed --class=DeliveryRejectionReasonSeeder --force --no-interaction
 
-              docker compose exec -T app php artisan list --raw | \
+              docker compose exec --interactive=false -T app php artisan list --raw | \
                 grep -Eq '^centra:permissions-sync([[:space:]]|$)' || \
                 fail 'The deployed code does not provide centra:permissions-sync.'
-              docker compose exec -T app php artisan centra:permissions-sync --apply --no-interaction
-              docker compose exec -T app php artisan permission:cache-reset --no-interaction
-              docker compose exec -T app php artisan optimize:clear --no-interaction
+              docker compose exec --interactive=false -T app php artisan centra:permissions-sync --apply --no-interaction
+              docker compose exec --interactive=false -T app php artisan permission:cache-reset --no-interaction
+              docker compose exec --interactive=false -T app php artisan optimize:clear --no-interaction
 
               # Internal checks are used while maintenance is active. There is
               # no public API health endpoint, and public /api correctly returns
               # 503 while the indicator exists.
-              docker compose exec -T app php-fpm -t
-              docker compose exec -T app php artisan about --only=environment --no-interaction
-              docker compose exec -T app php artisan migrate:status --no-interaction
+              docker compose exec --interactive=false -T app php-fpm -t
+              docker compose exec --interactive=false -T app php artisan about --only=environment --no-interaction
+              docker compose exec --interactive=false -T app php artisan migrate:status --no-interaction
 
               [ "$(stat -c '%d:%i' -- "$maintenance_flag")" = "$maintenance_identity" ] || \
                 fail 'Maintenance indicator changed during deployment; refusing to remove it.'
@@ -232,4 +240,5 @@ jobs:
               }
 
               echo "Deployment completed successfully at $deploy_sha."
+              deployment_completed=1
           REMOTE_SCRIPT
