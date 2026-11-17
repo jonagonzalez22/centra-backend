@@ -12,3 +12,4 @@
 .vscode/
 .idea/
 .cursor/centra_db
+/.deploy-maintenance/
