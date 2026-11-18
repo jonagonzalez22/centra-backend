@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\DeliveryRoute;
 use App\Models\Feature;
 use App\Models\Plan;
 use App\Models\Store;
@@ -145,6 +146,22 @@ test('lists vehicles scoped to store', function () {
         ->assertJsonPath('data.total', 3);
 });
 
+test('filters vehicles by search, type and active state', function () {
+    Vehicle::factory()->forStore($this->store)->create([
+        'name' => 'Camioneta Norte', 'plate' => 'NOR123', 'type' => 'camioneta', 'is_active' => true,
+    ]);
+    Vehicle::factory()->forStore($this->store)->create([
+        'name' => 'Moto Sur', 'plate' => 'SUR456', 'type' => 'moto', 'is_active' => false,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/vehicles?search=NOR&type=camioneta&is_active=1');
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.plate', 'NOR123');
+});
+
 // ── Show ────────────────────────────────────────────────────────────
 
 test('shows a single vehicle', function () {
@@ -213,4 +230,16 @@ test('returns 404 when deleting vehicle from another store', function () {
 
     $response->assertStatus(404);
     expect(Vehicle::find($otherVehicle->id))->not->toBeNull();
+});
+
+test('does not delete a vehicle associated to a route', function () {
+    $vehicle = Vehicle::factory()->forStore($this->store)->create();
+    DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'vehicle_id' => $vehicle->id]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->deleteJson("/api/v1/store/vehicles/{$vehicle->id}");
+
+    $response->assertStatus(422)
+        ->assertJsonPath('message', 'No se puede eliminar un vehículo asociado a rutas. Desactivalo para impedir nuevas asignaciones.');
+    expect(Vehicle::find($vehicle->id))->not->toBeNull();
 });

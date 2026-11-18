@@ -51,6 +51,17 @@ class VehicleController extends Controller
         $storeId = $request->user()->store_id;
 
         $vehicles = Vehicle::forStore($storeId)
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->get('search'));
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('plate', 'like', "%{$search}%");
+                });
+            })
+            ->when($request->filled('type'), fn ($query) => $query->where('type', $request->get('type')))
+            ->when($request->has('is_active') && $request->get('is_active') !== '', function ($query) use ($request) {
+                $query->where('is_active', filter_var($request->get('is_active'), FILTER_VALIDATE_BOOLEAN));
+            })
             ->orderBy('name')
             ->paginate($request->get('per_page', 15));
 
@@ -288,6 +299,15 @@ class VehicleController extends Controller
                 'data' => null,
                 'errors' => ['id' => ['El vehículo no existe o no pertenece a tu tienda.']],
             ], 404);
+        }
+
+        if ($vehicle->deliveryRoutes()->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se puede eliminar un vehículo asociado a rutas. Desactivalo para impedir nuevas asignaciones.',
+                'data' => null,
+                'errors' => ['id' => ['El vehículo tiene rutas asociadas.']],
+            ], 422);
         }
 
         $vehicle->delete();

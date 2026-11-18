@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class Vehicle extends Model
@@ -45,6 +46,11 @@ class Vehicle extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function deliveryRoutes(): HasMany
+    {
+        return $this->hasMany(DeliveryRoute::class);
     }
 
     public function scopeForStore(Builder $query, string $storeId): Builder
