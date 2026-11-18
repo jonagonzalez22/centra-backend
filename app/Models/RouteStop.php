@@ -20,6 +20,17 @@ class RouteStop extends Model
     protected $fillable = [
         'route_id',
         'order_id',
+        'customer_address_id',
+        'destination_street',
+        'destination_number',
+        'destination_floor',
+        'destination_apartment',
+        'destination_postal_code',
+        'destination_locality_id',
+        'destination_locality_name',
+        'destination_latitude',
+        'destination_longitude',
+        'destination_observations',
         'sequence',
         'status',
         'logistics_notes',
@@ -43,6 +54,8 @@ class RouteStop extends Model
             'notified_at' => 'datetime',
             'gps_lat' => 'decimal:7',
             'gps_lon' => 'decimal:7',
+            'destination_latitude' => 'decimal:8',
+            'destination_longitude' => 'decimal:8',
             'evidence_uris' => 'array',
         ];
     }
@@ -55,6 +68,37 @@ class RouteStop extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(CommercialOperation::class, 'order_id');
+    }
+
+    public function destinationAddress(): BelongsTo
+    {
+        return $this->belongsTo(CustomerAddress::class, 'customer_address_id');
+    }
+
+    public function hasDestinationSnapshot(): bool
+    {
+        return $this->customer_address_id !== null;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function destinationSnapshot(): ?array
+    {
+        if (! $this->hasDestinationSnapshot()) {
+            return null;
+        }
+
+        return [
+            'street' => $this->destination_street,
+            'number' => $this->destination_number,
+            'floor' => $this->destination_floor,
+            'apartment' => $this->destination_apartment,
+            'postal_code' => $this->destination_postal_code,
+            'locality_id' => $this->destination_locality_id,
+            'locality' => $this->destination_locality_name,
+            'latitude' => $this->destination_latitude === null ? null : (float) $this->destination_latitude,
+            'longitude' => $this->destination_longitude === null ? null : (float) $this->destination_longitude,
+            'reference' => $this->destination_observations,
+        ];
     }
 
     public function items(): HasMany

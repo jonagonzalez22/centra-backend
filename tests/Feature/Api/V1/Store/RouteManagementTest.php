@@ -75,7 +75,7 @@ function createVehicle(Store $store): Vehicle
 }
 
 /**
- * Create a customer with a geolocated main address.
+ * Create a customer with a geolocated delivery address.
  */
 function createCustomerWithAddress(Store $store): Customer
 {
@@ -83,7 +83,7 @@ function createCustomerWithAddress(Store $store): Customer
     $locality = Locality::factory()->for($province)->create();
 
     $customer = Customer::factory()->create(['store_id' => $store->id]);
-    CustomerAddress::factory()->forCustomer($customer)->for($locality)->asMain()->create([
+    CustomerAddress::factory()->forCustomer($customer)->for($locality)->asMain()->ofType('delivery')->create([
         'latitude' => -34.6037,
         'longitude' => -58.3816,
     ]);
@@ -597,8 +597,86 @@ test('adds a stop to a draft route', function () {
     expect($stop->order_id)->toBe($order->id);
     expect($stop->sequence)->toBe(1);
     expect($stop->status)->toBe('pending');
+    expect($stop->customer_address_id)->toBe($customer->addresses()->where('type', 'delivery')->value('id'));
+    expect($stop->destination_latitude)->toEqual('-34.60370000');
+    expect($stop->destination_longitude)->toEqual('-58.38160000');
 
     expect(DeliveryRouteEvent::where('event_type', 'stop_added')->count())->toBe(1);
+});
+
+test('uses a non-main delivery address and preserves it as a stop snapshot', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $customer = createCustomerWithAddress($this->store);
+    $deliveryAddress = $customer->addresses()->where('type', 'delivery')->firstOrFail();
+    $deliveryAddress->update([
+        'is_main' => false,
+        'street' => 'Destino Entrega',
+        'observations' => 'Casa de color marrón con blanco.',
+    ]);
+    CustomerAddress::factory()->forCustomer($customer)->asMain()->ofType('billing')->create([
+        'latitude' => -34.70,
+        'longitude' => -58.50,
+        'street' => 'Principal Cobranza',
+    ]);
+    $order = createEligibleOrder($this->store, $customer);
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'draft',
+    ]);
+    $order->update(['requested_delivery_date' => $route->operational_date]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/stops", ['order_id' => $order->id])
+        ->assertCreated();
+
+    $stop = RouteStop::firstOrFail();
+    expect($stop->customer_address_id)->toBe($deliveryAddress->id)
+        ->and($stop->destination_street)->toBe('Destino Entrega')
+        ->and($stop->destination_observations)->toBe('Casa de color marrón con blanco.')
+        ->and((float) $stop->destination_latitude)->toBe(-34.6037)
+        ->and((float) $stop->destination_longitude)->toBe(-58.3816);
+
+    $deliveryAddress->update([
+        'street' => 'Entrega modificada',
+        'latitude' => -34.80,
+        'longitude' => -58.80,
+        'observations' => 'Referencia modificada',
+    ]);
+    $customer->addresses()->where('type', 'billing')->update(['is_main' => false]);
+
+    $stop->refresh();
+    expect($stop->destination_street)->toBe('Destino Entrega')
+        ->and($stop->destination_observations)->toBe('Casa de color marrón con blanco.')
+        ->and((float) $stop->destination_latitude)->toBe(-34.6037)
+        ->and((float) $stop->destination_longitude)->toBe(-58.3816);
+});
+
+test('rejects assignment when the customer has no valid delivery address', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $customer = Customer::factory()->create(['store_id' => $this->store->id]);
+    CustomerAddress::factory()->forCustomer($customer)->asMain()->ofType('billing')->create([
+        'latitude' => -34.6037,
+        'longitude' => -58.3816,
+    ]);
+    $order = createEligibleOrder($this->store, $customer);
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'draft',
+    ]);
+    $order->update(['requested_delivery_date' => $route->operational_date]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/stops", ['order_id' => $order->id])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'El cliente debe tener un domicilio de Entrega con ubicación geolocalizada para asignar este pedido a una ruta.');
 });
 
 test('adds stop with exceptional assignment when dates differ', function () {
@@ -1147,6 +1225,30 @@ test('returns eligible orders', function () {
 
     $response->assertStatus(200)
         ->assertJsonPath('data.total', 2);
+});
+
+test('eligible orders excludes customers without a geolocated delivery address', function () {
+    $eligibleCustomer = createCustomerWithAddress($this->store);
+    $eligibleOrder = createEligibleOrder($this->store, $eligibleCustomer);
+
+    $province = Province::factory()->create();
+    $locality = Locality::factory()->for($province)->create();
+    $invalidCustomer = Customer::factory()->create(['store_id' => $this->store->id]);
+    CustomerAddress::factory()->forCustomer($invalidCustomer)->for($locality)->ofType('delivery')->create([
+        'latitude' => null,
+        'longitude' => null,
+    ]);
+    $invalidOrder = createEligibleOrder($this->store, $invalidCustomer);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes/eligible-orders');
+
+    $response->assertStatus(200)
+        ->assertJsonPath('data.total', 1);
+
+    $orderIds = array_column($response->json('data.items'), 'id');
+    expect($orderIds)->toContain($eligibleOrder->id)
+        ->not->toContain($invalidOrder->id);
 });
 
 test('eligible orders includes orders already in active routes (split allowed)', function () {

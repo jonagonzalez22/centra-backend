@@ -34,10 +34,8 @@ class RouteStopResource extends JsonResource
                             ? $this->order->customer->contacts->first()?->phone
                             : null,
                     ] : null,
-                    'address' => $this->when(
-                        $this->order->relationLoaded('customer') &&
-                        $this->order->customer &&
-                        $this->order->customer->relationLoaded('addresses'),
+                    'address' => $this->destinationSnapshot() ?? $this->when(
+                        $this->order->relationLoaded('customer') && $this->order->customer && $this->order->customer->relationLoaded('addresses'),
                         function () {
                             $mainAddress = $this->order->customer->addresses->firstWhere('is_main', true);
 

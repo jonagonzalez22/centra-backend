@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CommercialOperation;
+use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
@@ -111,12 +112,15 @@ class RouteManagementService
         $query = CommercialOperation::forStore($storeId)
             ->byType('order')
             ->whereNotIn('status', ['cancelled', 'closed', 'delivered'])
-            ->whereHas('customer', function (Builder $q) {
-                $q->whereHas('addresses', function (Builder $aq) {
-                    $aq->where('is_main', true)
-                        ->whereNotNull('latitude')
-                        ->whereNotNull('longitude');
-                });
+            ->whereHas('customer.addresses', function (Builder $query) {
+                $query->where('type', 'delivery');
+            }, '=', 1)
+            ->whereHas('customer.addresses', function (Builder $query) {
+                $query->where('type', 'delivery')
+                    ->whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->whereBetween('latitude', [-90, 90])
+                    ->whereBetween('longitude', [-180, 180]);
             });
 
         if (! empty($filters['requested_delivery_date'])) {
@@ -136,7 +140,7 @@ class RouteManagementService
 
         if (! empty($filters['locality_id'])) {
             $query->whereHas('customer.addresses', function (Builder $q) use ($filters) {
-                $q->where('locality_id', $filters['locality_id']);
+                $q->where('type', 'delivery')->where('locality_id', $filters['locality_id']);
             });
         }
 
@@ -211,7 +215,7 @@ class RouteManagementService
                 throw $this->validationError('El pedido ya tiene una parada activa en esta ruta.');
             }
 
-            $this->validateOrderEligible($order, $route->store_id);
+            $deliveryAddress = $this->validateOrderEligible($order, $route->store_id);
 
             // Exceptional assignment: date mismatch requires reason
             $orderDate = $order->requested_delivery_date?->format('Y-m-d');
@@ -229,6 +233,17 @@ class RouteManagementService
             $stop = RouteStop::create([
                 'route_id' => $route->id,
                 'order_id' => $order->id,
+                'customer_address_id' => $deliveryAddress->id,
+                'destination_street' => $deliveryAddress->street,
+                'destination_number' => $deliveryAddress->number,
+                'destination_floor' => $deliveryAddress->floor,
+                'destination_apartment' => $deliveryAddress->apartment,
+                'destination_postal_code' => $deliveryAddress->postal_code,
+                'destination_locality_id' => $deliveryAddress->locality_id,
+                'destination_locality_name' => $deliveryAddress->locality?->name,
+                'destination_latitude' => $deliveryAddress->latitude,
+                'destination_longitude' => $deliveryAddress->longitude,
+                'destination_observations' => $deliveryAddress->observations,
                 'sequence' => $maxSequence + 1,
                 'status' => 'pending',
                 'logistics_notes' => $data['logistics_notes'] ?? null,
@@ -405,8 +420,8 @@ class RouteManagementService
             $stopIdMap = [];
 
             foreach ($activeStops as $stop) {
-                $address = $this->getStopMainAddress($stop);
-                $intermediates[] = [(float) $address->latitude, (float) $address->longitude];
+                $coordinates = $this->getStopCoordinates($stop);
+                $intermediates[] = [$coordinates['latitude'], $coordinates['longitude']];
                 $stopIdMap[] = $stop->id;
             }
 
@@ -588,8 +603,8 @@ class RouteManagementService
             $intermediates = [];
 
             foreach ($activeStops as $stop) {
-                $address = $this->getStopMainAddress($stop);
-                $intermediates[] = [(float) $address->latitude, (float) $address->longitude];
+                $coordinates = $this->getStopCoordinates($stop);
+                $intermediates[] = [$coordinates['latitude'], $coordinates['longitude']];
             }
 
             // Call Google Routes API WITHOUT optimization (respect manual order)
@@ -681,8 +696,8 @@ class RouteManagementService
             $previousOrder = [];
 
             foreach ($activeStops as $stop) {
-                $address = $this->getStopMainAddress($stop);
-                $intermediates[] = [(float) $address->latitude, (float) $address->longitude];
+                $coordinates = $this->getStopCoordinates($stop);
+                $intermediates[] = [$coordinates['latitude'], $coordinates['longitude']];
                 $stopIdMap[] = $stop->id;
                 $previousOrder[$stop->id] = $stop->sequence;
             }
@@ -1858,7 +1873,7 @@ class RouteManagementService
     /**
      * Validate order is eligible for route assignment.
      */
-    private function validateOrderEligible(CommercialOperation $order, string $storeId): void
+    private function validateOrderEligible(CommercialOperation $order, string $storeId): CustomerAddress
     {
         if ($order->store_id !== $storeId) {
             throw $this->validationError('El pedido no pertenece a la tienda.');
@@ -1872,20 +1887,30 @@ class RouteManagementService
             throw $this->validationError('El pedido está cancelado, cerrado o ya fue entregado completamente.');
         }
 
-        // Check order has a geolocated delivery address
-        $customer = $order->customer()->with('addresses')->first();
+        $customer = Customer::forStore($storeId)->whereKey($order->customer_id)->lockForUpdate()->first();
         if (! $customer) {
             throw $this->validationError('El pedido no tiene cliente asignado.');
         }
 
-        $mainAddress = $customer->addresses->firstWhere('is_main', true);
-        if (! $mainAddress || ! $mainAddress->latitude || ! $mainAddress->longitude) {
-            throw $this->validationError('El pedido no tiene una dirección de entrega geolocalizada.');
+        $deliveryAddresses = CustomerAddress::where('customer_id', $customer->id)
+            ->where('type', 'delivery')
+            ->with('locality')
+            ->lockForUpdate()
+            ->get();
+
+        if ($deliveryAddresses->count() !== 1) {
+            throw $this->validationError('El cliente debe tener un domicilio de Entrega con ubicación geolocalizada para asignar este pedido a una ruta.');
+        }
+
+        $deliveryAddress = $deliveryAddresses->first();
+        if (! $this->hasValidCoordinates($deliveryAddress->latitude, $deliveryAddress->longitude)) {
+            throw $this->validationError('El cliente debe tener un domicilio de Entrega con ubicación geolocalizada para asignar este pedido a una ruta.');
         }
 
         // Note: A single order CAN be split across multiple active routes.
         // The correct control is at the product quantity level via
         // route_stop_items.quantity_planned, validated in assignItems().
+        return $deliveryAddress;
     }
 
     /**
@@ -2216,26 +2241,54 @@ class RouteManagementService
     private function validateStopCoordinates(\Illuminate\Database\Eloquent\Collection $stops): void
     {
         foreach ($stops as $stop) {
-            $address = $this->getStopMainAddress($stop);
+            $address = $this->getStopCoordinates($stop);
 
-            if (! $address || ! $address->latitude || ! $address->longitude) {
+            if ($address === null) {
                 throw $this->validationError('Uno o más pedidos no tienen una dirección de entrega geolocalizada.');
             }
         }
     }
 
-    /**
-     * Get the main delivery address for a stop's order.
-     */
-    private function getStopMainAddress(RouteStop $stop): ?CustomerAddress
+    /** @return array{latitude: float, longitude: float}|null */
+    private function getStopCoordinates(RouteStop $stop): ?array
     {
+        if ($stop->hasDestinationSnapshot()) {
+            if (! $this->hasValidCoordinates($stop->destination_latitude, $stop->destination_longitude)) {
+                return null;
+            }
+
+            return [
+                'latitude' => (float) $stop->destination_latitude,
+                'longitude' => (float) $stop->destination_longitude,
+            ];
+        }
+
+        // Compatibility for historical stops created before destination snapshots existed.
         $order = $stop->order()->with(['customer.addresses'])->first();
 
         if (! $order || ! $order->customer) {
             return null;
         }
 
-        return $order->customer->addresses->firstWhere('is_main', true);
+        $legacyAddress = $order->customer->addresses->firstWhere('is_main', true);
+        if (! $legacyAddress || ! $this->hasValidCoordinates($legacyAddress->latitude, $legacyAddress->longitude)) {
+            return null;
+        }
+
+        return [
+            'latitude' => (float) $legacyAddress->latitude,
+            'longitude' => (float) $legacyAddress->longitude,
+        ];
+    }
+
+    private function hasValidCoordinates(mixed $latitude, mixed $longitude): bool
+    {
+        return $latitude !== null
+            && $longitude !== null
+            && (float) $latitude >= -90
+            && (float) $latitude <= 90
+            && (float) $longitude >= -180
+            && (float) $longitude <= 180;
     }
 
     /**

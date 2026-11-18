@@ -29,7 +29,7 @@ class SaleHistoryController extends Controller
             $request->validated('reason_note'),
             $request->user()
         );
-        $sale->load(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod']);
+        $sale->load(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod']);
         $sale->loadSum('activePayments', 'amount');
 
         return response()->json([
@@ -48,7 +48,7 @@ class SaleHistoryController extends Controller
 
         $sales = CommercialOperation::forStore($storeId)
             ->byType('sale')
-            ->with(['customer', 'user', 'items', 'payments.storePaymentMethod'])
+            ->with(['customer.addresses.locality', 'user', 'items', 'payments.storePaymentMethod'])
             ->withSum('activePayments', 'amount')
             ->when($request->filled('status'), fn ($query) => $query->byStatus($request->status))
             ->when($request->filled('operation_number'), fn ($query) => $query->where('operation_number', 'like', trim($request->operation_number).'%'))
@@ -73,7 +73,7 @@ class SaleHistoryController extends Controller
     public function show(Request $request, string $id): JsonResponse
     {
         $sale = $this->saleForStore($request, $id, [
-            'customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod',
+            'customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod',
         ]);
 
         if (! $sale) {

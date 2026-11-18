@@ -21,7 +21,8 @@ class DriverStopResource extends JsonResource
         // Build contact info from loaded relations
         $contactName = null;
         $contactPhone = null;
-        $address = null;
+        $snapshot = $this->destinationSnapshot();
+        $address = $snapshot ? trim("{$snapshot['street']} {$snapshot['number']}") : null;
 
         if ($this->relationLoaded('order') && $this->order?->relationLoaded('customer')) {
             $customer = $this->order->customer;
@@ -29,7 +30,7 @@ class DriverStopResource extends JsonResource
             if ($customer->relationLoaded('contacts')) {
                 $contactPhone = $customer->contacts->first()?->phone;
             }
-            if ($customer->relationLoaded('addresses')) {
+            if (! $snapshot && $customer->relationLoaded('addresses')) {
                 $mainAddress = $customer->addresses->firstWhere('is_main', true);
                 if ($mainAddress) {
                     $address = trim("{$mainAddress->street} {$mainAddress->number}");
@@ -43,6 +44,7 @@ class DriverStopResource extends JsonResource
             'sequence' => $this->sequence,
             'status' => $this->status,
             'address' => $address,
+            'delivery_reference' => $this->destination_observations,
             'contact_name' => $contactName,
             'contact_phone' => $contactPhone,
             'timezone' => $timezone,

@@ -105,7 +105,7 @@ class OrderController extends Controller
         // Búsqueda por localidad del domicilio de entrega
         if ($request->filled('locality')) {
             $query->whereHas('customer.addresses', function ($q) use ($request) {
-                $q->where('is_main', true)
+                $q->where('type', 'delivery')
                     ->whereHas('locality', function ($q2) use ($request) {
                         $q2->where('name', 'like', '%'.$request->locality.'%');
                     });

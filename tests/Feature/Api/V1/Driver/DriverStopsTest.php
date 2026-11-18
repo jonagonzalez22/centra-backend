@@ -96,6 +96,7 @@ function createDriverTestData(User $driver, Store $store, Vehicle $vehicle): arr
         'status' => 'pending',
         'estimated_arrival_at' => '2026-08-11 09:30:00',
         'logistics_notes' => 'Timbre en piso 3',
+        'destination_observations' => 'Casa de color marrón con blanco.',
     ]);
 
     $stop2 = RouteStop::factory()->create([
@@ -161,6 +162,8 @@ test('driver routes stops returns 200 with correct structure for assigned driver
         ->assertJsonPath('data.0.sequence', 1)
         ->assertJsonPath('data.0.status', 'pending')
         ->assertJsonPath('data.0.address.street', 'Av. Corrientes 1234')
+        ->assertJsonPath('data.0.delivery_reference', 'Casa de color marrón con blanco.')
+        ->assertJsonPath('data.1.delivery_reference', null)
         ->assertJsonPath('data.0.customer.name', 'Juan Pérez')
         ->assertJsonPath('data.0.customer.phone', '+5491155551234')
         ->assertJsonStructure([
@@ -170,6 +173,7 @@ test('driver routes stops returns 200 with correct structure for assigned driver
                     'id',
                     'sequence',
                     'status',
+                    'delivery_reference',
                     'customer' => ['name', 'phone'],
                     'address' => ['street', 'locality', 'latitude', 'longitude', 'notes'],
                     'notification_window_start',
@@ -381,6 +385,16 @@ test('driver stops show includes notes from logistics_notes', function () {
 
     $response->assertStatus(200)
         ->assertJsonPath('data.notes', 'Timbre en piso 3');
+});
+
+test('driver stops show includes the delivery address reference snapshot', function () {
+    $data = createDriverTestData($this->driver, $this->store, $this->vehicle);
+    $stop = $data['stops'][0];
+
+    $this->withHeader('Authorization', "Bearer {$this->driverToken}")
+        ->getJson("/api/v1/driver/stops/{$stop->id}")
+        ->assertOk()
+        ->assertJsonPath('data.delivery_reference', 'Casa de color marrón con blanco.');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

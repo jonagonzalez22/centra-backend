@@ -141,6 +141,24 @@ test('creates a new address', function () {
     ]);
 });
 
+test('rejects a second delivery address for the same customer', function () {
+    CustomerAddress::factory()->forCustomer($this->customer)->for($this->locality)->ofType('delivery')->create();
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/customers/{$this->customer->id}/addresses", [
+            'customer_id' => $this->customer->id,
+            'locality_id' => $this->locality->id,
+            'street' => 'Calle Segunda',
+            'number' => '456',
+            'postal_code' => '1000',
+            'type' => 'delivery',
+        ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors('type')
+        ->assertJsonPath('errors.type.0', 'El cliente ya tiene un domicilio de Entrega.');
+});
+
 test('fails with invalid locality_id', function () {
     $response = $this->withHeader('Authorization', "Bearer $this->token")
         ->postJson("/api/v1/store/customers/{$this->customer->id}/addresses", [
@@ -223,6 +241,48 @@ test('updates an address', function () {
         'id' => $address->id,
         'street' => 'Av. Santa Fe',
     ]);
+});
+
+test('allows editing the existing delivery address', function () {
+    $address = CustomerAddress::factory()->forCustomer($this->customer)->ofType('delivery')->create();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/addresses/{$address->id}", [
+            'street' => 'Calle Actualizada',
+            'type' => 'delivery',
+        ])
+        ->assertStatus(200)
+        ->assertJsonPath('data.type', 'delivery')
+        ->assertJsonPath('data.street', 'Calle Actualizada');
+});
+
+test('rejects changing another address to delivery when one already exists', function () {
+    CustomerAddress::factory()->forCustomer($this->customer)->ofType('delivery')->create();
+    $otherAddress = CustomerAddress::factory()->forCustomer($this->customer)->ofType('billing')->create();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/addresses/{$otherAddress->id}", ['type' => 'delivery'])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('type');
+});
+
+test('allows replacing a delivery address after changing the previous one to another type', function () {
+    $deliveryAddress = CustomerAddress::factory()->forCustomer($this->customer)->ofType('delivery')->create();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/addresses/{$deliveryAddress->id}", ['type' => 'other'])
+        ->assertStatus(200);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/customers/{$this->customer->id}/addresses", [
+            'customer_id' => $this->customer->id,
+            'locality_id' => $this->locality->id,
+            'street' => 'Nueva entrega',
+            'number' => '789',
+            'postal_code' => '1000',
+            'type' => 'delivery',
+        ])
+        ->assertStatus(201);
 });
 
 test('cannot update address from another store', function () {

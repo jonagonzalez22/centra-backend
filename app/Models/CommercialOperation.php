@@ -175,7 +175,7 @@ class CommercialOperation extends Model
             $customer = $this->customer;
 
             if ($customer && $customer->relationLoaded('addresses')) {
-                return $customer->addresses->firstWhere('is_main', true);
+                return $customer->addresses->firstWhere('type', 'delivery');
             }
         }
 

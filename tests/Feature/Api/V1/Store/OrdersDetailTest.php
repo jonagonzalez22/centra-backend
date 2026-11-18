@@ -55,6 +55,7 @@ beforeEach(function () {
     $this->address = CustomerAddress::factory()->create([
         'customer_id' => $this->customer->id,
         'locality_id' => $this->locality->id,
+        'type' => 'billing',
         'is_main' => true,
         'street' => 'Av. Corrientes',
         'number' => '1234',
@@ -670,21 +671,44 @@ describe('GET /api/v1/store/orders/{id} — Orders Detail', function () {
         expect($history->pluck('type')->all())->toBe(['order_created']);
     });
 
-    test('includes delivery_address from customer main address', function () {
+    test('returns null delivery_address when the customer only has a main address', function () {
+        $order = createDetailOrder($this->store, ['customer_id' => $this->customer->id]);
+
+        $response = getOrderDetail($order->id);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.delivery_address', null);
+    });
+
+    test('uses the delivery address when it differs from the main address', function () {
+        $delivery = CustomerAddress::factory()->forCustomer($this->customer)->for($this->locality)->ofType('delivery')->create([
+            'is_main' => false,
+            'street' => 'Calle de Entrega',
+            'number' => '456',
+            'observations' => 'Portón azul',
+        ]);
         $order = createDetailOrder($this->store, ['customer_id' => $this->customer->id]);
 
         $response = getOrderDetail($order->id);
 
         $response->assertStatus(200);
         $address = $response->json('data.delivery_address');
-        expect($address)->not->toBeNull();
-        expect($address['id'])->toBe($this->address->id);
-        expect($address['street'])->toBe('Av. Corrientes');
-        expect($address['number'])->toBe('1234');
-        expect($address['locality'])->toBe($this->locality->name);
-        expect($address['province'])->toBe($this->province->name);
-        expect($address['notes'])->toBe('Timbre 4B');
-        expect($address['full_address'])->toBe('Av. Corrientes 1234');
+        expect($address['id'])->toBe($delivery->id)
+            ->and($address['street'])->toBe('Calle de Entrega')
+            ->and($address['number'])->toBe('456')
+            ->and($address['full_address'])->toBe('Calle de Entrega 456')
+            ->and($address['notes'])->toBe('Portón azul');
+    });
+
+    test('uses a delivery address even when the customer has no main address', function () {
+        $this->address->update(['type' => 'delivery', 'is_main' => false]);
+        $order = createDetailOrder($this->store, ['customer_id' => $this->customer->id]);
+
+        $response = getOrderDetail($order->id);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.delivery_address.id', $this->address->id)
+            ->assertJsonPath('data.delivery_address.full_address', 'Av. Corrientes 1234');
     });
 
     test('includes created_by from user relationship', function () {

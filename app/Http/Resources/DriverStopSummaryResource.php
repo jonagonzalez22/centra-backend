@@ -26,13 +26,21 @@ class DriverStopSummaryResource extends JsonResource
         $addressLatitude = null;
         $addressLongitude = null;
 
+        $snapshot = $this->destinationSnapshot();
+        if ($snapshot) {
+            $addressStreet = trim("{$snapshot['street']} {$snapshot['number']}");
+            $addressLocality = $snapshot['locality'];
+            $addressLatitude = $snapshot['latitude'];
+            $addressLongitude = $snapshot['longitude'];
+        }
+
         if ($this->relationLoaded('order') && $this->order?->relationLoaded('customer')) {
             $customer = $this->order->customer;
             $customerName = $customer->display_name ?? $customer->name;
             if ($customer->relationLoaded('contacts')) {
                 $customerPhone = $customer->contacts->first()?->phone;
             }
-            if ($customer->relationLoaded('addresses')) {
+            if (! $snapshot && $customer->relationLoaded('addresses')) {
                 $mainAddress = $customer->addresses->firstWhere('is_main', true);
                 if ($mainAddress) {
                     $addressStreet = trim("{$mainAddress->street} {$mainAddress->number}");
@@ -47,6 +55,7 @@ class DriverStopSummaryResource extends JsonResource
             'id' => $this->id,
             'sequence' => $this->sequence,
             'status' => $this->status,
+            'delivery_reference' => $this->destination_observations,
             'customer' => [
                 'name' => $customerName,
                 'phone' => $customerPhone,

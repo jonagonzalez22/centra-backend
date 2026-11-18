@@ -10,10 +10,10 @@ class EligibleOrderResource extends JsonResource
     public function toArray(Request $request): array
     {
         $customer = $this->relationLoaded('customer') ? $this->customer : null;
-        $mainAddress = null;
+        $deliveryAddress = null;
 
         if ($customer && $customer->relationLoaded('addresses')) {
-            $mainAddress = $customer->addresses->firstWhere('is_main', true);
+            $deliveryAddress = $customer->addresses->firstWhere('type', 'delivery');
         }
 
         return [
@@ -25,14 +25,14 @@ class EligibleOrderResource extends JsonResource
                 'name' => $customer->display_name ?? $customer->name,
                 'document' => $customer->document_number,
             ] : null,
-            'address' => $mainAddress ? [
-                'street' => $mainAddress->street,
-                'number' => $mainAddress->number,
-                'locality' => $mainAddress->relationLoaded('locality') && $mainAddress->locality
-                    ? $mainAddress->locality->name
+            'address' => $deliveryAddress ? [
+                'street' => $deliveryAddress->street,
+                'number' => $deliveryAddress->number,
+                'locality' => $deliveryAddress->relationLoaded('locality') && $deliveryAddress->locality
+                    ? $deliveryAddress->locality->name
                     : null,
-                'locality_id' => $mainAddress->locality_id,
-                'has_coordinates' => ! is_null($mainAddress->latitude) && ! is_null($mainAddress->longitude),
+                'locality_id' => $deliveryAddress->locality_id,
+                'has_coordinates' => ! is_null($deliveryAddress->latitude) && ! is_null($deliveryAddress->longitude),
             ] : null,
         ];
     }

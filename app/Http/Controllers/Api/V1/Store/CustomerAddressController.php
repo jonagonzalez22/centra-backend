@@ -7,9 +7,11 @@ use App\Http\Requests\Api\V1\Store\StoreCustomerAddressRequest;
 use App\Http\Requests\Api\V1\Store\UpdateCustomerAddressRequest;
 use App\Http\Resources\CustomerAddressResource;
 use App\Models\Customer;
-use App\Models\CustomerAddress;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
 class CustomerAddressController extends Controller
@@ -184,19 +186,32 @@ class CustomerAddressController extends Controller
             ], 404);
         }
 
-        $address = $customer->addresses()->create([
-            'locality_id' => $request->locality_id,
-            'street' => $request->street,
-            'number' => $request->number,
-            'floor' => $request->floor,
-            'apartment' => $request->apartment,
-            'postal_code' => $request->postal_code,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-            'type' => $request->type,
-            'is_main' => $request->boolean('is_main', false),
-            'observations' => $request->observations,
-        ]);
+        try {
+            $address = DB::transaction(function () use ($customer, $request, $storeId) {
+                $customer = Customer::forStore($storeId)->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+                $this->ensureDeliveryAddressIsUnique($customer, $request->type);
+
+                return $customer->addresses()->create([
+                    'locality_id' => $request->locality_id,
+                    'street' => $request->street,
+                    'number' => $request->number,
+                    'floor' => $request->floor,
+                    'apartment' => $request->apartment,
+                    'postal_code' => $request->postal_code,
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'type' => $request->type,
+                    'is_main' => $request->boolean('is_main', false),
+                    'observations' => $request->observations,
+                ]);
+            });
+        } catch (QueryException $exception) {
+            if ($this->isDeliveryAddressUniqueViolation($exception)) {
+                $this->deliveryAddressUniqueError();
+            }
+
+            throw $exception;
+        }
 
         $address->load(['locality', 'locality.province']);
 
@@ -379,7 +394,22 @@ class CustomerAddressController extends Controller
             $data['is_main'] = $request->boolean('is_main');
         }
 
-        $address->update($data);
+        try {
+            $address = DB::transaction(function () use ($address, $customer, $data, $storeId) {
+                $customer = Customer::forStore($storeId)->whereKey($customer->id)->lockForUpdate()->firstOrFail();
+                $address = $customer->addresses()->whereKey($address->id)->lockForUpdate()->firstOrFail();
+                $this->ensureDeliveryAddressIsUnique($customer, $data['type'] ?? $address->type, $address->id);
+                $address->update($data);
+
+                return $address;
+            });
+        } catch (QueryException $exception) {
+            if ($this->isDeliveryAddressUniqueViolation($exception)) {
+                $this->deliveryAddressUniqueError();
+            }
+
+            throw $exception;
+        }
         $address->load(['locality', 'locality.province']);
 
         return response()->json([
@@ -388,6 +418,37 @@ class CustomerAddressController extends Controller
             'data' => CustomerAddressResource::make($address),
             'errors' => null,
         ]);
+    }
+
+    private function ensureDeliveryAddressIsUnique(Customer $customer, string $type, ?string $exceptAddressId = null): void
+    {
+        if ($type !== 'delivery') {
+            return;
+        }
+
+        $query = $customer->addresses()->where('type', 'delivery');
+        if ($exceptAddressId !== null) {
+            $query->whereKeyNot($exceptAddressId);
+        }
+
+        if ($query->exists()) {
+            $this->deliveryAddressUniqueError();
+        }
+    }
+
+    private function isDeliveryAddressUniqueViolation(QueryException $exception): bool
+    {
+        return str_contains($exception->getMessage(), 'customer_addresses_one_delivery_per_customer');
+    }
+
+    private function deliveryAddressUniqueError(): never
+    {
+        throw new HttpResponseException(response()->json([
+            'status' => 'error',
+            'message' => 'Error de validación.',
+            'data' => null,
+            'errors' => ['type' => ['El cliente ya tiene un domicilio de Entrega.']],
+        ], 422));
     }
 
     #[OA\Delete(

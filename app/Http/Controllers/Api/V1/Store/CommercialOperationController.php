@@ -103,7 +103,7 @@ class CommercialOperationController extends Controller
         $storeId = $request->user()->store_id;
 
         $query = CommercialOperation::forStore($storeId)
-            ->with(['customer', 'user', 'items', 'payments.storePaymentMethod'])
+            ->with(['customer.addresses.locality', 'user', 'items', 'payments.storePaymentMethod'])
             ->withSum('activePayments', 'amount')
             ->when($request->filled('type'), function ($query) use ($request) {
                 $query->byType($request->type);
@@ -206,7 +206,7 @@ class CommercialOperationController extends Controller
             );
 
             $operation->load([
-                'customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod',
+                'customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod',
                 'payments.cashSession', 'payments.registeredBy',
             ])->loadSum('activePayments', 'amount');
 
@@ -253,7 +253,7 @@ class CommercialOperationController extends Controller
         $storeId = $request->user()->store_id;
 
         $operation = CommercialOperation::forStore($storeId)
-            ->with(['customer', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod'])
+            ->with(['customer.addresses.locality', 'user', 'items.product', 'payments.storePaymentMethod.paymentMethod'])
             ->withSum('activePayments', 'amount')
             ->find($id);
 
@@ -307,7 +307,7 @@ class CommercialOperationController extends Controller
         $operation = CommercialOperation::forStore($storeId)
             ->with([
                 'store',
-                'customer',
+                'customer.addresses.locality',
                 'user',
                 'items' => fn ($query) => $query->with('product.stockMeasurementUnit')->orderBy('created_at')->orderBy('id'),
                 'payments' => fn ($query) => $query->orderBy('created_at')->orderBy('id'),
@@ -408,7 +408,7 @@ class CommercialOperationController extends Controller
             );
 
             $operation->load([
-                'customer',
+                'customer.addresses.locality',
                 'user',
                 'items.product',
                 'payments.storePaymentMethod.paymentMethod',
@@ -495,7 +495,7 @@ class CommercialOperationController extends Controller
             );
 
             $operation->load([
-                'customer',
+                'customer.addresses.locality',
                 'user',
                 'items.product',
                 'payments.storePaymentMethod.paymentMethod',

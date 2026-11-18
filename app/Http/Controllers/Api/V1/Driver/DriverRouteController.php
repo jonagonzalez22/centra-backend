@@ -34,12 +34,15 @@ class DriverRouteController extends Controller
      *     @OA\Response(
      *         response=200,
      *         description="Lista de paradas",
+     *
      *         @OA\JsonContent(
+     *
      *             @OA\Property(property="status", type="string", example="success"),
      *             @OA\Property(property="data", type="array", @OA\Items(
      *                 @OA\Property(property="id", type="string", format="uuid"),
      *                 @OA\Property(property="sequence", type="integer"),
      *                 @OA\Property(property="status", type="string"),
+     *                 @OA\Property(property="delivery_reference", type="string", nullable=true),
      *                 @OA\Property(property="customer", type="object",
      *                     @OA\Property(property="name", type="string", nullable=true),
      *                     @OA\Property(property="phone", type="string", nullable=true)
@@ -62,6 +65,7 @@ class DriverRouteController extends Controller
      *             @OA\Property(property="errors", type="null")
      *         )
      *     ),
+     *
      *     @OA\Response(response=403, description="Driver not assigned to this route"),
      *     @OA\Response(response=404, description="Route not found")
      * )

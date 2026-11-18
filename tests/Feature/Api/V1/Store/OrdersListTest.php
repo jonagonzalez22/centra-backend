@@ -44,6 +44,7 @@ beforeEach(function () {
     $this->address = CustomerAddress::factory()->create([
         'customer_id' => $this->customer->id,
         'locality_id' => $this->locality->id,
+        'type' => 'billing',
         'is_main' => true,
         'street' => 'Av. Corrientes',
         'number' => '1234',
@@ -246,21 +247,31 @@ describe('GET /api/v1/store/orders — Orders List', function () {
 
         CustomerAddress::factory()->create([
             'customer_id' => $customerA->id,
-            'locality_id' => $localityA->id,
+            'locality_id' => $localityB->id,
+            'type' => 'billing',
             'is_main' => true,
+        ]);
+        CustomerAddress::factory()->create([
+            'customer_id' => $customerA->id,
+            'locality_id' => $localityA->id,
+            'type' => 'delivery',
+            'is_main' => false,
         ]);
         CustomerAddress::factory()->create([
             'customer_id' => $customerB->id,
             'locality_id' => $localityB->id,
-            'is_main' => true,
+            'type' => 'delivery',
+            'is_main' => false,
         ]);
 
         $order1 = createOrderForStore($this->store, ['customer_id' => $customerA->id]);
         $order2 = createOrderForStore($this->store, ['customer_id' => $customerB->id]);
 
-        $response = listOrders(['locality' => 'Palermo']);
+        $response = listOrders(['locality' => 'Palermo', 'status' => 'open', 'per_page' => 1]);
 
         $response->assertStatus(200);
+        expect($response->json('data.total'))->toBe(1)
+            ->and($response->json('data.per_page'))->toBe(1);
         $ids = collect($response->json('data.items'))->pluck('id')->toArray();
         expect($ids)->toContain($order1->id)
             ->not()->toContain($order2->id);
@@ -371,7 +382,12 @@ describe('GET /api/v1/store/orders — Orders List', function () {
         expect((float) $item['pending_amount'])->toBe(0.0);
     });
 
-    test('includes delivery_address from customer main address', function () {
+    test('includes the non-main delivery address in the list response', function () {
+        $delivery = CustomerAddress::factory()->forCustomer($this->customer)->for($this->locality)->ofType('delivery')->create([
+            'is_main' => false,
+            'street' => 'Calle de Entrega',
+            'number' => '456',
+        ]);
         $order = createOrderForStore($this->store, [
             'customer_id' => $this->customer->id,
         ]);
@@ -381,8 +397,20 @@ describe('GET /api/v1/store/orders — Orders List', function () {
         $response->assertStatus(200);
         $data = collect($response->json('data.items'))->firstWhere('id', $order->id);
         expect($data['delivery_address'])->not->toBeNull();
-        expect($data['delivery_address']['street'])->toBe('Av. Corrientes');
-        expect($data['delivery_address']['full_address'])->toBe('Av. Corrientes 1234');
+        expect($data['delivery_address']['street'])->toBe('Calle de Entrega');
+        expect($data['delivery_address']['full_address'])->toBe('Calle de Entrega 456');
         expect($data['delivery_address']['locality'])->toBe($this->locality->name);
+        expect($data['delivery_address']['street'])->not->toBe($this->address->street);
+        expect($delivery->is_main)->toBeFalse();
+    });
+
+    test('returns null delivery_address in the list when the customer has no delivery address', function () {
+        $order = createOrderForStore($this->store, ['customer_id' => $this->customer->id]);
+
+        $response = listOrders();
+
+        $response->assertStatus(200);
+        $data = collect($response->json('data.items'))->firstWhere('id', $order->id);
+        expect($data['delivery_address'])->toBeNull();
     });
 });
