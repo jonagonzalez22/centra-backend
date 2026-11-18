@@ -62,6 +62,7 @@ function createDriver(Store $store): User
 {
     $driver = User::factory()->create(['store_id' => $store->id]);
     $driver->assignRole('STORE_DRIVER');
+
     return $driver;
 }
 
@@ -144,12 +145,14 @@ test('creates a new delivery route', function () {
             'driver_id' => $driver->id,
             'operational_date' => $date,
             'observations' => 'Ruta de prueba',
+            'route_name' => '  Godoy Cruz - Las Heras  ',
         ]);
 
     $response->assertStatus(201)
         ->assertJsonPath('data.status', 'draft')
         ->assertJsonPath('data.operational_date', $date)
-        ->assertJsonPath('data.observations', 'Ruta de prueba');
+        ->assertJsonPath('data.observations', 'Ruta de prueba')
+        ->assertJsonPath('data.route_name', 'Godoy Cruz - Las Heras');
 
     expect(DeliveryRoute::count())->toBe(1);
     expect(DeliveryRoute::first()->store_id)->toBe($this->store->id);
@@ -258,6 +261,89 @@ test('filters routes by status', function () {
 
     $response->assertStatus(200)
         ->assertJsonCount(1, 'data.items');
+});
+
+test('filters routes by number, operational date range, driver and status', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $otherDriver = createDriver($this->store);
+    $matchingRoute = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => '2026-11-10',
+        'status' => 'planned',
+    ]);
+    DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $otherDriver->id,
+        'operational_date' => '2026-11-10',
+        'status' => 'planned',
+    ]);
+    DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => '2026-11-11',
+        'status' => 'draft',
+    ]);
+
+    $routeNumber = strtoupper(substr($matchingRoute->id, 0, 8));
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes?route_number=%23{$routeNumber}&from=2026-11-10&to=2026-11-10&driver_id={$driver->id}&status=planned");
+
+    $response->assertOk()
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.id', $matchingRoute->id);
+});
+
+test('filters routes by a case insensitive partial route name and keeps stores isolated', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $matching = DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'route_name' => 'Godoy Cruz - Las Heras']);
+    $otherStore = Store::factory()->create();
+    DeliveryRoute::factory()->create(['store_id' => $otherStore->id, 'vehicle_id' => createVehicle($otherStore)->id, 'driver_id' => createDriver($otherStore)->id, 'route_name' => 'Godoy Centro']);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes?route_name=gOdOy')
+        ->assertOk()->assertJsonPath('data.total', 1)->assertJsonPath('data.items.0.id', $matching->id);
+});
+
+test('sorts operational date consistently before paginating', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $routes = collect(['2026-11-10', '2026-11-12', '2026-11-12'])->map(fn ($date) => DeliveryRoute::factory()->create(['store_id' => $this->store->id, 'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'operational_date' => $date]));
+
+    $asc = $this->withHeader('Authorization', "Bearer $this->token")->getJson('/api/v1/store/routes?sort_dir=asc&per_page=2');
+    $desc = $this->withHeader('Authorization', "Bearer $this->token")->getJson('/api/v1/store/routes?sort_dir=desc&per_page=2');
+
+    $asc->assertOk()->assertJsonPath('data.items.0.id', $routes->sortBy('operational_date')->first()->id);
+    $desc->assertOk()->assertJsonPath('data.items.0.operational_date', '2026-11-12');
+    expect($desc->json('data.items.0.id'))->not->toBe($desc->json('data.items.1.id'));
+});
+
+test('validates route list filters and keeps results isolated by store', function () {
+    $otherStore = Store::factory()->create();
+    $otherVehicle = createVehicle($otherStore);
+    $otherDriver = createDriver($otherStore);
+    $otherRoute = DeliveryRoute::factory()->create([
+        'store_id' => $otherStore->id,
+        'vehicle_id' => $otherVehicle->id,
+        'driver_id' => $otherDriver->id,
+        'operational_date' => '2026-11-10',
+        'status' => 'planned',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes?route_number=%23'.substr($otherRoute->id, 0, 8)."&driver_id={$otherDriver->id}");
+
+    $response->assertOk()->assertJsonPath('data.total', 0);
+
+    $invalid = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson('/api/v1/store/routes?status=unknown&from=2026-11-11&to=2026-11-10');
+
+    $invalid->assertStatus(422)->assertJsonValidationErrors(['status', 'to']);
 });
 
 test('shows a single route with stops and events', function () {
@@ -457,12 +543,24 @@ test('updates a draft route', function () {
     $response = $this->withHeader('Authorization', "Bearer $this->token")
         ->putJson("/api/v1/store/routes/{$route->id}", [
             'observations' => 'Updated observations',
+            'route_name' => '  Ruta actualizada  ',
         ]);
 
     $response->assertStatus(200)
-        ->assertJsonPath('data.observations', 'Updated observations');
+        ->assertJsonPath('data.observations', 'Updated observations')
+        ->assertJsonPath('data.route_name', 'Ruta actualizada');
 
     expect($route->fresh()->observations)->toBe('Updated observations');
+    expect($route->fresh()->route_name)->toBe('Ruta actualizada');
+});
+
+test('validates the route name maximum length', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson('/api/v1/store/routes', ['vehicle_id' => $vehicle->id, 'driver_id' => $driver->id, 'operational_date' => now()->addDay()->format('Y-m-d'), 'route_name' => str_repeat('a', 101)])
+        ->assertStatus(422)->assertJsonValidationErrors('route_name');
 });
 
 // ── Stop Management Tests ────────────────────────────────────────────

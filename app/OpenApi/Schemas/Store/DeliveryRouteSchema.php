@@ -17,6 +17,9 @@ class DeliveryRouteSchema
     #[OA\Property(format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440001')]
     public string $store_id;
 
+    #[OA\Property(example: 'Godoy Cruz - Las Heras', nullable: true, maxLength: 100)]
+    public ?string $route_name;
+
     #[OA\Property(example: '2026-07-30', format: 'date')]
     public string $operational_date;
 

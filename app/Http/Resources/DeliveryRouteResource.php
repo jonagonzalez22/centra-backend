@@ -14,6 +14,7 @@ class DeliveryRouteResource extends JsonResource
         return [
             'id' => $this->id,
             'store_id' => $this->store_id,
+            'route_name' => $this->route_name,
             'operational_date' => $this->operational_date?->format('Y-m-d'),
             'status' => $this->status,
             'observations' => $this->observations,

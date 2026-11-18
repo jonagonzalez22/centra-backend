@@ -10,6 +10,7 @@ use App\Http\Requests\Api\V1\Store\CancelRouteRequest;
 use App\Http\Requests\Api\V1\Store\ConfirmLoadRequest;
 use App\Http\Requests\Api\V1\Store\DispatchRouteRequest;
 use App\Http\Requests\Api\V1\Store\FinalizeReconciliationRequest;
+use App\Http\Requests\Api\V1\Store\ListRoutesRequest;
 use App\Http\Requests\Api\V1\Store\PlanRouteRequest;
 use App\Http\Requests\Api\V1\Store\RejectCollectionRequest;
 use App\Http\Requests\Api\V1\Store\RemoveStopRequest;
@@ -135,7 +136,9 @@ class RouteController extends Controller
      *
      *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
      *   @OA\Parameter(name="page", in="query", @OA\Schema(type="integer", default=1), description="Número de página"),
-     *   @OA\Parameter(name="status", in="query", @OA\Schema(type="string", enum={"draft", "planned", "cancelled"}), description="Filtrar por estado"),
+     *   @OA\Parameter(name="route_number", in="query", @OA\Schema(type="string", example="A1B2C3D4"), description="Buscar parcialmente por identificador de ruta; acepta el prefijo #"),
+     *   @OA\Parameter(name="route_name", in="query", @OA\Schema(type="string", example="Godoy Cruz - Las Heras"), description="Buscar parcialmente por nombre de ruta"),
+     *   @OA\Parameter(name="status", in="query", @OA\Schema(type="string", enum={"draft", "planned", "loaded", "dispatched", "awaiting_reconciliation", "completed", "cancelled"}), description="Filtrar por estado"),
      *   @OA\Parameter(name="vehicle_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por vehículo"),
      *   @OA\Parameter(name="driver_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por conductor"),
      *   @OA\Parameter(name="from", in="query", @OA\Schema(type="string", format="date"), description="Fecha desde (rango)"),
@@ -163,7 +166,7 @@ class RouteController extends Controller
      *   @OA\Response(response=401, description="No autenticado")
      * )
      */
-    public function index(Request $request): JsonResponse
+    public function index(ListRoutesRequest $request): JsonResponse
     {
         $storeId = $request->user()->store_id;
 
@@ -173,6 +176,14 @@ class RouteController extends Controller
 
         if ($request->filled('status')) {
             $query->byStatus($request->get('status'));
+        }
+
+        if ($request->filled('route_number')) {
+            $query->whereRouteNumberLike($request->get('route_number'));
+        }
+
+        if ($request->filled('route_name')) {
+            $query->whereRouteNameLike($request->get('route_name'));
         }
 
         if ($request->filled('vehicle_id')) {
@@ -187,8 +198,9 @@ class RouteController extends Controller
             $query->byDateRange($request->get('from'), $request->get('to'));
         }
 
-        $routes = $query->orderBy('operational_date', 'desc')
-            ->orderBy('created_at', 'desc')
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $routes = $query->orderBy('operational_date', $sortDirection)
+            ->orderBy('id', $sortDirection)
             ->paginate($request->get('per_page', 15));
 
         return response()->json([

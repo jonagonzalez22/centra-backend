@@ -50,6 +50,7 @@ class RouteManagementService
                 'store_id' => $storeId,
                 'vehicle_id' => $data['vehicle_id'],
                 'driver_id' => $data['driver_id'],
+                'route_name' => $this->normalizeRouteName($data['route_name'] ?? null),
                 'operational_date' => $data['operational_date'],
                 'status' => 'draft',
                 'observations' => $data['observations'] ?? null,
@@ -85,10 +86,21 @@ class RouteManagementService
                 $this->validateDriver($data['driver_id'], $route->store_id);
             }
 
+            if (array_key_exists('route_name', $data)) {
+                $data['route_name'] = $this->normalizeRouteName($data['route_name']);
+            }
+
             $route->update($data);
 
             return $route;
         });
+    }
+
+    private function normalizeRouteName(?string $routeName): ?string
+    {
+        $routeName = $routeName === null ? null : trim($routeName);
+
+        return $routeName === '' ? null : $routeName;
     }
 
     /**

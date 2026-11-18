@@ -21,6 +21,7 @@ class DeliveryRoute extends Model
         'store_id',
         'vehicle_id',
         'driver_id',
+        'route_name',
         'operational_date',
         'status',
         'observations',
@@ -114,6 +115,21 @@ class DeliveryRoute extends Model
     public function scopeByStatus(Builder $query, string $status): Builder
     {
         return $query->where('status', $status);
+    }
+
+    public function scopeWhereRouteNumberLike(Builder $query, string $routeNumber): Builder
+    {
+        $routeNumber = ltrim(trim($routeNumber), '#');
+        $escapedRouteNumber = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $routeNumber);
+
+        return $query->where('id', 'like', "%{$escapedRouteNumber}%");
+    }
+
+    public function scopeWhereRouteNameLike(Builder $query, string $routeName): Builder
+    {
+        $escapedRouteName = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], trim($routeName));
+
+        return $query->whereRaw('LOWER(route_name) LIKE ?', ['%'.mb_strtolower($escapedRouteName).'%']);
     }
 
     public function scopeActive(Builder $query): Builder

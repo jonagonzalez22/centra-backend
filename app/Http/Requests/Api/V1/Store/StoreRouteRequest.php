@@ -18,6 +18,7 @@ class StoreRouteRequest extends FormRequest
         return [
             'vehicle_id' => ['required', 'uuid', 'exists:vehicles,id'],
             'driver_id' => ['required', 'uuid', 'exists:users,id'],
+            'route_name' => ['nullable', 'string', 'max:100'],
             'operational_date' => ['required', 'date', 'after_or_equal:today'],
             'observations' => ['nullable', 'string'],
         ];
