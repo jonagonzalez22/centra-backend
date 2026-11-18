@@ -32,8 +32,8 @@ class CustomerSchema
     #[OA\Property(ref: '#/components/schemas/DocumentType', nullable: true)]
     public ?object $document_type;
 
-    #[OA\Property(example: '20-12345678-5')]
-    public string $document_number;
+    #[OA\Property(example: '20-12345678-5', nullable: true)]
+    public ?string $document_number;
 
     #[OA\Property(example: 'active', enum: ['active', 'inactive'])]
     public string $status;

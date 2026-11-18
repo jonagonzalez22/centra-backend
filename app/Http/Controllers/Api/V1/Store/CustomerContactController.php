@@ -175,8 +175,8 @@ class CustomerContactController extends Controller
         $contact = $customer->contacts()->create([
             'name' => $request->name,
             'position' => $request->position,
-            'email' => $request->email,
-            'phone' => $request->phone,
+            'email' => $this->normalizeContactMethod($request->email),
+            'phone' => $this->normalizeContactMethod($request->phone),
             'is_main' => $request->boolean('is_main', false),
         ]);
 
@@ -349,6 +349,30 @@ class CustomerContactController extends Controller
 
         $data = $request->validated();
 
+        $email = array_key_exists('email', $request->all())
+            ? $this->normalizeContactMethod($request->input('email'))
+            : $contact->email;
+        $phone = array_key_exists('phone', $request->all())
+            ? $this->normalizeContactMethod($request->input('phone'))
+            : $contact->phone;
+
+        if ($email === null && $phone === null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error de validación.',
+                'data' => null,
+                'errors' => ['email' => ['Completá al menos un medio de contacto: email o teléfono.']],
+            ], 422);
+        }
+
+        if (array_key_exists('email', $request->all())) {
+            $data['email'] = $email;
+        }
+
+        if (array_key_exists('phone', $request->all())) {
+            $data['phone'] = $phone;
+        }
+
         if ($request->has('is_main')) {
             $data['is_main'] = $request->boolean('is_main');
         }
@@ -361,6 +385,17 @@ class CustomerContactController extends Controller
             'data' => CustomerContactResource::make($contact),
             'errors' => null,
         ]);
+    }
+
+    private function normalizeContactMethod(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
     }
 
     #[OA\Delete(

@@ -10,6 +10,16 @@ use Illuminate\Validation\Rule;
 
 class UpdateCustomerRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        foreach (['document_type_id', 'document_number'] as $field) {
+            if (array_key_exists($field, $this->all())) {
+                $value = $this->input($field);
+                $this->merge([$field => is_string($value) && trim($value) === '' ? null : $value]);
+            }
+        }
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -27,13 +37,13 @@ class UpdateCustomerRequest extends FormRequest
             'company_name' => ['nullable', 'string', 'max:255'],
             'document_type_id' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'uuid',
                 'exists:document_types,id',
             ],
             'document_number' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:50',
                 function ($attribute, $value, $fail) use ($storeId, $customerId) {
@@ -60,13 +70,30 @@ class UpdateCustomerRequest extends FormRequest
             'first_name.max' => 'El nombre no puede exceder los 100 caracteres.',
             'last_name.max' => 'El apellido no puede exceder los 100 caracteres.',
             'company_name.max' => 'El nombre de la empresa no puede exceder los 255 caracteres.',
-            'document_type_id.required' => 'El tipo de documento es obligatorio.',
             'document_type_id.uuid' => 'El ID del tipo de documento debe ser un UUID válido.',
             'document_type_id.exists' => 'El tipo de documento no existe.',
-            'document_number.required' => 'El número de documento es obligatorio.',
             'document_number.max' => 'El número de documento no puede exceder los 50 caracteres.',
             'status.in' => 'El estado debe ser activo o inactivo.',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $customer = Customer::forStore($this->user()->store_id)->find($this->route('customer'));
+            if (! $customer) {
+                return;
+            }
+
+            $type = array_key_exists('document_type_id', $this->all()) ? $this->input('document_type_id') : $customer->document_type_id;
+            $number = array_key_exists('document_number', $this->all()) ? $this->input('document_number') : $customer->document_number;
+
+            if (($type === null) !== ($number === null)) {
+                $message = 'Completá el tipo y número de documento, o dejá ambos vacíos.';
+                $validator->errors()->add('document_type_id', $message);
+                $validator->errors()->add('document_number', $message);
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator): void

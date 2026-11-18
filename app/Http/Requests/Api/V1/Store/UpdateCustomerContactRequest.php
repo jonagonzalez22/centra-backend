@@ -2,12 +2,22 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class UpdateCustomerContactRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        foreach (['email', 'phone'] as $field) {
+            if (array_key_exists($field, $this->all())) {
+                $value = $this->input($field);
+                $this->merge([$field => is_string($value) && trim($value) === '' ? null : trim($value)]);
+            }
+        }
+    }
+
     public function authorize(): bool
     {
         return true;

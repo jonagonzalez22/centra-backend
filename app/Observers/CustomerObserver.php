@@ -40,7 +40,9 @@ class CustomerObserver
     private function normalizeDocumentNumber(Customer $customer): void
     {
         if ($customer->isDirty('document_number')) {
-            $customer->document_number_normalized = preg_replace('/[^0-9]/', '', $customer->document_number);
+            $customer->document_number_normalized = $customer->document_number === null
+                ? null
+                : preg_replace('/[^0-9]/', '', $customer->document_number);
         }
     }
 

@@ -117,10 +117,11 @@ test('creates a new contact', function () {
     ]);
 });
 
-test('creates a contact with minimal fields', function () {
+test('creates a contact with only email', function () {
     $data = [
         'customer_id' => $this->customer->id,
         'name' => 'María García',
+        'email' => 'maria@ejemplo.com',
     ];
 
     $response = $this->withHeader('Authorization', "Bearer $this->token")
@@ -128,6 +129,59 @@ test('creates a contact with minimal fields', function () {
 
     $response->assertStatus(201)
         ->assertJsonPath('data.name', 'María García');
+});
+
+test('creates a contact with only phone', function () {
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/customers/{$this->customer->id}/contacts", [
+            'customer_id' => $this->customer->id,
+            'name' => 'María García',
+            'phone' => '+54 11 1234-5678',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.email', null)
+        ->assertJsonPath('data.phone', '+54 11 1234-5678');
+});
+
+test('requires at least one contact method', function () {
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/customers/{$this->customer->id}/contacts", [
+            'customer_id' => $this->customer->id,
+            'name' => 'Sin medios',
+            'email' => ' ',
+            'phone' => ' ',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('email');
+});
+
+test('preserves the remaining contact method during partial updates', function () {
+    $contact = CustomerContact::factory()->forCustomer($this->customer)->create([
+        'email' => 'contacto@ejemplo.com',
+        'phone' => '+54 11 1234-5678',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/contacts/{$contact->id}", [
+            'email' => ' ',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.email', null)
+        ->assertJsonPath('data.phone', '+54 11 1234-5678');
+});
+
+test('rejects removing the last contact method', function () {
+    $contact = CustomerContact::factory()->forCustomer($this->customer)->create([
+        'email' => 'contacto@ejemplo.com',
+        'phone' => null,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/contacts/{$contact->id}", [
+            'email' => null,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('email');
 });
 
 test('fails without name', function () {
@@ -178,7 +232,9 @@ test('returns 404 when customer does not exist for contact show', function () {
 });
 
 test('updates a contact', function () {
-    $contact = CustomerContact::factory()->forCustomer($this->customer)->create();
+    $contact = CustomerContact::factory()->forCustomer($this->customer)->create([
+        'email' => 'contacto@ejemplo.com',
+    ]);
 
     $response = $this->withHeader('Authorization', "Bearer $this->token")
         ->putJson("/api/v1/store/customers/{$this->customer->id}/contacts/{$contact->id}", [
@@ -269,7 +325,7 @@ test('is_main toggle sets other contacts to false', function () {
     expect($first->fresh()->is_main)->toBeFalse();
 });
 
-test('creates contact with only name', function () {
+test('rejects creating a contact with only name', function () {
     $data = [
         'customer_id' => $this->customer->id,
         'name' => 'Solo Nombre',
@@ -278,9 +334,6 @@ test('creates contact with only name', function () {
     $response = $this->withHeader('Authorization', "Bearer $this->token")
         ->postJson("/api/v1/store/customers/{$this->customer->id}/contacts", $data);
 
-    $response->assertStatus(201)
-        ->assertJsonPath('data.name', 'Solo Nombre')
-        ->assertJsonPath('data.email', null)
-        ->assertJsonPath('data.phone', null)
-        ->assertJsonPath('data.position', null);
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors('email');
 });

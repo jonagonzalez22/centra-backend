@@ -2,13 +2,23 @@
 
 namespace App\Http\Requests\Api\V1\Store;
 
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 
 class StoreCustomerContactRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        foreach (['email', 'phone'] as $field) {
+            $value = $this->input($field);
+            if (is_string($value)) {
+                $this->merge([$field => trim($value) === '' ? null : trim($value)]);
+            }
+        }
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -39,6 +49,15 @@ class StoreCustomerContactRequest extends FormRequest
             'name.required' => 'El nombre del contacto es obligatorio.',
             'email.email' => 'El formato del email no es válido.',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($this->input('email') === null && $this->input('phone') === null) {
+                $validator->errors()->add('email', 'Completá al menos un medio de contacto: email o teléfono.');
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator): void

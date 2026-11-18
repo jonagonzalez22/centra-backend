@@ -10,6 +10,14 @@ use Illuminate\Validation\Rule;
 
 class StoreCustomerRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'document_type_id' => $this->normalizedOptionalString('document_type_id'),
+            'document_number' => $this->normalizedOptionalString('document_number'),
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -25,12 +33,14 @@ class StoreCustomerRequest extends FormRequest
             'last_name' => ['nullable', 'string', 'max:100'],
             'company_name' => ['nullable', 'string', 'max:255'],
             'document_type_id' => [
-                'required',
+                'nullable',
+                'required_with:document_number',
                 'uuid',
                 'exists:document_types,id',
             ],
             'document_number' => [
-                'required',
+                'nullable',
+                'required_with:document_type_id',
                 'string',
                 'max:50',
                 function ($attribute, $value, $fail) use ($storeId) {
@@ -56,13 +66,20 @@ class StoreCustomerRequest extends FormRequest
             'first_name.max' => 'El nombre no puede exceder los 100 caracteres.',
             'last_name.max' => 'El apellido no puede exceder los 100 caracteres.',
             'company_name.max' => 'El nombre de la empresa no puede exceder los 255 caracteres.',
-            'document_type_id.required' => 'El tipo de documento es obligatorio.',
+            'document_type_id.required_with' => 'Completá el tipo y número de documento, o dejá ambos vacíos.',
             'document_type_id.uuid' => 'El ID del tipo de documento debe ser un UUID válido.',
             'document_type_id.exists' => 'El tipo de documento no existe.',
-            'document_number.required' => 'El número de documento es obligatorio.',
+            'document_number.required_with' => 'Completá el tipo y número de documento, o dejá ambos vacíos.',
             'document_number.max' => 'El número de documento no puede exceder los 50 caracteres.',
             'status.in' => 'El estado debe ser activo o inactivo.',
         ];
+    }
+
+    private function normalizedOptionalString(string $field): ?string
+    {
+        $value = $this->input($field);
+
+        return is_string($value) && trim($value) === '' ? null : $value;
     }
 
     protected function failedValidation(Validator $validator): void

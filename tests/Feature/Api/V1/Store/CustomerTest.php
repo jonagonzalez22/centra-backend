@@ -292,7 +292,78 @@ test('fails without required fields', function () {
 
     $response->assertStatus(422)
         ->assertJsonPath('status', 'error')
-        ->assertJsonValidationErrors(['display_name', 'document_type_id', 'document_number']);
+        ->assertJsonValidationErrors(['display_name']);
+});
+
+test('creates a customer without document data', function () {
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson('/api/v1/store/customers', ['display_name' => 'Consumidor final'])
+        ->assertCreated()
+        ->assertJsonPath('data.document_type', null)
+        ->assertJsonPath('data.document_number', null);
+
+    $this->assertDatabaseHas('customers', [
+        'store_id' => $this->store->id,
+        'display_name' => 'Consumidor final',
+        'document_type_id' => null,
+        'document_number' => null,
+        'document_number_normalized' => null,
+    ]);
+});
+
+test('requires both document fields when one is supplied', function () {
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson('/api/v1/store/customers', [
+            'display_name' => 'Sin número',
+            'document_type_id' => $this->documentType->id,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('document_number');
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson('/api/v1/store/customers', [
+            'display_name' => 'Sin tipo',
+            'document_number' => '20123456785',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('document_type_id');
+});
+
+test('updates document fields together and allows clearing both', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => null,
+        'document_number' => null,
+        'document_number_normalized' => null,
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$customer->id}", [
+            'document_type_id' => $this->documentType->id,
+            'document_number' => '20-12345678-5',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.document_number', '20-12345678-5');
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$customer->id}", [
+            'document_type_id' => ' ',
+            'document_number' => ' ',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.document_type', null)
+        ->assertJsonPath('data.document_number', null);
+});
+
+test('rejects a partial document update that would leave an incomplete pair', function () {
+    $customer = Customer::factory()->forStore($this->store)->create([
+        'document_type_id' => $this->documentType->id,
+        'document_number' => '20123456785',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$customer->id}", ['document_number' => null])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['document_type_id', 'document_number']);
 });
 
 test('shows a customer', function () {
