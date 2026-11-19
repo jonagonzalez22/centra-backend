@@ -62,6 +62,53 @@ class RouteOptimizationService
     }
 
     /**
+     * Request a route shape exclusively for immediate display.
+     *
+     * This intentionally does not optimize waypoint order and the returned
+     * polyline must not be persisted by callers.
+     *
+     * @param  array{0: float, 1: float}  $origin
+     * @param  array{0: float, 1: float}  $destination
+     * @param  array<int, array{0: float, 1: float}>  $intermediates
+     */
+    public function routeGeometry(array $origin, array $destination, array $intermediates): string
+    {
+        if (count($intermediates) > self::MAX_INTERMEDIATE_WAYPOINTS) {
+            throw new RouteOptimizationException(
+                'La ruta tiene más de '.self::MAX_INTERMEDIATE_WAYPOINTS.' paradas. No se puede mostrar el recorrido vial todavía.'
+            );
+        }
+
+        try {
+            $payload = $this->buildPayload($origin, $destination, $intermediates, false);
+            // Geometry-only rendering does not need a traffic-sensitive ETA.
+            // This also keeps viewer calls on the lower-latency route preference.
+            $payload['routingPreference'] = 'TRAFFIC_UNAWARE';
+            $response = $this->callGoogleAPI(
+                $payload,
+                'routes.polyline.encodedPolyline'
+            );
+            $polyline = $response['routes'][0]['polyline']['encodedPolyline'] ?? null;
+
+            if (! is_string($polyline) || $polyline === '') {
+                throw new RouteOptimizationException('Google no devolvió una geometría válida para el recorrido.');
+            }
+
+            return $polyline;
+        } catch (RouteOptimizationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            Log::warning('Google Routes request failed while rendering delivery route geometry.', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+                'waypoint_count' => count($intermediates),
+            ]);
+
+            throw new RouteOptimizationException('No se pudo obtener el recorrido en este momento. Intentá nuevamente.');
+        }
+    }
+
+    /**
      * Calculate ETAs for stops given departure time, durations, and unload time.
      *
      * ETA for stop i = departure_time + sum(durations[0..i]) + (i * unload_time_for_previous_stops)
@@ -152,10 +199,12 @@ class RouteOptimizationService
     /**
      * Call Google Routes API with proper headers.
      */
-    private function callGoogleAPI(array $payload): array
-    {
+    private function callGoogleAPI(
+        array $payload,
+        string $fieldMask = 'routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.polyline.encodedPolyline'
+    ): array {
         $response = Http::withHeaders([
-            'X-Goog-FieldMask' => 'routes.optimizedIntermediateWaypointIndex,routes.legs.duration,routes.polyline.encodedPolyline',
+            'X-Goog-FieldMask' => $fieldMask,
             'X-Goog-Api-Key' => $this->apiKey,
             'Content-Type' => 'application/json',
         ])->post($this->baseUrl, $payload);

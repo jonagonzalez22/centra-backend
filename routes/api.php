@@ -466,6 +466,10 @@ Route::prefix('v1')->group(function () {
                     ->middleware('permission:logistics.routes.view')
                     ->name('store.routes.show');
 
+                Route::get('routes/{route}/map-geometry', [RouteController::class, 'mapGeometry'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.map-geometry');
+
                 Route::put('routes/{route}', [RouteController::class, 'update'])
                     ->middleware('permission:logistics.routes.manage')
                     ->name('store.routes.update');

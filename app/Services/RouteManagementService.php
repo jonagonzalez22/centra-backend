@@ -469,7 +469,6 @@ class RouteManagementService
 
             $optimizedOrder = $result['optimizedOrder'];
             $durations = $result['durations'];
-            $polyline = $result['polyline'];
 
             // Reorder stops based on optimized order
             $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
@@ -500,7 +499,6 @@ class RouteManagementService
                 'status' => 'planned',
                 'planned_at' => now(),
                 'departure_time' => $departureTime,
-                'encoded_polyline' => $polyline,
                 'unload_time_minutes_snapshot' => $unloadTime,
                 'requires_recalculation' => false,
             ]);
@@ -542,7 +540,6 @@ class RouteManagementService
                 'observations' => $observation ?? $route->observations,
                 'planned_at' => null,
                 'departure_time' => null,
-                'encoded_polyline' => null,
                 'unload_time_minutes_snapshot' => null,
                 'requires_recalculation' => false,
             ]);
@@ -652,7 +649,6 @@ class RouteManagementService
             $result = $this->requestRouteOptimization($optimizer, $origin, $destination, $intermediates, false, $departureAt);
 
             $durations = $result['durations'];
-            $polyline = $result['polyline'];
 
             // Calculate ETAs using existing order (0, 1, 2...)
             $stopCount = $activeStops->count();
@@ -670,7 +666,6 @@ class RouteManagementService
             }
 
             $route->update([
-                'encoded_polyline' => $polyline,
                 'requires_recalculation' => false,
             ]);
 
@@ -749,7 +744,6 @@ class RouteManagementService
 
             $optimizedOrder = $result['optimizedOrder'];
             $durations = $result['durations'];
-            $polyline = $result['polyline'];
 
             // Reorder stops based on optimized order
             $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
@@ -787,7 +781,6 @@ class RouteManagementService
                 ->toArray();
 
             $route->update([
-                'encoded_polyline' => $polyline,
                 'requires_recalculation' => false,
             ]);
 
@@ -2288,6 +2281,55 @@ class RouteManagementService
                 throw $this->validationError('Uno o más pedidos no tienen una dirección de entrega geolocalizada.');
             }
         }
+    }
+
+    /**
+     * Get Google route geometry for the currently persisted stop order.
+     *
+     * This has no database writes and does not optimize or mutate the route.
+     * The caller must keep the returned geometry in memory only.
+     *
+     * @return array{encoded_polyline: string}
+     */
+    public function getVisualizationGeometry(DeliveryRoute $route): array
+    {
+        $activeStops = RouteStop::where('route_id', $route->id)
+            ->where('status', '!=', 'cancelled')
+            ->orderBy('sequence')
+            ->get();
+
+        if ($activeStops->isEmpty()) {
+            throw $this->validationError('La ruta no tiene paradas activas para mostrar.');
+        }
+
+        $store = Store::find($route->store_id);
+        if (! $store || ! $this->hasValidCoordinates($store->latitude, $store->longitude)) {
+            throw $this->validationError('La tienda no tiene coordenadas configuradas.');
+        }
+
+        $this->validateStopCoordinates($activeStops);
+
+        $origin = [(float) $store->latitude, (float) $store->longitude];
+        $intermediates = [];
+        foreach ($activeStops as $stop) {
+            $coordinates = $this->getStopCoordinates($stop);
+            if ($coordinates !== null) {
+                $intermediates[] = [$coordinates['latitude'], $coordinates['longitude']];
+            }
+        }
+
+        try {
+            $polyline = (new RouteOptimizationService)->routeGeometry($origin, $origin, $intermediates);
+        } catch (RouteOptimizationException $exception) {
+            throw new HttpResponseException(response()->json([
+                'status' => 'error',
+                'message' => $exception->getMessage(),
+                'data' => null,
+                'errors' => ['error' => [$exception->getMessage()]],
+            ], $exception->httpStatus));
+        }
+
+        return ['encoded_polyline' => $polyline];
     }
 
     /** @return array{latitude: float, longitude: float}|null */

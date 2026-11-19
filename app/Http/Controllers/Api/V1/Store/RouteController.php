@@ -341,6 +341,33 @@ class RouteController extends Controller
         ]);
     }
 
+    /**
+     * Return transient Google Routes geometry for the route's persisted stop order.
+     * The result is explicitly non-cacheable and is never written to the database.
+     */
+    public function mapGeometry(Request $request, string $id): JsonResponse
+    {
+        $route = DeliveryRoute::forStore($request->user()->store_id)->find($id);
+
+        if (! $route) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ruta no encontrada.',
+                'data' => null,
+                'errors' => ['id' => ['La ruta no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        return response()
+            ->json([
+                'status' => 'success',
+                'message' => null,
+                'data' => $this->routeService->getVisualizationGeometry($route),
+                'errors' => null,
+            ])
+            ->header('Cache-Control', 'no-store, private');
+    }
+
     // ── CRUD Endpoints ───────────────────────────────────────────────
 
     /**

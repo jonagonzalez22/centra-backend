@@ -28,7 +28,6 @@ class DeliveryRoute extends Model
         'created_by',
         'planned_at',
         'departure_time',
-        'encoded_polyline',
         'unload_time_minutes_snapshot',
         'requires_recalculation',
         'loaded_at',

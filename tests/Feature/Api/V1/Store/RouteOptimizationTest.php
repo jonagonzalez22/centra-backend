@@ -117,6 +117,158 @@ function mockGoogleApiSuccess(array $optimizedIndices = [0]): void
     ]);
 }
 
+test('map geometry is requested on demand in persisted stop order and is not stored', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'status' => 'planned',
+    ]);
+    $firstOrder = helperCreateEligibleOrder(
+        $this->store,
+        helperCreateCustomerWithAddress($this->store, -34.6033, -58.3815)
+    );
+    $secondOrder = helperCreateEligibleOrder(
+        $this->store,
+        helperCreateCustomerWithAddress($this->store, -34.6044, -58.3994)
+    );
+    RouteStop::create(['route_id' => $route->id, 'order_id' => $firstOrder->id, 'sequence' => 1, 'status' => 'pending']);
+    RouteStop::create(['route_id' => $route->id, 'order_id' => $secondOrder->id, 'sequence' => 2, 'status' => 'pending']);
+
+    Http::fake([
+        'routes.googleapis.com/*' => Http::response([
+            'routes' => [['polyline' => ['encodedPolyline' => 'temporary_google_geometry']]],
+        ], 200),
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}/map-geometry");
+
+    $response->assertOk()
+        ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertJsonPath('data.encoded_polyline', 'temporary_google_geometry');
+
+    Http::assertSent(function (\Illuminate\Http\Client\Request $request) {
+        $payload = $request->data();
+
+        return $request->url() === 'https://routes.googleapis.com/directions/v2:computeRoutes'
+            && ! array_key_exists('optimizeWaypointOrder', $payload)
+            && $payload['origin'] === $payload['destination']
+            && $payload['routingPreference'] === 'TRAFFIC_UNAWARE'
+            && $payload['intermediates'] === [
+                ['location' => ['latLng' => ['latitude' => -34.6033, 'longitude' => -58.3815]]],
+                ['location' => ['latLng' => ['latitude' => -34.6044, 'longitude' => -58.3994]]],
+            ];
+    });
+
+    $route->refresh();
+    expect($route->encoded_polyline)->toBeNull();
+});
+
+test('map geometry accepts exactly 25 persisted stops', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'status' => 'planned',
+    ]);
+    $customer = helperCreateCustomerWithAddress($this->store);
+
+    for ($sequence = 1; $sequence <= 25; $sequence++) {
+        $order = helperCreateEligibleOrder($this->store, $customer);
+        RouteStop::create([
+            'route_id' => $route->id,
+            'order_id' => $order->id,
+            'sequence' => $sequence,
+            'status' => 'pending',
+        ]);
+    }
+
+    Http::fake([
+        'routes.googleapis.com/*' => Http::response([
+            'routes' => [['polyline' => ['encodedPolyline' => 'geometry_for_25_stops']]],
+        ], 200),
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}/map-geometry")
+        ->assertOk()
+        ->assertJsonPath('data.encoded_polyline', 'geometry_for_25_stops');
+
+    Http::assertSent(fn (\Illuminate\Http\Client\Request $request) => count($request->data()['intermediates']) === 25);
+});
+
+test('map geometry rejects 26 stops before calling Google', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'status' => 'planned',
+    ]);
+    $customer = helperCreateCustomerWithAddress($this->store);
+
+    for ($sequence = 1; $sequence <= 26; $sequence++) {
+        $order = helperCreateEligibleOrder($this->store, $customer);
+        RouteStop::create([
+            'route_id' => $route->id,
+            'order_id' => $order->id,
+            'sequence' => $sequence,
+            'status' => 'pending',
+        ]);
+    }
+
+    Http::fake();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}/map-geometry")
+        ->assertStatus(503)
+        ->assertJsonPath(
+            'message',
+            'La ruta tiene más de 25 paradas. No se puede mostrar el recorrido vial todavía.'
+        );
+
+    Http::assertNothingSent();
+});
+
+test('map geometry is tenant scoped and does not call Google for another store route', function () {
+    $otherStore = Store::factory()->create();
+    $route = DeliveryRoute::factory()->create(['store_id' => $otherStore->id]);
+    Http::fake();
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}/map-geometry")
+        ->assertNotFound();
+
+    Http::assertNothingSent();
+});
+
+test('map geometry returns a provider error without persisting a polyline', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+    $route = DeliveryRoute::factory()->create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'status' => 'planned',
+    ]);
+    $order = helperCreateEligibleOrder($this->store, helperCreateCustomerWithAddress($this->store));
+    RouteStop::create(['route_id' => $route->id, 'order_id' => $order->id, 'sequence' => 1, 'status' => 'pending']);
+    Http::fake(['routes.googleapis.com/*' => Http::response([], 500)]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->getJson("/api/v1/store/routes/{$route->id}/map-geometry")
+        ->assertStatus(503)
+        ->assertJsonPath('status', 'error');
+
+    expect($route->fresh()->encoded_polyline)->toBeNull();
+});
+
 // ── Model Tests ──────────────────────────────────────────────────────
 
 test('store setting defaults to 15 minutes unload time', function () {
@@ -145,7 +297,7 @@ test('store getUnloadTimeMinutes returns default 15 when no setting', function (
     expect($this->store->getUnloadTimeMinutes())->toBe(15);
 });
 
-test('delivery route has optimization columns fillable and castable', function () {
+test('delivery route keeps operational optimization fields without making provider geometry fillable', function () {
     $vehicle = helperCreateVehicle($this->store);
     $driver = helperCreateDriver($this->store);
 
@@ -157,13 +309,12 @@ test('delivery route has optimization columns fillable and castable', function (
         'status' => 'draft',
         'planned_at' => now(),
         'departure_time' => '08:00',
-        'encoded_polyline' => 'test_polyline',
         'unload_time_minutes_snapshot' => 15,
         'requires_recalculation' => true,
     ]);
 
     expect($route->departure_time)->toBe('08:00');
-    expect($route->encoded_polyline)->toBe('test_polyline');
+    expect($route->getFillable())->not->toContain('encoded_polyline');
     expect($route->unload_time_minutes_snapshot)->toBe(15);
     expect($route->requires_recalculation)->toBeTrue();
 });
@@ -409,7 +560,7 @@ test('plan route with optimization succeeds', function () {
 
     $route->refresh();
     expect($route->status)->toBe('planned');
-    expect($route->encoded_polyline)->not->toBeNull();
+    expect($route->encoded_polyline)->toBeNull();
     expect($route->planned_at)->not->toBeNull();
     expect($route->unload_time_minutes_snapshot)->toBe(20);
     expect($route->requires_recalculation)->toBeFalse();
@@ -582,7 +733,7 @@ test('revert clears calculated fields', function () {
         ]);
 
     $route->refresh();
-    expect($route->encoded_polyline)->not->toBeNull();
+    expect($route->encoded_polyline)->toBeNull();
 
     // Now revert
     $response = $this->withHeader('Authorization', "Bearer $this->token")
@@ -758,7 +909,6 @@ test('recalculate updates ETAs and clears requires_recalculation flag', function
         'status' => 'planned',
         'departure_time' => '08:00',
         'unload_time_minutes_snapshot' => 20,
-        'encoded_polyline' => 'old_polyline',
         'planned_at' => now(),
         'requires_recalculation' => true,
     ]);
@@ -800,7 +950,7 @@ test('recalculate updates ETAs and clears requires_recalculation flag', function
 
     $route->refresh();
     expect($route->requires_recalculation)->toBeFalse();
-    expect($route->encoded_polyline)->toBe('global_polyline_recalc');
+    expect($route->encoded_polyline)->toBeNull();
 
     // Stops should have new ETAs
     $stops = $route->stops()->orderBy('sequence')->get();
@@ -855,7 +1005,6 @@ test('optimize re-runs automatic optimization on planned route', function () {
         'status' => 'planned',
         'departure_time' => '08:00',
         'unload_time_minutes_snapshot' => 20,
-        'encoded_polyline' => 'old_polyline',
         'planned_at' => now(),
         'requires_recalculation' => false,
     ]);
@@ -871,7 +1020,6 @@ test('optimize re-runs automatic optimization on planned route', function () {
 
     $response->assertStatus(200)
         ->assertJsonPath('data.status', 'planned')
-        ->assertJsonPath('data.encoded_polyline', 'global_polyline_abc123')
         ->assertJsonPath('data.requires_recalculation', false)
         ->assertJsonPath('data.departure_time', '08:00');
 
@@ -880,8 +1028,8 @@ test('optimize re-runs automatic optimization on planned route', function () {
     // Status must remain planned
     expect($route->status)->toBe('planned');
 
-    // Polyline updated
-    expect($route->encoded_polyline)->toBe('global_polyline_abc123');
+    // Provider geometry is not persisted.
+    expect($route->encoded_polyline)->toBeNull();
 
     // requires_recalculation cleared
     expect($route->requires_recalculation)->toBeFalse();
@@ -931,7 +1079,6 @@ test('optimize preserves the previous planned route when Google returns an inval
         'status' => 'planned',
         'departure_time' => '08:00',
         'unload_time_minutes_snapshot' => 15,
-        'encoded_polyline' => 'previous_polyline',
         'planned_at' => now(),
         'requires_recalculation' => false,
     ]);
@@ -953,7 +1100,7 @@ test('optimize preserves the previous planned route when Google returns an inval
 
     $route->refresh();
     expect($route->status)->toBe('planned');
-    expect($route->encoded_polyline)->toBe('previous_polyline');
+    expect($route->encoded_polyline)->toBeNull();
     expect($route->requires_recalculation)->toBeFalse();
 
     $stops = $route->stops()->orderBy('sequence')->get();
@@ -1062,8 +1209,8 @@ test('show route includes optimization data', function () {
     expect($data['store']['latitude'] ?? null)->not->toBeNull();
     expect($data['store']['longitude'] ?? null)->not->toBeNull();
 
-    // Polyline present
-    expect($data['encoded_polyline'] ?? null)->not->toBeNull();
+    // Provider geometry is deliberately absent from route resources.
+    expect($data)->not->toHaveKey('encoded_polyline');
 
     // Stop has ETA and coordinates
     $stop = $data['stops'][0] ?? null;

@@ -21,7 +21,6 @@ class DeliveryRouteResource extends JsonResource
             'created_by' => $this->created_by,
             'planned_at' => $this->planned_at?->format('Y-m-d H:i:s'),
             'departure_time' => $this->departure_time,
-            'encoded_polyline' => $this->encoded_polyline,
             'unload_time_minutes_snapshot' => $this->unload_time_minutes_snapshot,
             'loaded_at' => $this->loaded_at?->format('Y-m-d H:i:s'),
             'loaded_by' => $this->loaded_by,
