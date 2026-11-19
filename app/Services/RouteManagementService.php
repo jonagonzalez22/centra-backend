@@ -9,6 +9,7 @@ use App\Models\DeliveryDiscrepancy;
 use App\Models\DeliveryRoute;
 use App\Models\DeliveryRouteEvent;
 use App\Models\ExtraSaleAllocation;
+use App\Models\Locality;
 use App\Models\OperationPayment;
 use App\Models\Product;
 use App\Models\RouteLoadAdjustment;
@@ -109,6 +110,35 @@ class RouteManagementService
      */
     public function eligibleOrders(string $storeId, array $filters = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
+        return $this->eligibleOrdersQuery($storeId, $filters)
+            ->with(['customer', 'customer.addresses.locality'])
+            ->orderBy('requested_delivery_date')
+            ->orderBy('operation_number')
+            ->paginate($filters['per_page'] ?? 15);
+    }
+
+    /**
+     * Return delivery localities represented by orders eligible for this route.
+     */
+    public function eligibleOrderLocalities(string $storeId, array $filters = []): Collection
+    {
+        $eligibleCustomerIds = $this->eligibleOrdersQuery($storeId, $filters)->select('customer_id');
+
+        return Locality::query()
+            ->whereIn('id', CustomerAddress::query()
+                ->where('type', 'delivery')
+                ->whereNotNull('locality_id')
+                ->whereIn('customer_id', $eligibleCustomerIds)
+                ->select('locality_id'))
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Base eligibility query shared by the listing and its locality filter options.
+     */
+    private function eligibleOrdersQuery(string $storeId, array $filters): Builder
+    {
         $query = CommercialOperation::forStore($storeId)
             ->byType('order')
             ->whereNotIn('status', ['cancelled', 'closed', 'delivered'])
@@ -125,6 +155,13 @@ class RouteManagementService
 
         if (! empty($filters['requested_delivery_date'])) {
             $query->whereDate('requested_delivery_date', $filters['requested_delivery_date']);
+        }
+
+        if (! empty($filters['exclude_delivery_date'])) {
+            $query->where(function (Builder $q) use ($filters) {
+                $q->whereDate('requested_delivery_date', '!=', $filters['exclude_delivery_date'])
+                    ->orWhereNull('requested_delivery_date');
+            });
         }
 
         if (! empty($filters['search'])) {
@@ -153,10 +190,7 @@ class RouteManagementService
             });
         }
 
-        return $query->with(['customer', 'customer.addresses.locality'])
-            ->orderBy('requested_delivery_date')
-            ->orderBy('operation_number')
-            ->paginate($filters['per_page'] ?? 15);
+        return $query;
     }
 
     /**

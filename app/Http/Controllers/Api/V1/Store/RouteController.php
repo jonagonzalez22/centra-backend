@@ -25,6 +25,7 @@ use App\Http\Requests\Api\V1\Store\VerifyCollectionRequest;
 use App\Http\Resources\DeliveryRouteResource;
 use App\Http\Resources\EligibleOrderResource;
 use App\Http\Resources\LoadSheetResource;
+use App\Http\Resources\LocalityResource;
 use App\Http\Resources\ReconciliationResource;
 use App\Http\Resources\RouteStopResource;
 use App\Models\CommercialOperation;
@@ -108,7 +109,7 @@ class RouteController extends Controller
         $storeId = $request->user()->store_id;
 
         $orders = $this->routeService->eligibleOrders($storeId, $request->only([
-            'requested_delivery_date', 'search', 'locality_id', 'per_page', 'exclude_route_id',
+            'requested_delivery_date', 'exclude_delivery_date', 'search', 'locality_id', 'per_page', 'exclude_route_id',
         ]));
 
         return response()->json([
@@ -121,6 +122,21 @@ class RouteController extends Controller
                 'current_page' => $orders->currentPage(),
                 'last_page' => $orders->lastPage(),
             ],
+            'errors' => null,
+        ]);
+    }
+
+    public function eligibleOrderLocalities(Request $request): JsonResponse
+    {
+        $localities = $this->routeService->eligibleOrderLocalities(
+            $request->user()->store_id,
+            $request->only(['exclude_route_id'])
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Localidades elegibles obtenidas exitosamente.',
+            'data' => LocalityResource::collection($localities),
             'errors' => null,
         ]);
     }

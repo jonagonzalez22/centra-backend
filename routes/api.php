@@ -450,6 +450,9 @@ Route::prefix('v1')->group(function () {
                 Route::get('routes/eligible-orders', [RouteController::class, 'eligibleOrders'])
                     ->middleware('permission:logistics.routes.view')
                     ->name('store.routes.eligible-orders');
+                Route::get('routes/eligible-orders/localities', [RouteController::class, 'eligibleOrderLocalities'])
+                    ->middleware('permission:logistics.routes.view')
+                    ->name('store.routes.eligible-orders.localities');
 
                 Route::get('routes', [RouteController::class, 'index'])
                     ->middleware('permission:logistics.routes.view')
