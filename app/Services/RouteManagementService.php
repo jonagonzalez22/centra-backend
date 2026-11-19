@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\RouteOptimizationException;
 use App\Models\CommercialOperation;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
@@ -22,6 +23,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\MoneyMath;
 use App\Support\QuantityMath;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
@@ -444,6 +446,8 @@ class RouteManagementService
             // Validate all stops have geolocated delivery addresses
             $this->validateStopCoordinates($activeStops);
 
+            $departureAt = $this->effectiveDepartureAt($route, $store, $departureTime);
+
             // Get store unload time
             $unloadTime = $store->getUnloadTimeMinutes();
 
@@ -461,7 +465,7 @@ class RouteManagementService
 
             // Call Google Routes API with optimization
             $optimizer = new RouteOptimizationService;
-            $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, true);
+            $result = $this->requestRouteOptimization($optimizer, $origin, $destination, $intermediates, true, $departureAt);
 
             $optimizedOrder = $result['optimizedOrder'];
             $durations = $result['durations'];
@@ -471,7 +475,7 @@ class RouteManagementService
             $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
 
             // Calculate ETAs
-            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $optimizedOrder, $route->operational_date->format('Y-m-d'));
+            $etas = $this->calculateETAsFromInstant($optimizer, $departureAt, $durations, $unloadTime, $optimizedOrder);
 
             // Persist ETAs, durations, and route data
             for ($i = 0; $i < count($optimizedOrder); $i++) {
@@ -630,6 +634,8 @@ class RouteManagementService
 
             $departureTime = $route->departure_time;
             $unloadTime = $route->unload_time_minutes_snapshot ?? 15;
+            $store = Store::find($route->store_id);
+            $departureAt = $this->effectiveDepartureAt($route, $store, $departureTime);
 
             // Build waypoints in CURRENT sequence order (don't optimize)
             $origin = [(float) $store->latitude, (float) $store->longitude];
@@ -643,7 +649,7 @@ class RouteManagementService
 
             // Call Google Routes API WITHOUT optimization (respect manual order)
             $optimizer = new RouteOptimizationService;
-            $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, false);
+            $result = $this->requestRouteOptimization($optimizer, $origin, $destination, $intermediates, false, $departureAt);
 
             $durations = $result['durations'];
             $polyline = $result['polyline'];
@@ -651,7 +657,7 @@ class RouteManagementService
             // Calculate ETAs using existing order (0, 1, 2...)
             $stopCount = $activeStops->count();
             $originalOrder = range(0, $stopCount - 1);
-            $etas = $optimizer->calculateETAs($departureTime, $durations, $unloadTime, $originalOrder, $route->operational_date->format('Y-m-d'));
+            $etas = $this->calculateETAsFromInstant($optimizer, $departureAt, $durations, $unloadTime, $originalOrder);
 
             // Persist new ETAs
             foreach ($activeStops as $i => $stop) {
@@ -721,6 +727,7 @@ class RouteManagementService
 
             $departureTime = $route->departure_time;
             $unloadTime = $route->unload_time_minutes_snapshot ?? 15;
+            $departureAt = $this->effectiveDepartureAt($route, $store, $departureTime);
 
             // Build waypoints from active stops in current sequence order
             $origin = [(float) $store->latitude, (float) $store->longitude];
@@ -738,7 +745,7 @@ class RouteManagementService
 
             // Call Google Routes API WITH optimization
             $optimizer = new RouteOptimizationService;
-            $result = $optimizer->optimizeRoute($origin, $destination, $intermediates, true);
+            $result = $this->requestRouteOptimization($optimizer, $origin, $destination, $intermediates, true, $departureAt);
 
             $optimizedOrder = $result['optimizedOrder'];
             $durations = $result['durations'];
@@ -748,12 +755,12 @@ class RouteManagementService
             $this->applyOptimizedOrder($route->id, $stopIdMap, $optimizedOrder);
 
             // Calculate ETAs
-            $etas = $optimizer->calculateETAs(
-                $departureTime,
+            $etas = $this->calculateETAsFromInstant(
+                $optimizer,
+                $departureAt,
                 $durations,
                 $unloadTime,
-                $optimizedOrder,
-                $route->operational_date->format('Y-m-d')
+                $optimizedOrder
             );
 
             // Persist ETAs, durations
@@ -2358,6 +2365,67 @@ class RouteManagementService
                 ->where('route_id', $routeId)
                 ->update(['sequence' => $newIndex + 1]);
         }
+    }
+
+    /**
+     * Translate provider failures into a client-safe validation response.
+     * This is called inside the route transaction, so no partial route state is persisted.
+     *
+     * @param  array{0: float, 1: float}  $origin
+     * @param  array{0: float, 1: float}  $destination
+     * @param  array<int, array{0: float, 1: float}>  $intermediates
+     * @return array{optimizedOrder: int[], durations: int[], polyline: string}
+     */
+    private function requestRouteOptimization(
+        RouteOptimizationService $optimizer,
+        array $origin,
+        array $destination,
+        array $intermediates,
+        bool $optimizeOrder,
+        ?CarbonImmutable $departureAt = null,
+    ): array {
+        try {
+            return $optimizer->optimizeRoute($origin, $destination, $intermediates, $optimizeOrder, $departureAt);
+        } catch (RouteOptimizationException $exception) {
+            if (count($intermediates) > RouteOptimizationService::MAX_INTERMEDIATE_WAYPOINTS) {
+                throw $this->validationError($exception->getMessage());
+            }
+
+            throw new HttpResponseException(response()->json([
+                'status' => 'error',
+                'message' => $exception->getMessage(),
+                'data' => null,
+                'errors' => ['error' => [$exception->getMessage()]],
+            ], $exception->httpStatus));
+        }
+    }
+
+    private function effectiveDepartureAt(DeliveryRoute $route, ?Store $store, ?string $departureTime): CarbonImmutable
+    {
+        $timezone = $store?->timezone ?: config('app.timezone', 'UTC');
+        $now = CarbonImmutable::now($timezone);
+        if (! $departureTime) {
+            return $now;
+        }
+
+        $scheduled = CarbonImmutable::parse(
+            $route->operational_date->format('Y-m-d').' '.$departureTime,
+            $timezone
+        );
+
+        return $scheduled->greaterThan($now->addMinutes(2)) ? $scheduled : $now;
+    }
+
+    /** @param int[] $durations @param int[] $order @return string[] */
+    private function calculateETAsFromInstant(RouteOptimizationService $optimizer, CarbonImmutable $departureAt, array $durations, int $unloadTime, array $order): array
+    {
+        return $optimizer->calculateETAs(
+            $departureAt->format('H:i'),
+            $durations,
+            $unloadTime,
+            $order,
+            $departureAt->format('Y-m-d')
+        );
     }
 
     /**

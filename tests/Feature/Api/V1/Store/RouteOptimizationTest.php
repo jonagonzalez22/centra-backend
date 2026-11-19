@@ -59,6 +59,7 @@ function helperCreateDriver(Store $store): User
 {
     $driver = User::factory()->create(['store_id' => $store->id]);
     $driver->assignRole('STORE_DRIVER');
+
     return $driver;
 }
 
@@ -100,8 +101,8 @@ function mockGoogleApiSuccess(array $optimizedIndices = [0]): void
     $count = count($optimizedIndices) + 1;
     for ($i = 0; $i < $count; $i++) {
         $legs[] = [
-            'duration' => (600 + $i * 120) . 's',
-            'polyline' => ['encodedPolyline' => 'abc' . $i . 'def'],
+            'duration' => (600 + $i * 120).'s',
+            'polyline' => ['encodedPolyline' => 'abc'.$i.'def'],
         ];
     }
 
@@ -200,7 +201,7 @@ test('route stop has eta columns fillable and castable', function () {
 test('optimizeRoute builds correct payload and parses response', function () {
     mockGoogleApiSuccess([1, 0]);
 
-    $service = new \App\Services\RouteOptimizationService();
+    $service = new \App\Services\RouteOptimizationService;
 
     $origin = [-34.6037, -58.3816];
     $destination = [-34.6037, -58.3816];
@@ -216,12 +217,23 @@ test('optimizeRoute builds correct payload and parses response', function () {
     expect($result['durations'])->toHaveCount(3); // origin→stop1→stop2→destination
 });
 
+test('optimizeRoute sends RFC3339 departureTime when provided', function () {
+    mockGoogleApiSuccess([0]);
+    $departure = \Carbon\CarbonImmutable::parse('2026-11-19T08:30:00-03:00');
+
+    app(\App\Services\RouteOptimizationService::class)->optimizeRoute(
+        [-34.6037, -58.3816], [-34.6037, -58.3816], [[-34.6033, -58.3815]], true, $departure
+    );
+
+    Http::assertSent(fn ($request) => ($request['departureTime'] ?? null) === '2026-11-19T11:30:00+00:00');
+});
+
 test('optimizeRoute preserves order when optimizeOrder is false', function () {
     $legs = [];
     for ($i = 0; $i < 3; $i++) {
         $legs[] = [
-            'duration' => (600 + $i * 120) . 's',
-            'polyline' => ['encodedPolyline' => 'leg' . $i],
+            'duration' => (600 + $i * 120).'s',
+            'polyline' => ['encodedPolyline' => 'leg'.$i],
         ];
     }
 
@@ -234,7 +246,7 @@ test('optimizeRoute preserves order when optimizeOrder is false', function () {
         ], 200),
     ]);
 
-    $service = new \App\Services\RouteOptimizationService();
+    $service = new \App\Services\RouteOptimizationService;
 
     $origin = [-34.6037, -58.3816];
     $destination = [-34.6037, -58.3816];
@@ -249,8 +261,81 @@ test('optimizeRoute preserves order when optimizeOrder is false', function () {
     expect($result['durations'])->toHaveCount(3);
 });
 
+test('optimizeRoute accepts the Google limit of 25 intermediate stops', function () {
+    mockGoogleApiSuccess(range(0, 24));
+
+    $service = new \App\Services\RouteOptimizationService;
+    $intermediates = array_fill(0, 25, [-34.6033, -58.3815]);
+
+    $result = $service->optimizeRoute(
+        [-34.6037, -58.3816],
+        [-34.6037, -58.3816],
+        $intermediates,
+    );
+
+    expect($result['optimizedOrder'])->toBe(range(0, 24));
+    expect($result['durations'])->toHaveCount(26);
+});
+
+test('optimizeRoute rejects more than 25 intermediate stops before calling Google', function () {
+    $service = new \App\Services\RouteOptimizationService;
+    $intermediates = array_fill(0, 26, [-34.6033, -58.3815]);
+
+    expect(fn () => $service->optimizeRoute(
+        [-34.6037, -58.3816],
+        [-34.6037, -58.3816],
+        $intermediates,
+    ))->toThrow(\App\Exceptions\RouteOptimizationException::class, 'más de 25 paradas');
+});
+
+test('optimizeRoute rejects a Google error response', function () {
+    Http::fake([
+        'routes.googleapis.com/*' => Http::response([
+            'error' => ['code' => 503, 'status' => 'UNAVAILABLE'],
+        ], 503),
+    ]);
+
+    $service = new \App\Services\RouteOptimizationService;
+
+    expect(fn () => $service->optimizeRoute(
+        [-34.6037, -58.3816],
+        [-34.6037, -58.3816],
+        [[-34.6033, -58.3815]],
+    ))->toThrow(\App\Exceptions\RouteOptimizationException::class, 'No se pudo optimizar');
+});
+
+test('optimizeRoute rejects an empty Google response', function () {
+    Http::fake(['routes.googleapis.com/*' => Http::response([], 200)]);
+
+    $service = new \App\Services\RouteOptimizationService;
+
+    expect(fn () => $service->optimizeRoute(
+        [-34.6037, -58.3816],
+        [-34.6037, -58.3816],
+        [[-34.6033, -58.3815]],
+    ))->toThrow(\App\Exceptions\RouteOptimizationException::class, 'no devolvió un recorrido válido');
+});
+
+test('optimizeRoute rejects duplicate or incomplete optimized waypoint indices', function (array $indices) {
+    mockGoogleApiSuccess($indices);
+
+    $service = new \App\Services\RouteOptimizationService;
+
+    expect(fn () => $service->optimizeRoute(
+        [-34.6037, -58.3816],
+        [-34.6037, -58.3816],
+        [
+            [-34.6033, -58.3815],
+            [-34.6044, -58.3994],
+        ],
+    ))->toThrow(\App\Exceptions\RouteOptimizationException::class, 'no devolvió un recorrido válido');
+})->with([
+    'duplicate indices' => [[0, 0]],
+    'incomplete indices' => [[0]],
+]);
+
 test('calculateETAs returns correct arrival times', function () {
-    $service = new \App\Services\RouteOptimizationService();
+    $service = new \App\Services\RouteOptimizationService;
 
     $departureTime = '08:00';
     $durationsSeconds = [600, 450, 300];
@@ -269,7 +354,7 @@ test('calculateETAs returns correct arrival times', function () {
 });
 
 test('calculateETAs returns empty array for empty stops', function () {
-    $service = new \App\Services\RouteOptimizationService();
+    $service = new \App\Services\RouteOptimizationService;
 
     $etas = $service->calculateETAs('08:00', [], 15, [], '2026-07-28');
 
@@ -563,10 +648,47 @@ test('revert fails when route is not planned', function () {
     $response->assertStatus(422);
 });
 
+test('plan rejects more than 25 stops without changing the draft route', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+    $customer = helperCreateCustomerWithAddress($this->store, -34.6033, -58.3815);
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'draft',
+    ]);
+
+    $stops = [];
+    for ($sequence = 1; $sequence <= 26; $sequence++) {
+        $order = helperCreateEligibleOrder($this->store, $customer);
+        $stops[] = [
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'route_id' => $route->id,
+            'order_id' => $order->id,
+            'sequence' => $sequence,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+    }
+    RouteStop::insert($stops);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/plan", ['departure_time' => '08:00']);
+
+    $response->assertStatus(422)
+        ->assertJsonPath('message', 'La ruta tiene más de 25 paradas. Reducí las paradas antes de optimizarla.');
+
+    expect($route->fresh()->status)->toBe('draft');
+    expect($route->stops()->count())->toBe(26);
+});
+
 // ── Reorder in Planned Tests ─────────────────────────────────────────
 
 test('reorder stops in planned route sets requires_recalculation and clears ETAs', function () {
-    mockGoogleApiSuccess([0]);
+    mockGoogleApiSuccess([0, 1]);
 
     $vehicle = helperCreateVehicle($this->store);
     $driver = helperCreateDriver($this->store);
@@ -657,8 +779,8 @@ test('recalculate updates ETAs and clears requires_recalculation flag', function
     $legs = [];
     for ($i = 0; $i < 3; $i++) {
         $legs[] = [
-            'duration' => (600 + $i * 120) . 's',
-            'polyline' => ['encodedPolyline' => 'new_leg' . $i],
+            'duration' => (600 + $i * 120).'s',
+            'polyline' => ['encodedPolyline' => 'new_leg'.$i],
         ];
     }
     Http::fake([
@@ -791,6 +913,53 @@ test('optimize re-runs automatic optimization on planned route', function () {
     expect($event->metadata['departure_time'])->toBe('08:00');
     expect($event->metadata['previous_order'])->toBeArray();
     expect($event->metadata['new_order'])->toBeArray();
+});
+
+test('optimize preserves the previous planned route when Google returns an invalid response', function () {
+    $vehicle = helperCreateVehicle($this->store);
+    $driver = helperCreateDriver($this->store);
+    $customer1 = helperCreateCustomerWithAddress($this->store, -34.6033, -58.3815);
+    $customer2 = helperCreateCustomerWithAddress($this->store, -34.6044, -58.3994);
+    $order1 = helperCreateEligibleOrder($this->store, $customer1);
+    $order2 = helperCreateEligibleOrder($this->store, $customer2);
+
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id,
+        'vehicle_id' => $vehicle->id,
+        'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'),
+        'status' => 'planned',
+        'departure_time' => '08:00',
+        'unload_time_minutes_snapshot' => 15,
+        'encoded_polyline' => 'previous_polyline',
+        'planned_at' => now(),
+        'requires_recalculation' => false,
+    ]);
+
+    $eta = now()->addHour();
+    RouteStop::insert([
+        ['id' => (string) \Illuminate\Support\Str::uuid(), 'route_id' => $route->id, 'order_id' => $order1->id, 'sequence' => 1, 'status' => 'pending', 'estimated_arrival_at' => $eta, 'travel_duration_seconds' => 300, 'created_at' => now(), 'updated_at' => now()],
+        ['id' => (string) \Illuminate\Support\Str::uuid(), 'route_id' => $route->id, 'order_id' => $order2->id, 'sequence' => 2, 'status' => 'pending', 'estimated_arrival_at' => $eta, 'travel_duration_seconds' => 600, 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    Http::fake(['routes.googleapis.com/*' => Http::response([], 200)]);
+
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/optimize");
+
+    $response->assertStatus(503)
+        ->assertJsonPath('status', 'error')
+        ->assertJsonPath('message', 'Google no devolvió un recorrido válido. Conservamos el recorrido anterior; intentá nuevamente.');
+
+    $route->refresh();
+    expect($route->status)->toBe('planned');
+    expect($route->encoded_polyline)->toBe('previous_polyline');
+    expect($route->requires_recalculation)->toBeFalse();
+
+    $stops = $route->stops()->orderBy('sequence')->get();
+    expect($stops->pluck('order_id')->all())->toBe([$order1->id, $order2->id]);
+    expect($stops->pluck('travel_duration_seconds')->all())->toBe([300, 600]);
+    expect(DeliveryRouteEvent::where('event_type', 'route_optimized')->count())->toBe(0);
 });
 
 test('optimize rejects route not in planned status', function () {

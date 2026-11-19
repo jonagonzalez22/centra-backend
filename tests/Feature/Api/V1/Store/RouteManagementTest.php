@@ -1022,6 +1022,7 @@ test('plans a draft route with stops', function () {
                     ['duration' => '600s', 'polyline' => ['encodedPolyline' => 'abc123']],
                     ['duration' => '300s', 'polyline' => ['encodedPolyline' => 'def456']],
                 ],
+                'polyline' => ['encodedPolyline' => 'global_polyline_abc123'],
             ]],
         ], 200),
     ]);
