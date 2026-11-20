@@ -183,7 +183,7 @@ Route::prefix('v1')->group(function () {
             });
             Route::middleware('feature:inventory')->group(function () {
                 Route::get('products/brand-options', [BrandController::class, 'operationalOptions'])
-                    ->middleware('permission:inventory.create|inventory.edit')
+                    ->middleware('permission:inventory.create|inventory.edit|inventory.view')
                     ->name('store.products.brand-options');
                 Route::get('brands', [BrandController::class, 'index'])->middleware('permission:brands.view')->name('store.brands.index');
                 Route::get('brands/{brand}', [BrandController::class, 'show'])->middleware('permission:brands.view')->name('store.brands.show');

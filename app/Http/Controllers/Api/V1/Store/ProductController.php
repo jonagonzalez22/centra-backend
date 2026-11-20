@@ -39,10 +39,12 @@ class ProductController extends Controller
      *   @OA\Parameter(name="category_id", in="query", @OA\Schema(type="string", format="uuid"), description="Filtrar por categoría"),
      *   @OA\Parameter(name="name", in="query", @OA\Schema(type="string"), description="Filtrar por nombre (búsqueda parcial)"),
      *   @OA\Parameter(name="sku", in="query", @OA\Schema(type="string"), description="Filtrar por SKU (búsqueda parcial)"),
+     *   @OA\Parameter(name="q", in="query", @OA\Schema(type="string"), description="Buscar parcialmente por nombre o SKU"),
      *   @OA\Parameter(name="barcode", in="query", @OA\Schema(type="string"), description="Filtrar por código de barras"),
      *   @OA\Parameter(name="is_active", in="query", @OA\Schema(type="boolean"), description="Filtrar por estado activo"),
      *   @OA\Parameter(name="is_sellable", in="query", @OA\Schema(type="boolean"), description="Filtrar por disponibilidad para venta"),
      *   @OA\Parameter(name="stock_type", in="query", @OA\Schema(type="string", enum={"own", "shared"}), description="Filtrar por tipo de stock"),
+     *   @OA\Parameter(name="stock_status", in="query", @OA\Schema(type="string", enum={"low", "out"}), description="Filtrar por stock bajo o sin stock"),
      *   @OA\Parameter(name="sort_by", in="query", @OA\Schema(type="string", enum={"name", "sku", "price", "stock", "created_at"}), description="Campo por el cual ordenar"),
      *   @OA\Parameter(name="sort_dir", in="query", @OA\Schema(type="string", enum={"asc", "desc"}), description="Dirección del ordenamiento"),
      *   @OA\Parameter(name="per_page", in="query", @OA\Schema(type="integer", default=15), description="Items por página"),
@@ -73,7 +75,9 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         $request->validate([
+            'q' => ['nullable', 'string', 'max:255'],
             'stock_type' => ['nullable', 'string', Rule::in(['own', 'shared'])],
+            'stock_status' => ['nullable', 'string', Rule::in(['low', 'out'])],
             'is_sellable' => ['nullable', Rule::in(['true', 'false', '1', '0'])],
             'brand_id' => ['nullable', 'uuid'],
         ]);
@@ -87,6 +91,12 @@ class ProductController extends Controller
             })
             ->when($request->filled('brand_id'), function ($query) use ($request) {
                 $query->where('brand_id', $request->brand_id);
+            })
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $query->where(function ($query) use ($request) {
+                    $query->where('name', 'like', '%'.$request->q.'%')
+                        ->orWhere('sku', 'like', '%'.$request->q.'%');
+                });
             })
             ->when($request->filled('name'), function ($query) use ($request) {
                 $query->where(function ($query) use ($request) {
@@ -111,6 +121,23 @@ class ProductController extends Controller
             })
             ->when($request->stock_type === 'shared', function ($query) {
                 $query->whereNotNull('stock_source_product_id');
+            })
+            ->when($request->stock_status === 'out', function ($query) {
+                $query->where(function ($query) {
+                    $query->where(function ($ownProducts) {
+                        $ownProducts->whereNull('stock_source_product_id')
+                            ->whereRaw('stock <= stock_reserved');
+                    })->orWhereHas('stockSourceProduct', function ($sourceProducts) {
+                        $sourceProducts->whereRaw('stock <= stock_reserved');
+                    });
+                });
+            })
+            ->when($request->stock_status === 'low', function ($query) {
+                // The minimum threshold belongs exclusively to the product that owns
+                // physical stock. Associated products intentionally have no threshold.
+                $query->whereNull('stock_source_product_id')
+                    ->whereRaw('stock > stock_reserved')
+                    ->whereRaw('(stock - stock_reserved) <= stock_min');
             });
 
         $sortBy = $request->get('sort_by', 'created_at');

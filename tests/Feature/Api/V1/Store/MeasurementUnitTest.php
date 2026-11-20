@@ -139,6 +139,42 @@ test('products index rejects an invalid sellable filter', function () {
         ->assertJsonValidationErrors(['is_sellable']);
 });
 
+test('products index searches by name or code and filters stock status across pagination', function () {
+    $inStock = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'name' => 'Yerba mate',
+        'sku' => 'YER-001',
+        'stock' => '4.0000',
+        'stock_reserved' => '0.0000',
+        'stock_min' => '5.0000',
+    ]);
+    $outOfStock = Product::factory()->forStore($this->store)->create([
+        'category_id' => $this->category->id,
+        'name' => 'Azúcar',
+        'sku' => 'AZU-001',
+        'stock' => '2.0000',
+        'stock_reserved' => '2.0000',
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?q=YER-001&per_page=1')
+        ->assertOk()
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.id', $inStock->id);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?stock_status=low&per_page=1')
+        ->assertOk()
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.id', $inStock->id);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/products?stock_status=out&per_page=1')
+        ->assertOk()
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.items.0.id', $outOfStock->id);
+});
+
 test('a product persists an explicit active measurement unit and decimal sale step', function () {
     $unit = MeasurementUnit::query()->where('code', 'kg')->firstOrFail();
 

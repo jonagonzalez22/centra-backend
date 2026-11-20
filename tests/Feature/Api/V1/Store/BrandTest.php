@@ -87,3 +87,15 @@ test('product editors can read operational brand options without brands view', f
         ->assertJsonMissingPath('data.items.0.created_at');
     $this->actingAs($editor, 'sanctum')->getJson('/api/v1/store/brands')->assertForbidden();
 });
+
+test('product viewers can read operational brand options for list filters', function () {
+    Permission::firstOrCreate(['name' => 'inventory.view', 'guard_name' => 'web']);
+    Brand::factory()->create(['store_id' => $this->store->id, 'name' => 'Filtro']);
+    $viewer = User::factory()->create(['store_id' => $this->store->id]);
+    $viewer->assignRole('STORE_ADMIN');
+    $viewer->givePermissionTo('inventory.view');
+
+    $this->actingAs($viewer, 'sanctum')->getJson('/api/v1/store/products/brand-options')
+        ->assertOk()
+        ->assertJsonPath('data.items.0.name', 'Filtro');
+});
