@@ -35,14 +35,15 @@ beforeEach(function () {
     Role::create(['name' => 'BACKOFFICE_USER', 'guard_name' => 'web']);
 
     Permission::firstOrCreate(['name' => 'orders.edit', 'guard_name' => 'web']);
+    Permission::firstOrCreate(['name' => 'orders.cancel', 'guard_name' => 'web']);
 
     $this->store = Store::factory()->create();
     $this->plan = Plan::factory()->create();
     $this->store->plan_id = $this->plan->id;
     $this->store->save();
 
-    $posFeature = Feature::firstOrCreate(['code' => 'pos', 'name' => 'Punto de Venta']);
-    $this->plan->features()->syncWithoutDetaching([$posFeature->id => ['limit_value' => null]]);
+    $ordersFeature = Feature::firstOrCreate(['code' => 'orders', 'name' => 'Ordenes']);
+    $this->plan->features()->syncWithoutDetaching([$ordersFeature->id => ['limit_value' => null]]);
 
     $this->category = Category::factory()->create(['store_id' => $this->store->id]);
     $this->customer = Customer::factory()->create(['store_id' => $this->store->id]);
@@ -63,6 +64,9 @@ function makeAuthUserCancel(Store $store, string $role = 'STORE_ADMIN', array $p
     $user = User::factory()->create(['store_id' => $store->id]);
     $user->assignRole($role);
 
+    if (in_array('orders.edit', $permissions, true)) {
+        $permissions[] = 'orders.cancel';
+    }
     foreach ($permissions as $perm) {
         $user->givePermissionTo($perm);
     }
@@ -467,7 +471,14 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
         expect($product->stock_reserved)->toBe('3.0000');
     });
 
-    it('returns 403 when user lacks orders.edit permission', function () {
+    it('allows a cancellation-only employee without orders.edit', function () {
+        $user = makeAuthUserCancel($this->store, 'STORE_USER', ['orders.cancel']);
+        $order = makeOrderForCancel($this->store);
+
+        cancelOp($user, $order->id)->assertOk();
+    });
+
+    it('returns 403 when user lacks orders.cancel permission', function () {
         $user = makeAuthUserCancel($this->store, 'STORE_ADMIN', []);
         $order = makeOrderForCancel($this->store);
 
@@ -483,8 +494,8 @@ describe('PUT /api/v1/store/operations/{operation}/cancel', function () {
         $otherPlan = Plan::factory()->create();
         $otherStore->plan_id = $otherPlan->id;
         $otherStore->save();
-        $posFeature = Feature::where('code', 'pos')->first();
-        $otherPlan->features()->syncWithoutDetaching([$posFeature->id => ['limit_value' => null]]);
+        $ordersFeature = Feature::where('code', 'orders')->first();
+        $otherPlan->features()->syncWithoutDetaching([$ordersFeature->id => ['limit_value' => null]]);
 
         $otherOrder = makeOrderForCancel($otherStore);
 

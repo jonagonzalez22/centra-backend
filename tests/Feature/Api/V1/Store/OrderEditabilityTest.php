@@ -35,8 +35,8 @@ beforeEach(function () {
     $this->store = Store::factory()->create();
     $plan = Plan::factory()->create();
     $this->store->update(['plan_id' => $plan->id]);
-    $posFeature = Feature::firstOrCreate(['code' => 'pos', 'name' => 'Punto de Venta']);
-    $plan->features()->syncWithoutDetaching([$posFeature->id => ['limit_value' => null]]);
+    $ordersFeature = Feature::firstOrCreate(['code' => 'orders', 'name' => 'Ordenes']);
+    $plan->features()->syncWithoutDetaching([$ordersFeature->id => ['limit_value' => null]]);
 
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');

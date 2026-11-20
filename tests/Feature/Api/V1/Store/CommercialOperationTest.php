@@ -30,16 +30,19 @@ beforeEach(function () {
     Role::create(['name' => 'STORE_USER', 'guard_name' => 'web']);
     Permission::findOrCreate('pos.view', 'web');
     Permission::findOrCreate('pos.create', 'web');
-    Role::findByName('STORE_ADMIN', 'web')->givePermissionTo(['pos.view', 'pos.create']);
+    foreach (['orders.view', 'orders.create', 'orders.edit', 'orders.cancel', 'orders.collect'] as $permission) {
+        Permission::findOrCreate($permission, 'web');
+    }
+    Role::findByName('STORE_ADMIN', 'web')->givePermissionTo(['pos.view', 'pos.create', 'orders.view', 'orders.create', 'orders.edit', 'orders.cancel', 'orders.collect']);
 
     $this->store = Store::factory()->create();
     $this->plan = Plan::factory()->create();
     $this->store->plan_id = $this->plan->id;
     $this->store->save();
-    $this->plan->features()->attach(
-        \App\Models\Feature::where('code', 'pos')->firstOrCreate(['code' => 'pos', 'name' => 'Punto de Venta']),
-        ['limit_value' => null]
-    );
+    $this->plan->features()->attach([
+        \App\Models\Feature::where('code', 'pos')->firstOrCreate(['code' => 'pos', 'name' => 'Punto de Venta'])->id => ['limit_value' => null],
+        \App\Models\Feature::where('code', 'orders')->firstOrCreate(['code' => 'orders', 'name' => 'Ordenes'])->id => ['limit_value' => null],
+    ]);
 
     $this->category = Category::factory()->create(['store_id' => $this->store->id]);
     $this->customer = Customer::factory()->create(['store_id' => $this->store->id]);
@@ -1298,5 +1301,48 @@ describe('POST /api/v1/store/operations - Totals', function () {
         ]);
 
         $response->assertStatus(401);
+    });
+});
+
+describe('POS and orders authorization boundaries', function () {
+    test('a POS-only employee cannot read or create orders through generic operations', function () {
+        $order = createOperationForStore($this->store, ['type' => 'order']);
+        $cashier = User::factory()->create(['store_id' => $this->store->id]);
+        $cashier->assignRole('STORE_USER');
+        $cashier->givePermissionTo(['pos.view', 'pos.create']);
+
+        $this->actingAs($cashier, 'sanctum')->getJson('/api/v1/store/operations')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $order->id]);
+        $this->actingAs($cashier, 'sanctum')->getJson("/api/v1/store/operations/{$order->id}")
+            ->assertForbidden();
+        $this->actingAs($cashier, 'sanctum')->postJson('/api/v1/store/operations', [
+            'type' => 'order',
+            'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1]],
+            'payments' => [],
+        ])->assertForbidden();
+    });
+
+    test('an order creator cannot create sales or collect an initial payment without collect permission', function () {
+        $user = User::factory()->create(['store_id' => $this->store->id]);
+        $user->assignRole('STORE_USER');
+        $user->givePermissionTo('orders.create');
+        $orderPayload = [
+            'type' => 'order',
+            'customer_id' => $this->customer->id,
+            'requested_delivery_date' => now()->addDay()->format('Y-m-d'),
+            'items' => [['product_id' => $this->product->id, 'quantity' => 1]],
+        ];
+
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/store/operations', $orderPayload + ['payments' => []])
+            ->assertCreated();
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/store/operations', [
+            'type' => 'sale', 'items' => [['product_id' => $this->product->id, 'quantity' => 1]], 'payments' => [],
+        ])->assertForbidden();
+        $this->actingAs($user, 'sanctum')->postJson('/api/v1/store/operations', $orderPayload + [
+            'payments' => [['store_payment_method_id' => makePaymentMethodForStore($this->store)->id, 'amount' => 1]],
+        ])->assertForbidden();
     });
 });

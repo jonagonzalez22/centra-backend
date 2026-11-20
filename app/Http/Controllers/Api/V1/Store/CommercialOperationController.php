@@ -16,6 +16,7 @@ use App\Services\CommercialOperationService;
 use App\Services\OrderHistoryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class CommercialOperationController extends Controller
@@ -101,8 +102,27 @@ class CommercialOperationController extends Controller
     public function index(ListCommercialOperationsRequest $request): JsonResponse
     {
         $storeId = $request->user()->store_id;
+        $requestedType = $request->input('type');
+        $allowedTypes = [];
+
+        if ($request->user()->can('pos.view')) {
+            $allowedTypes[] = 'sale';
+        }
+        if ($request->user()->can('orders.view')) {
+            $allowedTypes[] = 'order';
+        }
+
+        if ($requestedType) {
+            $this->authorizeOperationAbility($requestedType, 'view');
+            $allowedTypes = [$requestedType];
+        }
+
+        if ($allowedTypes === []) {
+            abort(403, 'No tenés permiso para consultar operaciones comerciales.');
+        }
 
         $query = CommercialOperation::forStore($storeId)
+            ->whereIn('type', $allowedTypes)
             ->with(['customer.addresses.locality', 'user', 'items', 'payments.storePaymentMethod'])
             ->withSum('activePayments', 'amount')
             ->when($request->filled('type'), function ($query) use ($request) {
@@ -198,9 +218,18 @@ class CommercialOperationController extends Controller
      */
     public function store(StoreCommercialOperationRequest $request, CommercialOperationService $service): JsonResponse
     {
+        $data = $request->validated();
+        $this->authorizeOperationAbility($data['type'], 'create');
+
+        // A deposit is a collection even when it is registered atomically with
+        // an order. Creating an order never grants financial authority.
+        if ($data['type'] === 'order' && ! empty($data['payments'])) {
+            Gate::authorize('orders.collect');
+        }
+
         try {
             $operation = $service->create(
-                $request->validated(),
+                $data,
                 $request->user()->store_id,
                 $request->user()->id
             );
@@ -265,6 +294,8 @@ class CommercialOperationController extends Controller
                 'errors' => ['id' => ['La operación comercial no existe o no pertenece a tu tienda.']],
             ], 404);
         }
+
+        $this->authorizeOperationAbility($operation->type, 'view');
 
         return response()->json([
             'status' => 'success',
@@ -512,5 +543,16 @@ class CommercialOperationController extends Controller
         } catch (ValidationException $e) {
             throw $e;
         }
+    }
+
+    private function authorizeOperationAbility(string $type, string $action): void
+    {
+        $permission = match ($type) {
+            'sale' => "pos.{$action}",
+            'order' => "orders.{$action}",
+            default => abort(404, 'Tipo de operación no encontrado.'),
+        };
+
+        Gate::authorize($permission);
     }
 }

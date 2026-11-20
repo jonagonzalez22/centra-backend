@@ -3,7 +3,9 @@
 return [
     'Pedidos' => [
         ['name' => 'orders.view', 'label' => 'Ver'],
+        ['name' => 'orders.create', 'label' => 'Crear'],
         ['name' => 'orders.edit', 'label' => 'Editar'],
+        ['name' => 'orders.cancel', 'label' => 'Cancelar'],
         ['name' => 'orders.collect', 'label' => 'Registrar pagos'],
     ],
     'Punto de Venta' => [

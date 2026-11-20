@@ -46,8 +46,8 @@ beforeEach(function () {
     $this->store->plan_id = $this->plan->id;
     $this->store->save();
 
-    $posFeature = Feature::firstOrCreate(['code' => 'pos', 'name' => 'Punto de Venta']);
-    $this->plan->features()->syncWithoutDetaching([$posFeature->id => ['limit_value' => null]]);
+    $ordersFeature = Feature::firstOrCreate(['code' => 'orders', 'name' => 'Ordenes']);
+    $this->plan->features()->syncWithoutDetaching([$ordersFeature->id => ['limit_value' => null]]);
 
     $this->customer = Customer::factory()->create(['store_id' => $this->store->id]);
     $this->province = Province::factory()->create();

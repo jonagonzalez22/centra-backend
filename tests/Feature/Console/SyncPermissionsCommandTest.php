@@ -30,10 +30,10 @@ test('apply reconstructs the canonical roles and baselines without direct user c
 
     expect(Role::where('guard_name', 'web')->pluck('name')->sort()->values()->all())
         ->toBe(collect(PermissionRegistry::roles())->sort()->values()->all())
-        ->and(Permission::where('guard_name', 'web')->count())->toBe(96)
+        ->and(Permission::where('guard_name', 'web')->count())->toBe(98)
         ->and(Role::findByName('SUPER_ADMIN', 'web')->permissions()->pluck('name')->sort()->values()->all())
         ->toBe(collect(PermissionRegistry::baselineFor('SUPER_ADMIN'))->sort()->values()->all())
-        ->and(Role::findByName('STORE_ADMIN', 'web')->permissions()->count())->toBe(74)
+        ->and(Role::findByName('STORE_ADMIN', 'web')->permissions()->count())->toBe(76)
         ->and(Role::findByName('BACKOFFICE_USER', 'web')->permissions()->pluck('name')->sort()->values()->all())
         ->toBe(['plans.view', 'stores.view'])
         ->and(Role::findByName('STORE_USER', 'web')->permissions()->count())->toBe(0)

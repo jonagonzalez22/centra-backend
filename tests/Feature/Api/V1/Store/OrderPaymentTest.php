@@ -26,7 +26,7 @@ beforeEach(function () {
     $this->store = Store::factory()->create();
     $plan = Plan::factory()->create();
     $this->store->update(['plan_id' => $plan->id]);
-    $feature = Feature::firstOrCreate(['code' => 'pos'], ['name' => 'Punto de Venta']);
+    $feature = Feature::firstOrCreate(['code' => 'orders'], ['name' => 'Ordenes']);
     $plan->features()->attach($feature, ['limit_value' => null]);
     $this->user = User::factory()->create(['store_id' => $this->store->id]);
     $this->user->assignRole('STORE_ADMIN');

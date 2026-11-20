@@ -1,7 +1,6 @@
 <?php
 
 return [
-    'orders' => 'pos',
     'sales' => 'pos',
     'sales_history' => 'pos',
     'price_lists' => 'pos',

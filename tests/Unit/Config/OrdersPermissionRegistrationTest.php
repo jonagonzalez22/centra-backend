@@ -11,17 +11,15 @@ describe('Permissions Catalog', function () {
         $pedidosPermissions = $catalog['Pedidos'];
         $names = collect($pedidosPermissions)->pluck('name')->toArray();
 
-        expect($names)->toContain('orders.edit');
-        expect($names)->toContain('orders.collect');
+        expect($names)->toContain('orders.create', 'orders.edit', 'orders.cancel', 'orders.collect');
     });
 });
 
 describe('Permissions Mapping', function () {
-    test('maps orders to pos feature', function () {
+    test('lets orders resolve to its own feature', function () {
         $mapping = require __DIR__.'/../../../config/permissions_mapping.php';
 
-        expect($mapping)->toHaveKey('orders')
-            ->and($mapping['orders'])->toBe('pos');
+        expect($mapping)->not->toHaveKey('orders');
     });
 });
 

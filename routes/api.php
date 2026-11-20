@@ -268,10 +268,11 @@ Route::prefix('v1')->group(function () {
                 ->middleware('permission:reports.view')
                 ->name('store.reports.analytics');
 
+            Route::get('price-lists/active', [PriceListController::class, 'active'])
+                ->middleware('permission:pos.view|orders.create|orders.edit')
+                ->name('store.price-lists.active');
+
             Route::middleware('feature:pos')->group(function () {
-                Route::get('price-lists/active', [PriceListController::class, 'active'])
-                    ->middleware('permission:pos.view|orders.edit')
-                    ->name('store.price-lists.active');
                 Route::get('price-lists', [PriceListController::class, 'index'])->middleware('permission:price_lists.view')->name('store.price-lists.index');
                 Route::get('price-lists/{price_list}', [PriceListController::class, 'show'])->middleware('permission:price_lists.view')->name('store.price-lists.show');
                 Route::post('price-lists', [PriceListController::class, 'store'])->middleware('permission:price_lists.create')->name('store.price-lists.store');
@@ -303,15 +304,22 @@ Route::prefix('v1')->group(function () {
                 Route::put('sales/{id}/cancel', [SaleHistoryController::class, 'cancel'])
                     ->middleware('permission:sales.cancel')
                     ->name('store.sales.cancel');
-                Route::get('operations/products/search', CommercialProductCatalogController::class)
-                    ->middleware('permission:pos.view|orders.edit')
-                    ->name('store.operations.products.search');
-                Route::get('operations/products/{id}', CommercialProductDetailController::class)
-                    ->middleware('permission:pos.view|orders.edit')
-                    ->name('store.operations.products.show');
-                Route::get('operations/payment-methods', [StorePaymentMethodController::class, 'commercialIndex'])
-                    ->middleware('permission:pos.create|orders.collect')
-                    ->name('store.operations.payment-methods.index');
+            });
+
+            // Shared commercial catalogues are authorized by the operation the
+            // caller can perform. They deliberately do not grant inventory,
+            // customer or price-list administration.
+            Route::get('operations/products/search', CommercialProductCatalogController::class)
+                ->middleware('permission:pos.view|orders.create|orders.edit')
+                ->name('store.operations.products.search');
+            Route::get('operations/products/{id}', CommercialProductDetailController::class)
+                ->middleware('permission:pos.view|orders.create|orders.edit')
+                ->name('store.operations.products.show');
+            Route::get('operations/payment-methods', [StorePaymentMethodController::class, 'commercialIndex'])
+                ->middleware('permission:pos.create|orders.collect')
+                ->name('store.operations.payment-methods.index');
+
+            Route::middleware('feature:orders')->group(function () {
                 Route::get('orders', [OrderController::class, 'index'])
                     ->middleware('permission:orders.view')
                     ->name('store.orders.index');
@@ -337,35 +345,32 @@ Route::prefix('v1')->group(function () {
                 Route::post('orders/{order}/payments', [OrderPaymentController::class, 'store'])
                     ->middleware('permission:orders.collect')
                     ->name('store.orders.payments.store');
-
-                Route::get('operations', [CommercialOperationController::class, 'index'])
-                    ->middleware('permission:pos.view')
-                    ->name('store.operations.index');
-                Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])
-                    ->middleware('permission:pos.view')
-                    ->name('store.operations.show');
-                Route::get('operations/{operation}/receipt', [CommercialOperationController::class, 'receipt'])
-                    ->middleware('permission:pos.view')
-                    ->name('store.operations.receipt');
-                Route::post('operations', [CommercialOperationController::class, 'store'])
-                    ->middleware('permission:pos.create')
-                    ->name('store.operations.store');
                 Route::put('operations/{operation}/reschedule', [CommercialOperationController::class, 'reschedule'])
                     ->middleware('permission:orders.edit')
                     ->name('store.operations.reschedule');
                 Route::put('operations/{operation}/cancel', [CommercialOperationController::class, 'cancel'])
-                    ->middleware('permission:orders.edit')
+                    ->middleware('permission:orders.cancel')
                     ->name('store.operations.cancel');
                 Route::post('operations/{operation}/cancel-pending-delivery', [CommercialOperationController::class, 'cancelPendingDelivery'])
-                    ->middleware('permission:orders.edit')
+                    ->middleware('permission:orders.cancel')
                     ->name('store.operations.cancel-pending-delivery');
             });
+
+            // Authorization for these generic endpoints is selected from the
+            // persisted operation type inside the controller, never from a
+            // client-supplied query parameter alone.
+            Route::get('operations', [CommercialOperationController::class, 'index'])->name('store.operations.index');
+            Route::get('operations/{operation}', [CommercialOperationController::class, 'show'])->name('store.operations.show');
+            Route::get('operations/{operation}/receipt', [CommercialOperationController::class, 'receipt'])
+                ->middleware(['feature:pos', 'permission:pos.view'])
+                ->name('store.operations.receipt');
+            Route::post('operations', [CommercialOperationController::class, 'store'])->name('store.operations.store');
 
             Route::middleware('feature:customers')->group(function () {
                 // Commercial selection is intentionally separate from customer
                 // administration: POS/order users do not gain customers.view.
                 Route::get('operations/customers/search', [CustomerController::class, 'commercialSearch'])
-                    ->middleware(['feature:pos', 'permission:pos.view|orders.edit'])
+                    ->middleware('permission:pos.view|orders.create|orders.edit')
                     ->name('store.operations.customers.search');
 
                 Route::get('customers', [CustomerController::class, 'index'])->middleware('permission:customers.view')->name('store.customers.index');
