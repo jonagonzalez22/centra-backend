@@ -22,12 +22,14 @@ class UpdateCustomerAddressRequest extends FormRequest
             'number' => ['sometimes', 'string', 'max:20'],
             'floor' => ['nullable', 'string', 'max:10'],
             'apartment' => ['nullable', 'string', 'max:10'],
-            'postal_code' => ['sometimes', 'string', 'max:20'],
+            'postal_code' => ['sometimes', 'nullable', 'string', 'max:20'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'type' => ['sometimes', 'string', Rule::in(['billing', 'delivery', 'other'])],
             'is_main' => ['nullable', 'boolean'],
             'observations' => ['nullable', 'string'],
+            'location_source' => ['sometimes', 'nullable', Rule::in(['geocoding', 'manual', 'coordinates', 'shared_link'])],
+            'confirm_location' => ['sometimes', 'boolean'],
         ];
     }
 

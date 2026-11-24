@@ -28,12 +28,14 @@ class StoreCustomerAddressRequest extends FormRequest
             'number' => ['required', 'string', 'max:20'],
             'floor' => ['nullable', 'string', 'max:10'],
             'apartment' => ['nullable', 'string', 'max:10'],
-            'postal_code' => ['required', 'string', 'max:20'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'type' => ['required', 'string', Rule::in(['billing', 'delivery', 'other'])],
             'is_main' => ['nullable', 'boolean'],
             'observations' => ['nullable', 'string'],
+            'location_source' => ['nullable', Rule::in(['geocoding', 'manual', 'coordinates', 'shared_link'])],
+            'confirm_location' => ['nullable', 'boolean'],
         ];
     }
 
@@ -46,7 +48,6 @@ class StoreCustomerAddressRequest extends FormRequest
             'locality_id.exists' => 'La localidad seleccionada no existe.',
             'street.required' => 'La calle es obligatoria.',
             'number.required' => 'El número es obligatorio.',
-            'postal_code.required' => 'El código postal es obligatorio.',
             'type.required' => 'El tipo de dirección es obligatorio.',
             'type.in' => 'El tipo debe ser billing, delivery u other.',
             'latitude.between' => 'La latitud debe estar entre -90 y 90.',

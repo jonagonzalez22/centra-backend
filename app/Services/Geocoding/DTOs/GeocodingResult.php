@@ -9,5 +9,7 @@ final readonly class GeocodingResult
         public float $longitude,
         public string $formatted_address,
         public string $provider,
+        public string $quality = 'precise',
+        public bool $requires_confirmation = true,
     ) {}
 }

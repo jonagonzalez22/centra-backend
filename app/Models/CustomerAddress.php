@@ -26,6 +26,8 @@ class CustomerAddress extends Model
         'postal_code',
         'latitude',
         'longitude',
+        'location_status',
+        'location_source',
         'type',
         'is_main',
         'observations',
@@ -33,8 +35,8 @@ class CustomerAddress extends Model
 
     protected $casts = [
         'is_main' => 'boolean',
-        'latitude' => 'decimal:8',
-        'longitude' => 'decimal:8',
+        'latitude' => 'float',
+        'longitude' => 'float',
     ];
 
     protected static function booted(): void

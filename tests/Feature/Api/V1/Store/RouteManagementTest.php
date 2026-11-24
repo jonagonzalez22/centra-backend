@@ -679,6 +679,24 @@ test('rejects assignment when the customer has no valid delivery address', funct
         ->assertJsonPath('message', 'El cliente debe tener un domicilio de Entrega con ubicación geolocalizada para asignar este pedido a una ruta.');
 });
 
+test('rejects assignment when the delivery location is pending confirmation', function () {
+    $vehicle = createVehicle($this->store);
+    $driver = createDriver($this->store);
+    $customer = createCustomerWithAddress($this->store);
+    $customer->addresses()->where('type', 'delivery')->update(['location_status' => 'pending']);
+    $order = createEligibleOrder($this->store, $customer);
+    $route = DeliveryRoute::create([
+        'store_id' => $this->store->id, 'vehicle_id' => $vehicle->id, 'driver_id' => $driver->id,
+        'operational_date' => now()->addDay()->format('Y-m-d'), 'status' => 'draft',
+    ]);
+    $order->update(['requested_delivery_date' => $route->operational_date]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/routes/{$route->id}/stops", ['order_id' => $order->id])
+        ->assertUnprocessable()
+        ->assertJsonPath('message', 'El domicilio de Entrega necesita confirmar su ubicación antes de asignar este pedido a una ruta.');
+});
+
 test('adds stop with exceptional assignment when dates differ', function () {
     $vehicle = createVehicle($this->store);
     $driver = createDriver($this->store);

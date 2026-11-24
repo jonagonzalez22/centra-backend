@@ -7,6 +7,7 @@ use App\Http\Requests\Api\V1\Store\StoreCustomerAddressRequest;
 use App\Http\Requests\Api\V1\Store\UpdateCustomerAddressRequest;
 use App\Http\Resources\CustomerAddressResource;
 use App\Models\Customer;
+use App\Models\CustomerAddress;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -191,6 +192,8 @@ class CustomerAddressController extends Controller
                 $customer = Customer::forStore($storeId)->whereKey($customer->id)->lockForUpdate()->firstOrFail();
                 $this->ensureDeliveryAddressIsUnique($customer, $request->type);
 
+                $data = $this->locationDataForCreate($request);
+
                 return $customer->addresses()->create([
                     'locality_id' => $request->locality_id,
                     'street' => $request->street,
@@ -198,11 +201,13 @@ class CustomerAddressController extends Controller
                     'floor' => $request->floor,
                     'apartment' => $request->apartment,
                     'postal_code' => $request->postal_code,
-                    'latitude' => $request->latitude,
-                    'longitude' => $request->longitude,
+                    'latitude' => $data['latitude'],
+                    'longitude' => $data['longitude'],
                     'type' => $request->type,
                     'is_main' => $request->boolean('is_main', false),
                     'observations' => $request->observations,
+                    'location_status' => $data['location_status'],
+                    'location_source' => $data['location_source'],
                 ]);
             });
         } catch (QueryException $exception) {
@@ -399,6 +404,7 @@ class CustomerAddressController extends Controller
                 $customer = Customer::forStore($storeId)->whereKey($customer->id)->lockForUpdate()->firstOrFail();
                 $address = $customer->addresses()->whereKey($address->id)->lockForUpdate()->firstOrFail();
                 $this->ensureDeliveryAddressIsUnique($customer, $data['type'] ?? $address->type, $address->id);
+                $data = $this->locationDataForUpdate($data, $address);
                 $address->update($data);
 
                 return $address;
@@ -434,6 +440,96 @@ class CustomerAddressController extends Controller
         if ($query->exists()) {
             $this->deliveryAddressUniqueError();
         }
+    }
+
+    /** @return array{latitude: ?float, longitude: ?float, location_status: string, location_source: ?string} */
+    private function locationDataForCreate(StoreCustomerAddressRequest $request): array
+    {
+        return $this->buildLocationData(
+            $request->input('latitude'),
+            $request->input('longitude'),
+            $request->boolean('confirm_location'),
+            $request->input('location_source'),
+        );
+    }
+
+    /** @param array<string, mixed> $data @return array<string, mixed> */
+    private function locationDataForUpdate(array $data, CustomerAddress $address): array
+    {
+        $addressChanged = array_key_exists('street', $data) && $data['street'] !== $address->street
+            || array_key_exists('number', $data) && $data['number'] !== $address->number
+            || array_key_exists('locality_id', $data) && $data['locality_id'] !== $address->locality_id;
+
+        if ($addressChanged) {
+            $confirm = (bool) ($data['confirm_location'] ?? false);
+            $hasCompleteCoordinates = array_key_exists('latitude', $data) && array_key_exists('longitude', $data);
+
+            if ($confirm && $hasCompleteCoordinates) {
+                unset($data['confirm_location']);
+
+                return array_merge($data, $this->buildLocationData(
+                    $data['latitude'],
+                    $data['longitude'],
+                    true,
+                    $data['location_source'] ?? $address->location_source,
+                ));
+            }
+
+            $data['latitude'] = null;
+            $data['longitude'] = null;
+            $data['location_status'] = 'none';
+            $data['location_source'] = null;
+            unset($data['confirm_location']);
+
+            return $data;
+        }
+
+        $coordinatesChanged = array_key_exists('latitude', $data) || array_key_exists('longitude', $data);
+        $confirm = (bool) ($data['confirm_location'] ?? false);
+        unset($data['confirm_location']);
+
+        if (! $coordinatesChanged && ! $confirm) {
+            return $data;
+        }
+
+        $location = $this->buildLocationData(
+            $data['latitude'] ?? $address->latitude,
+            $data['longitude'] ?? $address->longitude,
+            $confirm,
+            $data['location_source'] ?? $address->location_source,
+        );
+
+        return array_merge($data, $location);
+    }
+
+    /** @return array{latitude: ?float, longitude: ?float, location_status: string, location_source: ?string} */
+    private function buildLocationData(mixed $latitude, mixed $longitude, bool $confirm, mixed $source): array
+    {
+        if ($latitude === null && $longitude === null) {
+            if ($confirm) {
+                $this->locationValidationError('No se puede confirmar una ubicación sin coordenadas.');
+            }
+
+            return ['latitude' => null, 'longitude' => null, 'location_status' => 'none', 'location_source' => null];
+        }
+        if ($latitude === null || $longitude === null) {
+            $this->locationValidationError('La ubicación debe incluir latitud y longitud.');
+        }
+
+        return [
+            'latitude' => (float) $latitude,
+            'longitude' => (float) $longitude,
+            'location_status' => $confirm ? 'confirmed' : 'pending',
+            'location_source' => is_string($source) ? $source : null,
+        ];
+    }
+
+    private function locationValidationError(string $message): never
+    {
+        throw new HttpResponseException(response()->json([
+            'status' => 'error', 'message' => 'Error de validación.', 'data' => null,
+            'errors' => ['location' => [$message]],
+        ], 422));
     }
 
     private function isDeliveryAddressUniqueViolation(QueryException $exception): bool

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\GeocodingSearchRequest;
+use App\Services\Geocoding\Exceptions\GeocodingNotFoundException;
+use App\Services\Geocoding\Exceptions\GeocodingProviderException;
 use App\Services\Location\LocationManager;
 use Illuminate\Http\JsonResponse;
 use OpenApi\Attributes as OA;
@@ -95,13 +97,22 @@ class GeocodingController extends Controller
                     'longitude' => $result->longitude,
                     'formatted_address' => $result->formatted_address,
                     'provider' => $result->provider,
+                    'quality' => $result->quality,
+                    'requires_confirmation' => $result->requires_confirmation,
                 ],
                 'errors' => null,
             ]);
-        } catch (\RuntimeException $e) {
+        } catch (GeocodingNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'No se pudo resolver la ubicación.',
+                'message' => 'No encontramos una ubicación suficientemente precisa. Elegí el punto manualmente o verificá la dirección.',
+                'data' => null,
+                'errors' => ['location' => ['La dirección no produjo un domicilio utilizable.']],
+            ], 422);
+        } catch (GeocodingProviderException|\RuntimeException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El servicio de ubicación no está disponible en este momento.',
                 'data' => null,
                 // Provider errors may contain request URLs or provider-side
                 // diagnostics. They are intentionally not part of the API.

@@ -3,6 +3,8 @@
 namespace App\Services\Location\Resolvers;
 
 use App\Services\Geocoding\DTOs\GeocodingResult;
+use App\Services\Geocoding\Exceptions\GeocodingNotFoundException;
+use App\Services\Geocoding\Exceptions\GeocodingProviderException;
 use App\Services\Geocoding\GeocodingService;
 
 class AddressResolver extends LocationResolver
@@ -18,14 +20,14 @@ class AddressResolver extends LocationResolver
 
     public function resolve(string $input): ?GeocodingResult
     {
-        try {
-            // A map URL with a textual place is sent to the fixed geocoding
-            // provider as its extracted address, never as an arbitrary URL.
-            $address = AppleMapsLinkResolver::addressFromUrl($input)
-                ?? GoogleMapsLinkResolver::addressFromUrl($input)
-                ?? trim($input);
+        $address = AppleMapsLinkResolver::addressFromUrl($input)
+            ?? GoogleMapsLinkResolver::addressFromUrl($input)
+            ?? trim($input);
 
+        try {
             return $this->geocodingService->search($address);
+        } catch (GeocodingNotFoundException|GeocodingProviderException $exception) {
+            throw $exception;
         } catch (\RuntimeException) {
             return null;
         }

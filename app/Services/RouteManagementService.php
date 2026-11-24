@@ -1940,6 +1940,9 @@ class RouteManagementService
         if (! $this->hasValidCoordinates($deliveryAddress->latitude, $deliveryAddress->longitude)) {
             throw $this->validationError('El cliente debe tener un domicilio de Entrega con ubicación geolocalizada para asignar este pedido a una ruta.');
         }
+        if ($deliveryAddress->location_status !== 'confirmed') {
+            throw $this->validationError('El domicilio de Entrega necesita confirmar su ubicación antes de asignar este pedido a una ruta.');
+        }
 
         // Note: A single order CAN be split across multiple active routes.
         // The correct control is at the product quantity level via

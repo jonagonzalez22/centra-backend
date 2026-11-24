@@ -141,6 +141,19 @@ test('creates a new address', function () {
     ]);
 });
 
+test('serializes saved address coordinates as JSON numbers', function () {
+    CustomerAddress::factory()->forCustomer($this->customer)->for($this->locality)->create([
+        'latitude' => -32.9449285,
+        'longitude' => -68.8407279,
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$this->token}")
+        ->getJson("/api/v1/store/customers/{$this->customer->id}/addresses");
+
+    expect($response->json('data.items.0.latitude'))->toBeFloat()
+        ->and($response->json('data.items.0.longitude'))->toBeFloat();
+});
+
 test('rejects a second delivery address for the same customer', function () {
     CustomerAddress::factory()->forCustomer($this->customer)->for($this->locality)->ofType('delivery')->create();
 
@@ -195,7 +208,7 @@ test('fails without required fields', function () {
 
     $response->assertStatus(422)
         ->assertJsonPath('status', 'error')
-        ->assertJsonValidationErrors(['locality_id', 'street', 'number', 'postal_code', 'type']);
+        ->assertJsonValidationErrors(['locality_id', 'street', 'number', 'type']);
 });
 
 test('shows an address', function () {
@@ -374,6 +387,76 @@ test('creates address with minimal fields', function () {
     $response->assertStatus(201)
         ->assertJsonPath('data.street', 'Calle Falsa')
         ->assertJsonPath('data.type', 'delivery');
+});
+
+test('accepts omitted, null and empty postal codes', function () {
+    foreach ([[], ['postal_code' => null], ['postal_code' => '']] as $index => $overrides) {
+        $customer = Customer::factory()->forStore($this->store)->create(['document_type_id' => $this->documentType->id]);
+        $this->withHeader('Authorization', "Bearer $this->token")
+            ->postJson("/api/v1/store/customers/{$customer->id}/addresses", array_merge([
+                'customer_id' => $customer->id, 'locality_id' => $this->locality->id,
+                'street' => 'Calle Postal', 'number' => (string) ($index + 1), 'type' => 'delivery',
+            ], $overrides))
+            ->assertCreated()
+            ->assertJsonPath('data.postal_code', null);
+    }
+});
+
+test('does not trust a client supplied confirmed location status', function () {
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/customers/{$this->customer->id}/addresses", [
+            'customer_id' => $this->customer->id, 'locality_id' => $this->locality->id,
+            'street' => 'Ubicación pendiente', 'number' => '10', 'type' => 'delivery',
+            'latitude' => -32.9, 'longitude' => -68.8, 'location_status' => 'confirmed',
+        ]);
+
+    $response->assertCreated()->assertJsonPath('data.location_status', 'pending');
+});
+
+test('requires an explicit valid confirmation and invalidates coordinates when address text changes', function () {
+    $address = CustomerAddress::factory()->forCustomer($this->customer)->create([
+        'latitude' => -32.9, 'longitude' => -68.8, 'location_status' => 'pending',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/addresses/{$address->id}", ['confirm_location' => true])
+        ->assertOk()->assertJsonPath('data.location_status', 'confirmed');
+
+    $this->withHeader('Authorization', "Bearer $this->token")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/addresses/{$address->id}", ['street' => 'Otra calle', 'confirm_location' => true])
+        ->assertOk()->assertJsonPath('data.location_status', 'none')->assertJsonPath('data.latitude', null);
+});
+
+test('allows an explicitly reconfirmed point when address text and coordinates change together', function () {
+    $address = CustomerAddress::factory()->forCustomer($this->customer)->for($this->locality)->create([
+        'street' => 'Calle anterior',
+        'latitude' => -32.9,
+        'longitude' => -68.8,
+        'location_status' => 'confirmed',
+        'location_source' => 'manual',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$this->token}")
+        ->putJson("/api/v1/store/customers/{$this->customer->id}/addresses/{$address->id}", [
+            'street' => 'Calle nueva',
+            'latitude' => -32.9449285,
+            'longitude' => -68.8407279,
+            'confirm_location' => true,
+            'location_source' => 'manual',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.location_status', 'confirmed')
+        ->assertJsonPath('data.latitude', -32.9449285)
+        ->assertJsonPath('data.longitude', -68.8407279);
+});
+
+test('cannot confirm a location without both coordinates', function () {
+    $response = $this->withHeader('Authorization', "Bearer $this->token")
+        ->postJson("/api/v1/store/customers/{$this->customer->id}/addresses", [
+            'customer_id' => $this->customer->id, 'locality_id' => $this->locality->id,
+            'street' => 'Sin punto', 'number' => '10', 'type' => 'delivery', 'confirm_location' => true,
+        ]);
+    $response->assertUnprocessable()->assertJsonValidationErrors('location');
 });
 
 test('provides the locality relation on address show', function () {
