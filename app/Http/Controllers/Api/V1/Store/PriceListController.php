@@ -3,16 +3,28 @@
 namespace App\Http\Controllers\Api\V1\Store;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Store\PriceListExportDataRequest;
 use App\Http\Requests\Api\V1\Store\StorePriceListRequest;
 use App\Http\Requests\Api\V1\Store\UpdatePriceListRequest;
 use App\Http\Resources\PriceListResource;
 use App\Models\PriceList;
+use App\Services\PriceListExportDataService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
 
 class PriceListController extends Controller
 {
+    public function exportData(PriceListExportDataRequest $request, PriceListExportDataService $service): JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Datos de lista de precios generados exitosamente.',
+            'data' => $service->build($request->validated(), $request->user()->store_id),
+            'errors' => null,
+        ]);
+    }
+
     #[OA\Get(
         path: '/store/price-lists/active',
         summary: 'Obtener listas activas para selección operativa',

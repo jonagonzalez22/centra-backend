@@ -35,6 +35,7 @@ return [
         ['name' => 'price_lists.create', 'label' => 'Crear'],
         ['name' => 'price_lists.edit', 'label' => 'Editar'],
         ['name' => 'price_lists.delete', 'label' => 'Eliminar'],
+        ['name' => 'price_lists.export', 'label' => 'Exportar'],
     ],
     'Inventario' => [
         ['name' => 'inventory.view', 'label' => 'Ver'],

@@ -274,6 +274,7 @@ Route::prefix('v1')->group(function () {
 
             Route::middleware('feature:pos')->group(function () {
                 Route::get('price-lists', [PriceListController::class, 'index'])->middleware('permission:price_lists.view')->name('store.price-lists.index');
+                Route::post('price-lists/export-data', [PriceListController::class, 'exportData'])->middleware('permission:price_lists.export')->name('store.price-lists.export-data');
                 Route::get('price-lists/{price_list}', [PriceListController::class, 'show'])->middleware('permission:price_lists.view')->name('store.price-lists.show');
                 Route::post('price-lists', [PriceListController::class, 'store'])->middleware('permission:price_lists.create')->name('store.price-lists.store');
                 Route::put('price-lists/{price_list}', [PriceListController::class, 'update'])->middleware('permission:price_lists.edit')->name('store.price-lists.update');
