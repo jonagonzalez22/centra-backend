@@ -74,6 +74,19 @@ test('lists POS, order deposit and manual collection payments with their normali
         ->assertJsonFragment(['operation_number' => 'P-000022']);
 });
 
+test('preserves cents in the received payment response', function (): void {
+    $operation = receivedPaymentOperation($this->store, ['operation_number' => 'V-000031']);
+    $payment = receivedPayment($operation, $this->method, [
+        'amount' => 869.25,
+        'payment_details' => ['origin' => 'pos_sale'],
+    ]);
+
+    $this->actingAs($this->user, 'sanctum')
+        ->getJson('/api/v1/store/received-payments?per_page=20')
+        ->assertOk()
+        ->assertJsonFragment(['id' => $payment->id, 'amount' => 869.25]);
+});
+
 test('only verified route collections with an operation payment appear as route payments', function (): void {
     $operation = receivedPaymentOperation($this->store, ['type' => 'order']);
     $driver = User::factory()->create(['store_id' => $this->store->id, 'name' => 'Chofer Ruta']);

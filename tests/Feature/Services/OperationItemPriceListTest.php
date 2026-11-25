@@ -95,6 +95,48 @@ test('price list snapshots and one hundred percent discounts remain historical a
         ->and($line->fresh()->discount_percentage)->toBe('100.00');
 });
 
+test('persists the pending balance from the definitive discounted total with no payments', function (array $lines, string $expectedTotal) {
+    $items = collect($lines)->map(function (array $line) {
+        $product = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'price' => $line['price'],
+            'stock' => '100.0000',
+            'stock_reserved' => '0.0000',
+            'sale_quantity_step' => $line['step'] ?? '1.0000',
+        ]);
+        $priceList = ($line['discount'] ?? 0) > 0
+            ? PriceList::factory()->create([
+                'store_id' => $this->store->id,
+                'discount_percentage' => number_format($line['discount'], 2, '.', ''),
+            ])
+            : null;
+
+        return [
+            'product_id' => $product->id,
+            'quantity' => $line['quantity'],
+            'price_list_id' => $priceList?->id,
+        ];
+    })->all();
+
+    $order = createPricedOrder($this, $items);
+
+    expect($order->fresh()->total)->toBe($expectedTotal)
+        ->and($order->fresh()->paid_amount)->toBe(0.0)
+        ->and($order->fresh()->pending_balance)->toBe((float) $expectedTotal);
+})->with([
+    'without discount' => [[['price' => '100.00', 'quantity' => '1.0000']], '100.00'],
+    'with eight point five percent discount' => [[['price' => '950.00', 'quantity' => '1.0000', 'discount' => 8.5]], '869.25'],
+    'with ten percent discount' => [[['price' => '100.00', 'quantity' => '1.0000', 'discount' => 10]], '90.00'],
+    'with one hundred percent discount' => [[['price' => '100.00', 'quantity' => '1.0000', 'discount' => 100]], '0.00'],
+    'with multiple products' => [[
+        ['price' => '100.00', 'quantity' => '2.0000'],
+        ['price' => '50.00', 'quantity' => '3.0000', 'discount' => 10],
+    ], '335.00'],
+    'with fractional quantity and decimal price' => [[
+        ['price' => '10.05', 'quantity' => '1.2500', 'discount' => 10, 'step' => '0.2500'],
+    ], '11.30'],
+]);
+
 test('increasing an existing price-list line retains its snapshots after the live list changes', function () {
     $list = PriceList::factory()->create(['store_id' => $this->store->id, 'name' => 'Mayorista', 'discount_percentage' => '10.00']);
     $order = createPricedOrder($this, [[
