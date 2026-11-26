@@ -24,6 +24,7 @@ class FeatureSeeder extends Seeder
             ['code' => 'geography', 'name' => 'Geografia', 'description' => 'Data referente a la geografia.'],
             ['code' => 'categories', 'name' => 'Categorias', 'description' => 'Categoría de los productos.'],
             ['code' => 'cash', 'name' => 'Caja', 'description' => 'Modulos de caja.'],
+            ['code' => 'financial_incidents', 'name' => 'Incidencias financieras', 'description' => 'Seguimiento administrativo de faltantes de caja y cobranzas rechazadas.'],
             ['code' => 'purchases', 'name' => 'Compras', 'description' => 'Gestión de proveedores y futuras compras.'],
         ];
 

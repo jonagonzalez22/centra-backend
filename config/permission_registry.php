@@ -21,6 +21,7 @@ $store = [
     'inventory' => ['inventory.view', 'inventory.create', 'inventory.edit', 'inventory.adjust', 'inventory.delete', 'categories.view', 'categories.create', 'categories.edit', 'categories.delete', 'brands.view', 'brands.create', 'brands.edit', 'brands.delete'],
     'customers' => ['customers.view', 'customers.create', 'customers.edit', 'customers.delete', 'customer_addresses.view', 'customer_addresses.create', 'customer_addresses.edit', 'customer_addresses.delete', 'customer_contacts.view', 'customer_contacts.create', 'customer_contacts.edit', 'customer_contacts.delete'],
     'cash' => ['cash.view', 'cash.open', 'cash.submit', 'cash.close'],
+    'financial_incidents' => ['financial_incidents.view', 'financial_incidents.manage'],
     'orders' => ['orders.view', 'orders.create', 'orders.edit', 'orders.cancel', 'orders.collect'],
     'pos_extra' => ['sales_history.view', 'sales_history.print', 'sales.cancel', 'price_lists.view', 'price_lists.create', 'price_lists.edit', 'price_lists.delete', 'price_lists.export', 'payments.view', 'payments.reverse'],
     'multi_user' => ['store_users.view', 'store_users.create', 'store_users.edit', 'store_users.delete'],

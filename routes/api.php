@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\Store\CustomerAddressController;
 use App\Http\Controllers\Api\V1\Store\CustomerContactController;
 use App\Http\Controllers\Api\V1\Store\CustomerController;
 use App\Http\Controllers\Api\V1\Store\DriverController;
+use App\Http\Controllers\Api\V1\Store\FinancialIncidentController;
 use App\Http\Controllers\Api\V1\Store\GenerateSkuController;
 use App\Http\Controllers\Api\V1\Store\InventoryController;
 use App\Http\Controllers\Api\V1\Store\MeasurementUnitController;
@@ -290,6 +291,19 @@ Route::prefix('v1')->group(function () {
                 Route::get('cash/{cashSession}/reconciliation', [CashSessionController::class, 'reconciliation'])->name('store.cash.reconciliation');
                 Route::get('cash/{cashSession}/reconciliation/payment-methods/{storePaymentMethod}/payments', [CashSessionController::class, 'reconciliationPayments'])->name('store.cash.reconciliation.payments');
                 Route::post('cash/{cashSession}/close', [CashSessionController::class, 'close'])->name('store.cash.close');
+            });
+
+            Route::middleware('feature:financial_incidents')->prefix('financial-incidents')->group(function () {
+                Route::get('', [FinancialIncidentController::class, 'index'])->middleware('permission:financial_incidents.view');
+                Route::get('counters', [FinancialIncidentController::class, 'counters'])->middleware('permission:financial_incidents.view');
+                Route::get('assignees', [FinancialIncidentController::class, 'assignees'])->middleware('permission:financial_incidents.view|financial_incidents.manage');
+                Route::get('{sourceType}/{sourceId}', [FinancialIncidentController::class, 'show'])->middleware('permission:financial_incidents.view');
+                Route::get('{sourceType}/{sourceId}/history', [FinancialIncidentController::class, 'history'])->middleware('permission:financial_incidents.view');
+                Route::post('{sourceType}/{sourceId}/start-review', [FinancialIncidentController::class, 'startReview'])->middleware('permission:financial_incidents.view|financial_incidents.manage');
+                Route::post('{sourceType}/{sourceId}/assign', [FinancialIncidentController::class, 'assign'])->middleware('permission:financial_incidents.view|financial_incidents.manage');
+                Route::post('{sourceType}/{sourceId}/comments', [FinancialIncidentController::class, 'comment'])->middleware('permission:financial_incidents.view|financial_incidents.manage');
+                Route::post('{sourceType}/{sourceId}/resolve', [FinancialIncidentController::class, 'resolve'])->middleware('permission:financial_incidents.view|financial_incidents.manage');
+                Route::post('{sourceType}/{sourceId}/dismiss', [FinancialIncidentController::class, 'dismiss'])->middleware('permission:financial_incidents.view|financial_incidents.manage');
             });
 
             Route::middleware('feature:pos')->group(function () {

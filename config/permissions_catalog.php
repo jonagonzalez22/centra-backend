@@ -85,6 +85,8 @@ return [
         ['name' => 'cash.open', 'label' => 'Abrir'],
         ['name' => 'cash.submit', 'label' => 'Enviar a arqueo'],
         ['name' => 'cash.close', 'label' => 'Cerrar'],
+        ['name' => 'financial_incidents.view', 'label' => 'Ver incidencias financieras'],
+        ['name' => 'financial_incidents.manage', 'label' => 'Gestionar incidencias financieras'],
     ],
     'Pagos recibidos' => [
         ['name' => 'payments.view', 'label' => 'Ver pagos recibidos'],
