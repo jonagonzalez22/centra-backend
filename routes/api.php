@@ -341,6 +341,9 @@ Route::prefix('v1')->group(function () {
                 Route::get('orders/{id}', [OrderController::class, 'show'])
                     ->middleware('permission:orders.view')
                     ->name('store.orders.show');
+                Route::get('orders/{id}/share-message', [OrderController::class, 'shareMessage'])
+                    ->middleware('permission:orders.view')
+                    ->name('store.orders.share-message');
                 Route::get('orders/{id}/editability', [OrderController::class, 'editability'])
                     ->middleware('permission:orders.edit')
                     ->name('store.orders.editability');

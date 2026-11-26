@@ -16,11 +16,44 @@ use App\Models\OperationItem;
 use App\Services\OrderEditabilityService;
 use App\Services\OrderHistoryBuilder;
 use App\Services\OrderItemEditService;
+use App\Services\OrderShareMessageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
+    public function shareMessage(
+        Request $request,
+        OrderShareMessageService $shareMessageService,
+        string $id
+    ): JsonResponse {
+        $operation = CommercialOperation::query()
+            ->forStore($request->user()->store_id)
+            ->with(['items.product.stockMeasurementUnit'])
+            ->find($id);
+
+        if (! $operation || $operation->type !== 'order') {
+            return response()->json([
+                'status' => 'error', 'message' => 'Pedido no encontrado.', 'data' => null,
+                'errors' => ['id' => ['El pedido no existe o no pertenece a tu tienda.']],
+            ], 404);
+        }
+
+        if ($operation->status === 'cancelled') {
+            return response()->json([
+                'status' => 'error', 'message' => 'No se puede compartir un pedido cancelado.', 'data' => null,
+                'errors' => ['id' => ['El pedido está cancelado.']],
+            ], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Mensaje para el cliente generado exitosamente.',
+            'data' => ['message' => $shareMessageService->build($operation, $request->user()->store->name)],
+            'errors' => null,
+        ]);
+    }
+
     /**
      * Listado paginado de pedidos de la tienda.
      *

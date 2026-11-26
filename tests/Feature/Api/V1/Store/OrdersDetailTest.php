@@ -74,6 +74,127 @@ beforeEach(function () {
     $this->token = $this->user->createToken('test-token')->plainTextToken;
 });
 
+describe('GET /api/v1/store/orders/{id}/share-message', function () {
+    test('requires the regular order-view permission', function () {
+        $order = createDetailOrder($this->store);
+        $user = makeDetailUser($this->store, 'STORE_USER');
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        getOrderShareMessage($order->id, $token)->assertForbidden();
+    });
+
+    test('builds a customer message from historical order amounts and commercial snapshots', function () {
+        $this->store->update(['name' => 'Limpieza Clorito']);
+        $unit = MeasurementUnit::firstOrCreate(
+            ['code' => 'l'],
+            ['name' => 'Litro', 'symbol' => 'L', 'category' => 'volume', 'is_active' => true],
+        );
+        $product = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'name' => 'Nombre actual que no se usa',
+            'sku' => 'PROD-001',
+            'barcode' => '7791234567890',
+            'stock_measurement_unit_id' => $unit->id,
+        ]);
+        $order = createDetailOrder($this->store, [
+            'operation_number' => 'P-000037',
+            'customer_display_name' => 'Javier Costamagna',
+            'total' => '3869.25',
+        ]);
+        OperationItem::factory()->forOperation($order)->forProduct($product)->create([
+            'product_name' => 'Detergente histórico',
+            'quantity' => '1.5000',
+            'measurement_unit_code' => 'l',
+            'measurement_unit_symbol' => 'L',
+            'sale_quantity_step' => '0.2500',
+            'price' => '950.00',
+            'discount_percentage' => '8.50',
+            'tax_amount' => '0.00',
+            'discount_amount' => '80.75',
+            'subtotal' => '950.00',
+        ]);
+        OperationItem::factory()->forOperation($order)->forProduct($product)->create([
+            'product_name' => 'Producto sin código histórico',
+            'quantity' => '2.0000',
+            'measurement_unit_code' => 'l',
+            'measurement_unit_symbol' => 'L',
+            'sale_quantity_step' => '1.0000',
+            'tax_amount' => '0.00',
+            'discount_amount' => '0.00',
+            'subtotal' => '3000.00',
+        ]);
+
+        $response = getOrderShareMessage($order->id);
+
+        $response->assertOk();
+        expect($response->json('data.message'))->toBe(implode("\n", [
+            '*Limpieza Clorito*', 'Pedido *P-000037*', 'Cliente: *Javier Costamagna*', '',
+            '──────────────────────────────', '*Detalle del pedido:*', '',
+            '[PROD-001] *Detergente histórico*', '1,5 litros — $869,25', '',
+            '[PROD-001] *Producto sin código histórico*', '2 litros — $3.000,00', '',
+            '*Total del pedido: $3.869,25*', '', '──────────────────────────────', '', '_¡Gracias por tu compra!_',
+        ]));
+    });
+
+    test('uses persisted final line amounts and safe historical unit fallbacks', function () {
+        $unit = MeasurementUnit::query()->where('code', 'l')->firstOrFail();
+        $product = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'sku' => 'CODIGO-VISIBLE',
+            'barcode' => 'DISTINTO-DEL-CODIGO',
+            'stock_measurement_unit_id' => $unit->id,
+        ]);
+        $productWithoutCode = Product::factory()->create([
+            'store_id' => $this->store->id,
+            'sku' => '',
+            'stock_measurement_unit_id' => $unit->id,
+        ]);
+        $order = createDetailOrder($this->store, ['total' => '1109.25']);
+        OperationItem::factory()->forOperation($order)->forProduct($product)->create([
+            'product_name' => 'Con descuento', 'quantity' => '1.0000',
+            'measurement_unit_code' => 'l', 'measurement_unit_symbol' => 'L', 'sale_quantity_step' => '1.0000',
+            'subtotal' => '950.00', 'tax_amount' => '0.00', 'discount_amount' => '80.75',
+        ]);
+        OperationItem::factory()->forOperation($order)->forProduct($product)->create([
+            'product_name' => 'Fraccionario con impuesto', 'quantity' => '2.5000',
+            'measurement_unit_code' => 'l', 'measurement_unit_symbol' => 'L', 'sale_quantity_step' => '0.2500',
+            'subtotal' => '250.00', 'tax_amount' => '10.00', 'discount_amount' => '20.00',
+        ]);
+        OperationItem::factory()->forOperation($order)->forProduct($product)->create([
+            'product_name' => 'Bonificado', 'quantity' => '1.0000',
+            'measurement_unit_code' => 'pack', 'measurement_unit_symbol' => 'paq.', 'sale_quantity_step' => '1.0000',
+            'subtotal' => '100.00', 'tax_amount' => '0.00', 'discount_amount' => '100.00',
+        ]);
+        OperationItem::factory()->forOperation($order)->forProduct($productWithoutCode)->create([
+            'product_name' => 'Producto histórico con una denominación comercial extensa', 'quantity' => '1.0000',
+            'measurement_unit_code' => 'l', 'measurement_unit_symbol' => 'L', 'sale_quantity_step' => '1.0000',
+            'subtotal' => '0.00', 'tax_amount' => '0.00', 'discount_amount' => '0.00',
+        ]);
+
+        $message = getOrderShareMessage($order->id)->assertOk()->json('data.message');
+        expect($message)
+            ->toContain("[CODIGO-VISIBLE] *Con descuento*\n1 litro — $869,25")
+            ->toContain("[CODIGO-VISIBLE] *Fraccionario con impuesto*\n2,5 litros — $240,00")
+            ->toContain("[CODIGO-VISIBLE] *Bonificado*\n1 paq. — $0,00")
+            ->toContain("*Producto histórico con una denominación comercial extensa*\n1 litro — $0,00")
+            ->not->toContain('DISTINTO-DEL-CODIGO')
+            ->not->toContain('•')
+            ->toContain('*Total del pedido: $1.109,25*')
+            ->toContain("──────────────────────────────\n\n_¡Gracias por tu compra!_");
+        expect(substr_count($message, '──────────────────────────────'))->toBe(2);
+    });
+
+    test('does not expose another store order and refuses cancelled orders', function () {
+        $otherStore = Store::factory()->create();
+        $otherOrder = createDetailOrder($otherStore);
+        $cancelledOrder = createDetailOrder($this->store, ['status' => 'cancelled']);
+
+        getOrderShareMessage($otherOrder->id)->assertNotFound();
+        getOrderShareMessage($cancelledOrder->id)->assertUnprocessable()
+            ->assertJsonPath('message', 'No se puede compartir un pedido cancelado.');
+    });
+});
+
 function makeDetailUser(Store $store, string $role = 'STORE_ADMIN', array $permissions = []): User
 {
     $user = User::factory()->create(['store_id' => $store->id]);
@@ -105,6 +226,14 @@ function getOrderDetail(string $id, ?string $token = null): \Illuminate\Testing\
 
     return test()->withHeader('Authorization', 'Bearer '.$token)
         ->getJson('/api/v1/store/orders/'.$id);
+}
+
+function getOrderShareMessage(string $id, ?string $token = null): \Illuminate\Testing\TestResponse
+{
+    $token = $token ?? test()->token;
+
+    return test()->withHeader('Authorization', 'Bearer '.$token)
+        ->getJson('/api/v1/store/orders/'.$id.'/share-message');
 }
 
 function makePaymentMethodForStoreDetail(Store $store): StorePaymentMethod
